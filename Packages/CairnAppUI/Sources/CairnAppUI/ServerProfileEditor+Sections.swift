@@ -26,6 +26,9 @@ extension ServerProfileEditor {
                     .foregroundStyle(CairnTheme.stoneLight)
             }
             NetworkBadge(networkClass: draft.networkClass)
+            if draft.isPlaintext {
+                PlaintextBadge()
+            }
         }
     }
 
@@ -33,13 +36,13 @@ extension ServerProfileEditor {
         Section {
             Toggle("Use this server", isOn: $enabled)
             if draft.networkClass.requiresOptIn {
-                Toggle("Allow requests to leave the tailnet", isOn: $optIn)
+                Toggle("Allow requests to leave this device", isOn: $optIn)
                     .tint(CairnTheme.rust)
             }
         } header: {
             Text("Traffic")
         } footer: {
-            Text("Plaintext http is refused except on localhost. On a tailnet server, run tailscale serve --bg --https=443 <port> to get an https:// name whose certificate iOS already trusts.")
+            Text(trafficFooter)
         }
     }
 

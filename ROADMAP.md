@@ -38,20 +38,37 @@ Recorded 2026-11-14. These supersede anything older in the repo.
   virtual addressing is paid-only). M3 must work **with and without** the entitlement;
   confirm availability by measuring `os_proc_available_memory()` on the physical device
   in M3 — never trust community reports. The app must never *require* an entitlement.
-- **Networking.** Servers are reached over **Tailscale MagicDNS via `tailscale serve`
-  HTTPS**. **Zero ATS exceptions in any configuration** — this supersedes the earlier
-  plan for a Debug-only scoped `NSExceptionDomains` entry. `serve` auto-provisions and
-  auto-renews **Let's Encrypt** certificates for `<device>.<tailnet>.ts.net`; iOS trusts
-  them by default, so URLSession needs no custom trust handling and `tailscale cert` is
-  not part of the flow. Plaintext HTTP remote profiles are blocked by ATS and get
-  rejected at profile-save time with an explanatory error instead of an exception.
-  Bonjour discovery of plaintext LAN servers is deferred to M7 (it would only find
-  servers ATS refuses to talk to).
-- **Hostname policy.** The real MagicDNS hostname must never appear in the repo,
-  commits, tests, docs, screenshots, or CI logs. Docs and tests use the placeholder
-  `your-host.your-tailnet.ts.net` — the only `*.ts.net` value permitted in tracked
-  files (`Scripts/check-hostname.sh` enforces this in CI). The real hostname lives only
-  in the app (per-server profile; token in Keychain) or gitignored local config.
+- **Networking (2026-11-15, superseding the 2026-11-14 Tailscale-only rule).** A server the
+  user runs is reached over **plain `http://` at its private address** — a LAN IPv4 literal, or
+  that same private address through **the router's own WireGuard server**. No Tailscale, no
+  MagicDNS, no HTTPS requirement, no certificate management. Two facts carry this:
+  - Apple's ATS scope: ATS "applies only to connections made to public host names", and the
+    system provides no ATS protection for **IP addresses**, **unqualified host names**, or
+    **`.local` hosts** (Cocoa Keys, *Availability of ATS for Remote and Local Connections*).
+    A private IP literal is therefore outside ATS entirely and needs no exception. The
+    2026-11-14 reasoning that a LAN IP over HTTP was "impossible via exceptions" mistook
+    "NSExceptionDomains cannot match IP literals" for "IP literals are unreachable"; the
+    first is true, the second is not.
+  - When away from home, **the tunnel is the security layer**. WireGuard encrypts the path
+    end to end and the tunnel is the access control, so TLS on top would encrypt twice and
+    add a certificate to manage for no security gain.
+  Exactly one ATS key ships: **`NSAllowsLocalNetworking = true`**, which covers the one
+  remaining case ATS does police — a `.local` or unqualified host *name*. Apple states that
+  when this key is YES ATS ignores `NSAllowsArbitraryLoads`, so declaring it **narrows** the
+  app's ATS posture rather than widening it. `Scripts/check-ats.sh` now enforces that exact
+  shape: the key present and true, and no `NSAllowsArbitraryLoads*` / `NSExceptionDomains`.
+  A **public-internet** profile still requires `https://` plus the outbound opt-in, enforced
+  in code (`NetworkClass.allowsPlaintext` → profile validation → connection tester) and
+  unit-tested — never by an ATS hole. Plaintext always carries a visible `Plaintext` badge.
+  iOS's **Local Network** permission is now load-bearing, not cosmetic: the first request to a
+  LAN address prompts, and a denial breaks the connection. Bonjour discovery stays in M7.
+- **Hostname policy.** No real hostname belonging to the user's own network ever appears in
+  the repo, commits, tests, docs, screenshots, or CI logs — that now covers **dynamic-DNS**
+  names (a router's DDNS endpoint for its WireGuard port) as well as MagicDNS names. Docs and
+  tests use `your-host.your-tailnet.ts.net`, `<your-ddns-hostname>` in prose, or generic
+  RFC 1918 addresses (`192.168.x.x`, `10.x`, `100.64.x.x`); `Scripts/check-hostname.sh`
+  enforces both classes in CI. Cairn dials the **private** address through the tunnel and
+  never the public endpoint, so a DDNS name has no reason to exist in this repository at all.
 - **Test device.** iPhone 15 Pro on **iOS 26.2** (8 GB RAM per Apple's specs — confirm
   on device). Do not assume iOS 27. The CI simulator lane stays iPhone 17 / iOS 26.5.
 - **CI lane.** `macos-26` + Xcode 26.6 pinned (SDK ceiling iOS 26.5), deployment target
@@ -166,18 +183,20 @@ zero-ATS-exception and defer-Bonjour decisions and has been rewritten, not silen
   `ServerProfileStoring` in `SwiftDataStore+Profiles`; headers as JSON in SwiftData, never
   logged; token never leaves Keychain.
 - `CairnAppUI` — `ServersModel` view model + profile list, profile editor (name, kind, URL,
-  Keychain token, custom headers, HTTPS-only rejection of plaintext with an explanation,
-  public-internet opt-in), capability-gated model management (Pull/Delete/Loaded models on
+  Keychain token, custom headers, plaintext accepted on a private address and refused on a
+  public-internet host with an explanation, public-internet opt-in, `Plaintext` badge),
+  capability-gated model management (Pull/Delete/Loaded models on
   Ollama only; disabled with a reason on OpenAI-compatible), persistent `NetworkBadge`.
 - Optional **Ollama Cloud** profile: created only on explicit opt-in, `.publicInternet`,
   labelled as internet, off by default.
-- `docs/SERVERS.md`: install Tailscale on server + iPhone, same tailnet, MagicDNS + HTTPS,
-  `tailscale serve --bg --https=443 <port>` (syntax verified against Tailscale's current
-  `cmd/tailscale/cli/serve_v2.go`: `--bg`, `--https`, `--set-path` are live flags and HTTPS is
-  the default serve mode), placeholders only.
+- ~~`docs/SERVERS.md`: install Tailscale on server + iPhone, same tailnet, MagicDNS + HTTPS,
+  `tailscale serve --bg --https=443 <port>`, placeholders only.~~ Superseded 2026-11-15: the
+  server-access guide lives in `docs/INSTALL.md` and describes the LAN address plus the router's
+  WireGuard tunnel, with no certificate setup at all.
 - **Dropped from M2** (superseded by Decisions): Bonjour discovery and `NSBonjourServices`
   → M7; Debug-only scoped `NSExceptionDomains` and the per-config plist split → never;
-  plaintext LAN HTTP is unsupported, remote is `tailscale serve` HTTPS only.
+  the Tailscale-serve-HTTPS requirement → superseded on 2026-11-15 by private plaintext
+  (LAN address, or that address through the router's WireGuard tunnel).
 
 Acceptance criteria:
 
@@ -185,16 +204,19 @@ Acceptance criteria:
    `xcodebuild build`, `xcodebuild test` on iPhone 17 / iOS 26.5.
 2. Parser/codec/profile tests cover split chunk boundaries, mid-multibyte UTF-8, `[DONE]`,
    malformed lines, mid-stream errors, cancellation, real-usage-only metrics, network
-   classification, HTTPS-only validation, reserved-header rejection.
+   classification, private-plaintext-accepted / public-plaintext-refused validation,
+   reserved-header rejection.
 3. Provider tests against a stub transport: Ollama NDJSON and OpenAI SSE end to end, 401/500
    mapping, tester outcomes, plus a real loopback (127.0.0.1) stub server.
 4. SwiftData profile round trip incl. custom headers and `hasBearerToken`; Keychain logic
    covered through a fake operator (real Keychain is device-only).
-5. UI: profile editor + tester + model management compile and run in the app; plaintext HTTP
-   is rejected with an explanation; OpenAI-compatible servers expose no Pull/Delete.
-6. `check-ats.sh` proves zero ATS exceptions; `check-hostname.sh` proves no real hostname.
+5. UI: profile editor + tester + model management compile and run in the app; a public host
+   over http is rejected with an explanation, a private host over http saves and carries the
+   `Plaintext` badge; OpenAI-compatible servers expose no Pull/Delete.
+6. `check-ats.sh` proves the single permitted ATS key and no other; `check-hostname.sh`
+   proves no real private hostname (MagicDNS **or** DDNS) is tracked.
 
-**M2 is CI-verified only.** No stub test may be reported as real Tailscale connectivity.
+**M2 is CI-verified only.** No stub test may be reported as a real LAN or VPN connection.
 
 ### Implementation and verification record (2026-11-15, CI run [43764696840](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/43764696840) on `a5466dd`)
 
@@ -230,9 +252,10 @@ proven and what is not:
 
 What CI cannot prove, and what therefore stays unclaimed: Keychain behaviour against a real
 keychain (device-only — the policy is covered here through a fake operator), and any real
-Tailscale, Ollama, or LM Studio connection. The last one also needs the server facts still
-listed under **Blocked on the user**; until then no real-server result may be reported, and
-the loopback stub is not a substitute for one.
+connection to the user's own server over LAN or VPN. The server facts that used to block the
+latter are resolved (see **Probe of the user's real server + transport reversal**); what still
+cannot be claimed from a runner is the Local Network prompt, the WireGuard route into the LAN
+subnet, and streaming over that tunnel. The loopback stub is not a substitute for any of it.
 
 ### Final green run — M2 closed (run 43764696840, commit `a5466dd`)
 
@@ -277,8 +300,86 @@ to survive a publish while passing no `baseEngines`, so publishing correctly dro
 The honest limitation of this loop: those eleven runs were compile-and-unit feedback, not
 behaviour proof against a server. The wire keys in item 1 are exactly the class of defect that
 unit tests against a stub cannot catch, and they were caught by asserting our own serialized
-body. Whether Cairn really talks to a real Ollama or LM Studio over Tailscale is still untested
-and is the first thing the device checklist must establish.
+body. Whether Cairn really talks to the user's own server is still untested on a device and is
+the first thing the device checklist must establish.
+
+### Probe of the user's real server + transport reversal (2026-11-15)
+
+The server facts listed under **Blocked on the user** are resolved, and they invalidated the
+M2 networking decision. Findings from probing the server directly over the LAN (addresses and
+hostnames stay out of this file by policy):
+
+1. **The engine is llama.cpp-style, not Ollama.** `GET /v1/models` answers with **both** an
+   OpenAI-shaped `data[]` array and an Ollama-shaped `models[]` array, while `GET /api/tags`
+   and `GET /api/version` return `404` with `not_found_error`. So the Ollama dialect's version
+   and tags endpoints do not exist: a profile set to **Ollama** fails the connection test on an
+   endpoint the server has never had. The profile default is now **OpenAI-compatible** and the
+   editor's empty-state text says why.
+2. **Chat completions stream correctly** on `/v1/chat/completions` with `stream: true`,
+   including a `usage` chunk under `include_usage` — which is exactly the wire key the M2
+   green run fixed (item 1 of the defect list). The fix is now known to matter against a real
+   server, not only against a stub.
+3. **The server is reachable at its LAN IPv4 address over plain http**, which is what the
+   2026-11-14 decision said was unreachable. That is the reversal recorded in **Decisions**:
+   Apple's ATS scope excludes IP addresses, unqualified names, and `.local` hosts, and the
+   router's WireGuard tunnel — not TLS — is the protection when away from home. Tailscale,
+   MagicDNS, and `tailscale serve` are dropped from the supported path entirely.
+4. **A single-model server ignores the `model` field it is sent**, so a wrong model id produces
+   no error, only a surprise later. Model ids must be chosen from the fetched list; typing one
+   from memory is not a supported workflow.
+
+Code and guard changes that followed, all verified locally (no Swift toolchain here, so CI is
+the compile gate): `NetworkClass.allowsPlaintext` as the single rule; profile canonicalization
+and validation accept private plaintext and refuse public plaintext with a distinct
+`plaintextPublicInternet` error; the connection tester refuses only public plaintext;
+`PlaintextBadge` on rows and the editor; every Tailscale/MagicDNS-specific error hint rewritten
+to speak in terms of address, port, route, and VPN; `check-ats.sh` rewritten to require the one
+permitted key and reject any other; `check-hostname.sh` extended to catch real DDNS hostnames as
+well as MagicDNS ones.
+
+Guard verification run locally (8 scenarios, all behaving as specified): spec-only checkout
+passes; generated plist with the one key passes; a plist adding `NSAllowsArbitraryLoads`, a
+plist setting the key `false`, and a plist with `NSExceptionDomains` each fail; a spec with the
+key deleted or swapped to the blanket exception each fail; the hostname and logging guards pass
+on the current tree. Two defects were caught by that harness before committing: the guard
+grepped comments, so its own explanatory comment naming a banned key failed the build, and the
+`guards` job runs on Ubuntu where `App/Info.plist` is never generated — the guard now falls
+back to `project.yml` there, and an extra step re-runs it on the generated plist in the build
+job.
+
+Still unclaimed: any on-device result. The Local Network prompt, WireGuard routing from the
+tunnel into the LAN subnet, and streaming over the tunnel are device facts, and `AllowedIPs`
+must include the LAN subnet for the private address to be routable at all.
+
+### M2 device checklist — run this on the iPhone to close M2 honestly
+
+Each line states what it proves. Anything not checked stays unclaimed; a pass on one line is
+not evidence for the next.
+
+1. **Sideload the CI artifact and launch.** Proves the signing path still works.
+2. **Servers → Add server → OpenAI-compatible → `http://<lan-address>:<port>` → Save.**
+   Must save, not be refused, and the row must show the **LAN** badge and the **Plaintext**
+   badge. A refusal here means the private-address rule regressed.
+3. **Allow the Local Network prompt** iOS raises on the first request. Deny it once, confirm
+   Test reports the connection-refused hint, then re-enable in Settings and continue. This
+   proves the hint teaches the right fix — the one thing CI cannot observe.
+4. **Test** on the row → expect *Connected* with a model count. A `404` on an Ollama endpoint
+   means the profile was set to Ollama on a llama.cpp server (see probe finding 1).
+5. **Models** → the model appears in the list. Choose it from the list; typing an id is not a
+   supported path on a single-model server.
+6. **Send a prompt on that server.** Tokens must stream with a tok/s figure **and** a usage
+   count at the end. No usage reported means the `include_usage` wire key regressed.
+7. **Stop mid-stream**, then **regenerate**, then **branch** and step `< 1 / N >`. Tree
+   behaviour against a real server, not just the mock engine.
+8. **Turn on the WireGuard tunnel from outside the home network** (or with `AllowedIPs`
+   covering the LAN subnet) and repeat 4–6 using the **same private address**. Proves the
+   tunnel route and that nothing about the app depends on being on the local Wi-Fi.
+9. **Away with the tunnel off** → Test must fail with the timeout hint, not hang forever.
+10. **Force-quit and relaunch.** The profile, model choice, and the partial stream survive;
+    the token is still only in Keychain (`Token in Keychain` label, no token text anywhere).
+
+Any line that fails is a real defect, and its fix belongs in the same milestone. Until 1–10 are
+checked on the device, M2 remains CI-verified only.
 
 ## Milestone 3 — On-device inference + memory guardrails
 
@@ -334,15 +435,13 @@ vault, device-to-device sync, meeting capture.
 
 ## Blocked on the user
 
-Resolved facts (device, signing identity, distribution route, repo visibility) moved to
-**Decisions** above. Still open:
+Resolved facts (device, signing identity, distribution route, repo visibility, server engine
+and address) moved to **Decisions** above. Still open:
 
-- M2 server facts: which engines and versions run on the server machine(s) (Ollama
-  version, LM Studio version), which models will be used (thinking-capable or not),
-  whether Tailscale is installed on that machine, and whether MagicDNS + HTTPS are
-  already enabled on the tailnet. M2's code and CI gates are done, so these facts are no
-  longer needed to write the provider layer — they are what the M2 device checklist needs
-  before any real-server claim can be made.
+- On-device proof of the server connection: the iOS Local Network prompt, the WireGuard route
+  from the tunnel into the LAN subnet (`AllowedIPs` must cover it), and streaming over that
+  tunnel. CI cannot exercise any of these; the checklist under **M2 device checklist** is what
+  closes them.
 - `increased-memory-limit` availability: assumed unavailable (see Decisions); confirmed
   only by on-device measurement in M3.
 - App-icon asset pipeline (the mark is currently code-drawn `CairnMark`).

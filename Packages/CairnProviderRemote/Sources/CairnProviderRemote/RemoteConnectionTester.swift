@@ -36,12 +36,11 @@ public final class RemoteConnectionTester: RemoteTesting {
         }
     }
 
-    /// Plaintext may only reach loopback (also enforced when the profile is saved); anything
-    /// else is refused here as defence in depth, since the app ships zero ATS exceptions.
+    /// Plaintext may only reach a private address — the same rule the save path applies.
+    /// A public-internet host over http is refused here as defence in depth, so a stale or
+    /// hand-edited record can never put a prompt on the open internet in the clear.
     private func rejectsPlainHTTP(_ profile: ServerProfile) -> Bool {
-        guard profile.isPlaintext else { return false }
-        let host = URLComponents(string: profile.baseURLString)?.host?.lowercased() ?? ""
-        return !ServerProfile.loopbackHosts.contains(host)
+        profile.isPlaintext && !profile.networkClass.allowsPlaintext
     }
 
     private func versionNumber(_ profile: ServerProfile) async throws -> String? {

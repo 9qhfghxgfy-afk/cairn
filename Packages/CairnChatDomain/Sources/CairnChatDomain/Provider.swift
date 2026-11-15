@@ -6,9 +6,9 @@ public enum NetworkClass: String, Sendable, Equatable, Codable, CaseIterable {
     case onDevice
     /// RFC 1918, `.local`, or an unqualified host on the user's own LAN.
     case privateLan
-    /// A Tailscale tailnet peer (100.64.0.0/10 or a `*.ts.net` MagicDNS name).
-    /// Private, but NOT covered by `NSAllowsLocalNetworking`, so it is modelled
-    /// separately from `.privateLan`.
+    /// A private VPN / mesh peer: Tailscale's 100.64.0.0/10, a `*.ts.net` MagicDNS
+    /// name, or a subnet routed through a WireGuard gateway. Private, but not the
+    /// local link, so it is modelled separately from `.privateLan`.
     case tailnet
     case publicInternet
 
@@ -20,6 +20,24 @@ public enum NetworkClass: String, Sendable, Equatable, Codable, CaseIterable {
     }
 
     public var requiresOptIn: Bool { self == .publicInternet }
+
+    /// May this server be reached over plaintext http?
+    ///
+    /// Yes for anything private. A LAN segment carries only the user's own traffic,
+    /// and a VPN tunnel (WireGuard) encrypts the path itself, so transport security
+    /// lives below HTTP rather than inside it. No for a public-internet host, which
+    /// has no such protected path.
+    ///
+    /// Apple's own ATS scope is what makes this reachable with no exception: ATS
+    /// "applies only to connections made to public host names", and the system "does
+    /// not provide ATS protection to connections made to: Internet protocol (IP)
+    /// addresses, Unqualified host names, Local hosts employing the .local top-level
+    /// domain" (Cocoa Keys, *Availability of ATS for Remote and Local Connections*).
+    /// `NSAllowsLocalNetworking` is still declared in the app's Info.plist, because
+    /// ATS *does* apply to an unqualified or `.local` **name** — and Apple states that
+    /// key makes ATS ignore `NSAllowsArbitraryLoads` entirely, so adding it narrows
+    /// the app's ATS posture rather than widening it.
+    public var allowsPlaintext: Bool { self != .publicInternet }
 }
 
 /// What a given server or runtime can actually do. The UI derives every button

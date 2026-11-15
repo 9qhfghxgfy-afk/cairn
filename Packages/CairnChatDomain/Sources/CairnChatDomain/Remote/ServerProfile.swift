@@ -3,7 +3,7 @@ import Foundation
 
 /// A remote inference server the user configured. Everything about where
 /// traffic goes lives here so the privacy rules (network class, opt-in,
-/// HTTPS-only) are one validated value, not scattered checks.
+/// plaintext scope) are one validated value, not scattered checks.
 ///
 /// The bearer token is NOT part of this struct: it lives in the Keychain
 /// (`.afterFirstUnlockThisDeviceOnly`) under this profile's id. `hasBearerToken`
@@ -58,15 +58,12 @@ public struct ServerProfile: Sendable, Equatable, Identifiable, Codable {
         enabled && (!networkClass.requiresOptIn || publicInternetOptIn)
     }
 
-    /// Hosts that may use plaintext http (dev/test only; ATS exempts loopback).
-    public static let loopbackHosts: Set<String> = [
-        "localhost", "127.0.0.1", "[::1]", "::1",
-    ]
 }
 
 extension ServerProfile {
     /// Parses and canonicalizes to `scheme://host[:port]`; nil when unusable.
-    /// https is required everywhere except loopback hosts.
+    /// http is allowed for a private address or name only; a public-internet
+    /// host must be https — see `NetworkClass.allowsPlaintext`.
     public static func canonicalize(urlString: String) -> String? {
         let trimmed = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
@@ -74,8 +71,12 @@ extension ServerProfile {
         guard let rawScheme = components.scheme?.lowercased(), !rawScheme.isEmpty else { return nil }
         guard rawScheme == "https" || rawScheme == "http" else { return nil }
         guard let host = components.host?.lowercased(), !host.isEmpty else { return nil }
-        // Plaintext is only tolerated on loopback (dev / CI stub servers).
-        if rawScheme == "http" && !loopbackHosts.contains(host) { return nil }
+        // Plaintext is only for the user's own network: LAN, VPN, `.local`, an
+        // unqualified name, or loopback. A public host over http is refused here,
+        // so a mistyped URL never reaches the transport.
+        if rawScheme == "http" && !NetworkClassRouting.classify(host: host).allowsPlaintext {
+            return nil
+        }
         guard components.user == nil && components.password == nil else { return nil }
         guard components.query == nil && components.fragment == nil else { return nil }
         guard components.path.isEmpty || components.path == "/" else { return nil }

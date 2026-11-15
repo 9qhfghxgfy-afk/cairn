@@ -109,6 +109,23 @@ struct ServerProfileEditor: View {
         }
     }
 
+    /// Honest traffic summary for the editor footer. The rule it states is the app's
+    /// real one: plaintext is allowed only where the path is the user's own network —
+    /// a LAN segment, or a VPN tunnel that carries its own encryption — and a
+    /// public-internet address always needs https plus the outbound opt-in.
+    var trafficFooter: String {
+        if draft.networkClass.allowsPlaintext {
+            if draft.isPlaintext {
+                return "Private address over http: your prompts cross your own network "
+                    + "unencrypted. Inside a WireGuard tunnel that path is already "
+                    + "encrypted; across plain Wi-Fi it is not."
+            }
+            return "Private address over https, so the connection is encrypted end to end."
+        }
+        return "This address is on the public internet, so it needs https:// and the "
+            + "outbound opt-in."
+    }
+
     var headerFooter: String {
         let names = headers.keys.map { $0.lowercased() }
         if let hit = names.first(where: { Self.credentialLikeHeaders.contains($0) }) {

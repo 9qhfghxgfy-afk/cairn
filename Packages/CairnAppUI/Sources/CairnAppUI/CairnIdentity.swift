@@ -79,7 +79,7 @@ public struct NetworkBadge: View {
         switch networkClass {
         case .onDevice: return "On device"
         case .privateLan: return "LAN"
-        case .tailnet: return "Tailnet"
+        case .tailnet: return "VPN"
         case .publicInternet: return "Internet"
         }
     }
@@ -91,6 +91,26 @@ public struct NetworkBadge: View {
         case .tailnet: return CairnTheme.stoneLight
         case .publicInternet: return CairnTheme.rust
         }
+    }
+}
+
+/// A profile whose traffic reaches the server unencrypted. Plaintext is permitted on a
+/// private network, so this is a warning rather than an error — but it is never hidden,
+/// so the user can always see whether a prompt leaves the device in the clear.
+public struct PlaintextBadge: View {
+    public init() {}
+
+    public var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "lock.open.fill")
+            Text("Plaintext")
+        }
+        .font(.caption2.weight(.semibold))
+        .padding(.horizontal, 7)
+        .padding(.vertical, 3)
+        .background(Capsule().fill(CairnTheme.amber.opacity(0.18)))
+        .foregroundStyle(CairnTheme.amber)
+        .accessibilityLabel("Unencrypted connection")
     }
 }
 

@@ -57,7 +57,10 @@ entitlement tricks, and App Store distribution before the on-device milestones a
 - Every request carries a network class: `.onDevice`, `.privateLan`, `.tailnet`,
   `.publicInternet`. The badge in the header reflects it, and `.publicInternet` requires
   opt-in.
-- Release builds contain **zero** ATS exceptions. Plaintext shows a risk badge.
+- Release builds carry exactly one ATS key, `NSAllowsLocalNetworking`, and never a blanket or
+  per-host exception. A server on the user's own network may be reached over `http://` — by LAN
+  address, or through a VPN tunnel that already encrypts the path — while any public-internet
+  host needs `https://` plus opt-in. Plaintext always shows a risk badge.
 - Temporary chat is backed by a memory-only store; the on-disk store refuses it.
 
 ## Success measures for v1

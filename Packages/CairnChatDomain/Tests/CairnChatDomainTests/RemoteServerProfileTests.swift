@@ -20,13 +20,26 @@ final class RemoteServerProfileTests: XCTestCase {
         )
     }
 
-    func testCanonicalizeRejectsNonHTTPSExceptLoopback() {
-        XCTAssertNil(ServerProfile.canonicalize(urlString: "http://192.168.1.5:1234"))
-        XCTAssertNil(ServerProfile.canonicalize(urlString: "http://ollama.internal:11434"))
+    /// A private address over http is the primary supported route, and a public-internet
+    /// host over http is refused. Generic RFC 1918 addresses only — never a real host.
+    func testCanonicalizeAcceptsPrivatePlaintextAndRefusesPublicPlaintext() {
+        XCTAssertEqual(ServerProfile.canonicalize(urlString: "http://192.168.1.5:1234"),
+                       "http://192.168.1.5:1234")
+        XCTAssertEqual(ServerProfile.canonicalize(urlString: "http://10.0.0.5:11434"),
+                       "http://10.0.0.5:11434")
+        XCTAssertEqual(ServerProfile.canonicalize(urlString: "http://100.64.1.2:11434"),
+                       "http://100.64.1.2:11434")
+        XCTAssertEqual(ServerProfile.canonicalize(urlString: "http://ollama.local:11434"),
+                       "http://ollama.local:11434")
+        XCTAssertEqual(ServerProfile.canonicalize(urlString: "http://deskserver:8080/"),
+                       "http://deskserver:8080")
+        XCTAssertEqual(ServerProfile.canonicalize(urlString: "http://localhost:11434"),
+                       "http://localhost:11434")
+
+        XCTAssertNil(ServerProfile.canonicalize(urlString: "http://api.some-provider.example"))
+        XCTAssertNil(ServerProfile.canonicalize(urlString: "http://203.0.113.9:11434"))
         XCTAssertNil(ServerProfile.canonicalize(urlString: "ftp://host"))
         XCTAssertNil(ServerProfile.canonicalize(urlString: "192.168.1.5:1234"))
-        XCTAssertNotNil(ServerProfile.canonicalize(urlString: "http://localhost:11434"))
-        XCTAssertNotNil(ServerProfile.canonicalize(urlString: "http://127.0.0.1:1234"))
     }
 
     func testCanonicalizeRejectsUserInfoPathAndQuery() {
@@ -57,20 +70,33 @@ final class RemoteServerProfileTests: XCTestCase {
         )
     }
 
-    func testValidateRejectsBadNameSchemeAndUserInfo() {
+    func testValidateRejectsBlankNameForeignSchemeAndUserInfo() {
         XCTAssertThrowsError(
             try ServerProfile.validate(name: "  ", urlString: "https://host", headers: [:])
         )
         XCTAssertThrowsError(
-            try ServerProfile.validate(name: "s", urlString: "http://10.0.0.9:11434", headers: [:])
+            try ServerProfile.validate(name: "s", urlString: "http://api.some-provider.example", headers: [:])
         ) { error in
-            guard case ServerProfileValidationError.wrongScheme("http") = error else {
-                return XCTFail("expected wrongScheme(http), got \(error)")
+            guard case ServerProfileValidationError.plaintextPublicInternet = error else {
+                return XCTFail("expected plaintextPublicInternet, got \(error)")
+            }
+        }
+        XCTAssertThrowsError(
+            try ServerProfile.validate(name: "s", urlString: "ftp://10.0.0.9", headers: [:])
+        ) { error in
+            guard case ServerProfileValidationError.wrongScheme("ftp") = error else {
+                return XCTFail("expected wrongScheme(ftp), got \(error)")
             }
         }
         XCTAssertThrowsError(
             try ServerProfile.validate(name: "s", urlString: "https://u:p@host", headers: [:])
         )
+    }
+
+    /// The user's actual setup: a llama.cpp / Ollama box on the LAN, reached over http.
+    func testValidateAcceptsAPlaintextServerOnTheLAN() throws {
+        try ServerProfile.validate(name: "Home box", urlString: "http://192.168.1.20:8181", headers: [:])
+        try ServerProfile.validate(name: "VPN box", urlString: "http://10.8.0.2:11434", headers: [:])
     }
 
     // MARK: network class
@@ -123,5 +149,23 @@ final class RemoteServerProfileTests: XCTestCase {
                                     baseURLString: "http://127.0.0.1:8080")
         XCTAssertEqual(profile.networkClass, .privateLan)
         XCTAssertTrue(profile.isPlaintext)
+    }
+
+    /// A LAN server over http is usable with no opt-in: the traffic never leaves the
+    /// user's own network, so plaintext there is a warning to display, not a rule to enforce.
+    func testLanPlaintextIsPrivateAndNeedsNoOptIn() {
+        let profile = ServerProfile(name: "Wired box", kind: .openAICompatible,
+                                    baseURLString: "http://192.168.1.20:8181")
+        XCTAssertEqual(profile.networkClass, .privateLan)
+        XCTAssertTrue(profile.isPlaintext)
+        XCTAssertTrue(profile.networkClass.allowsPlaintext)
+        XCTAssertTrue(profile.usableNow, "a private server is never gated by the outbound opt-in")
+    }
+
+    func testPublicInternetNeverAllowsPlaintextButPrivateClassesDo() {
+        XCTAssertFalse(NetworkClass.publicInternet.allowsPlaintext)
+        XCTAssertTrue(NetworkClass.privateLan.allowsPlaintext)
+        XCTAssertTrue(NetworkClass.tailnet.allowsPlaintext)
+        XCTAssertTrue(NetworkClass.onDevice.allowsPlaintext)
     }
 }

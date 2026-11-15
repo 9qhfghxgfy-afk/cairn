@@ -28,18 +28,22 @@ public enum RemoteTestOutcome: Sendable, Equatable {
         case .optInRequired:
             return "This server is on the public internet. Tick the outbound opt-in first."
         case .rejectedPlainHTTP:
-            return "Plaintext http is blocked (zero ATS exceptions). Use tailscale serve HTTPS."
+            return "Plaintext http is allowed only for a private address. This host is on "
+                + "the public internet, so use https://."
         case .hostNotFound:
-            return "Hostname not found. Is the Tailscale app connected on this iPhone, "
-                + "and is MagicDNS on? tailscale serve gives the right https:// name."
+            return "Host not found. Check the address and the port — and if you are away from "
+                + "home, that the VPN tunnel to your network is connected."
         case .tlsFailure:
-            return "TLS failed. Re-check the https URL; tailscale serve renews its "
-                + "Let's Encrypt certificate automatically."
+            return "TLS failed. Re-check the https URL and the server's certificate; a plain "
+                + "LAN server should be addressed with http:// instead."
         case .connectionRefused:
-            return "Connection refused. Is the server running and is the port forwarded "
-                + "with tailscale serve --bg --https=443 <port>?"
+            return "Connection refused. Nothing is listening at that address and port: is the "
+                + "server running, is the port right, and is it bound to the LAN rather than "
+                + "only to 127.0.0.1? The first connection from this iPhone also needs the "
+                + "Local Network permission."
         case .timedOut:
-            return "Timed out. The server or Tailscale may be unreachable right now."
+            return "Timed out. The server may be asleep, or the route to it may be missing — "
+                + "away from home that usually means the VPN is not connected."
         case .unauthorized:
             return "The server rejected the token (401). Check the token field."
         case .httpStatus(let status):

@@ -31,9 +31,9 @@ jobs:
       - uses: actions/checkout@v7
       - name: No prompt / response / secret logging
         run: bash Scripts/check-logging.sh
-      - name: Release ships with zero ATS exceptions
+      - name: ATS carries only NSAllowsLocalNetworking
         run: bash Scripts/check-ats.sh
-      - name: No real MagicDNS hostname in tracked files
+      - name: No real private hostname in tracked files
         run: bash Scripts/check-hostname.sh
 
   domain:
@@ -74,6 +74,11 @@ jobs:
 
       - name: Generate the .xcodeproj from project.yml
         run: xcodegen generate
+
+      # The guards job has only the spec; here the plist really shipped is checked, so a key
+      # that XcodeGen would drop or alter cannot slip past the static guard.
+      - name: ATS guard on the generated plist
+        run: bash Scripts/check-ats.sh
 
       - name: Resolve package dependencies
         run: xcodebuild -resolvePackageDependencies -project Cairn.xcodeproj -scheme Cairn

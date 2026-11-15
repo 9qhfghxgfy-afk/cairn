@@ -20,8 +20,10 @@ public enum NetworkClassRouting: Sendable {
         // even broader — also tailnet territory).
         if host == "ts.net" || host.hasSuffix(".ts.net") { return .tailnet }
 
-        // Tailscale CGNAT range 100.64.0.0/10 — a tailnet peer address, NOT
-        // covered by NSAllowsLocalNetworking.
+        // Tailscale CGNAT range 100.64.0.0/10 — a tailnet peer address. Private like
+        // any other VPN address. A WireGuard gateway that routes a LAN subnet is not
+        // matched here: the phone dials the LAN address itself (e.g. 192.168.x.x), so
+        // the RFC 1918 rule below classifies it, whichever side of the tunnel it is on.
         if isIPv4(host, inCGNATRange: true) { return .tailnet }
 
         if loopback(host) { return .privateLan }

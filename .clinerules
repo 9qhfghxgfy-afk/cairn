@@ -72,18 +72,28 @@ compatibility, not copied expression.
   (`Authorization`, `X-API-Key`, `Api-Key`, `Proxy-Authorization`, `Cookie`) go to Keychain
   only; other custom header values live in SwiftData, are never logged, and the UI warns
   against putting credentials in ordinary headers.
-- `Scripts/check-ats.sh` fails if ANY configuration carries an ATS exception — the
-  Debug-only scoped-exception plan is superseded (2026-11-14, see ROADMAP **Decisions**).
-  Remote access is HTTPS-only via `tailscale serve`: `serve` auto-provisions and renews
-  Let's Encrypt certificates for the MagicDNS hostname, which iOS trusts by default.
-  Technical facts kept for reference: `NSAllowsLocalNetworking` does NOT cover
-  Tailscale's 100.64.0.0/10; `NSAllowsArbitraryLoads` is ignored when
-  `NSAllowsLocalNetworking` is present; `NSExceptionDomains` cannot match IP literals.
-- The real MagicDNS hostname never enters the repo, commits, tests, docs, or CI logs.
-  Use the placeholder `your-host.your-tailnet.ts.net` — the only `*.ts.net` value
-  allowed in tracked files; `Scripts/check-hostname.sh` fails CI on any other one.
-- HTTP is a warning condition: the UI must show a plaintext-risk badge whenever a profile
-  resolves to plaintext.
+- **Transport decision (2026-11-15, superseding 2026-11-14).** A server on the user's own
+  network is reached over plain `http://` — a LAN IP literal, or that same private address
+  through the router's WireGuard tunnel. No Tailscale, no MagicDNS, no HTTPS requirement.
+  Apple's ATS "applies only to connections made to public host names" and gives no protection
+  to IP addresses, unqualified host names, or `.local` hosts, so a private address needs no
+  exception at all; when away from home the VPN tunnel — not TLS — is what protects the path.
+- Exactly one ATS key may ever ship: `NSAllowsLocalNetworking = true`, which covers a `.local`
+  or unqualified host *name*. `Scripts/check-ats.sh` fails if it is missing, not true, or
+  accompanied by `NSAllowsArbitraryLoads*` or `NSExceptionDomains`. Apple states that key makes
+  ATS ignore `NSAllowsArbitraryLoads`, so declaring it narrows the app's posture.
+- A public-internet profile requires `https://` plus the outbound opt-in. That rule lives in
+  code (`NetworkClass.allowsPlaintext` → validation → connection tester) and is unit-tested —
+  never enforced by an ATS hole.
+- The first request to a LAN address raises the iOS Local Network prompt, and a denial really
+  breaks the connection: keep `NSLocalNetworkUsageDescription` and keep the hint that says so.
+- No real private hostname ever enters the repo, commits, tests, docs, or CI logs — MagicDNS
+  **or** dynamic-DNS. Use `your-host.your-tailnet.ts.net` for a tailnet example, `<your-ddns-hostname>`
+  in prose, and generic RFC 1918 addresses (`192.168.x.x`, `10.x`) in tests. Never write the
+  user's LAN IP, VPN address, or DDNS name into a tracked file; `Scripts/check-hostname.sh`
+  fails CI on any real one.
+- Plaintext is a warning condition, never a silent one: the UI shows a `Plaintext` badge on any
+  profile whose traffic leaves unencrypted.
 
 ## Working style
 - One milestone at a time. Before a milestone, list the exact files to create/modify and its

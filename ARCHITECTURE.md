@@ -28,8 +28,8 @@ Cairn (app target, iOS 26.0, generated from project.yml)
  │                    providers protocol, ChatWorkspace, MockStreamingProvider.
  ├─ CairnPersistence  Swift 6 strict. SwiftData records + SwiftDataStore.
  └─ (M2) CairnProviderRemote   URLSession, SSE, Keychain profiles
-                               (Bonjour discovery deferred to M7: the zero-ATS-exception
-                               policy makes plaintext LAN servers unreachable anyway)
+                               (Bonjour discovery deferred to M7: profiles are typed in
+                               by hand today, and a LAN server is addressed by IP)
     (M3) CairnInferenceLocal   Foundation Models, memory budget, model downloads
     (M3) CairnInferenceNative  Swift 5 MODE ONLY — llama.cpp / mlx-swift C++ interop
                                is not strict-concurrency-clean; isolated and actor-wrapped
@@ -124,22 +124,32 @@ never copied between stores, so an ephemeral conversation has no code path to di
   for the active provider. `.publicInternet` requires explicit opt-in before the first
   request and keeps a persistent badge afterwards (web search, Ollama Cloud).
 
-### ATS / Local Network matrix (Milestone 2 design, already encoded in the guard)
+### ATS / Local Network matrix (decision 2026-11-15, superseding 2026-11-14)
 
-| Situation | Mechanism | Notes |
+Apple's scope decides everything below, so it comes first. ATS **"applies only to connections
+made to public host names"**, and the system provides **no** ATS protection for connections to
+**Internet protocol (IP) addresses**, **unqualified host names**, or **local hosts employing the
+`.local` top-level domain** (Cocoa Keys, *Availability of ATS for Remote and Local Connections*).
+The 2026-11-14 claim that a LAN IP literal over HTTP was "impossible via exceptions" was simply
+wrong: an IP literal is outside ATS, so it needs no exception at all.
+
+| Situation | Transport | Why it works, and what enforces it |
 |---|---|---|
-| LAN over RFC 1918 / `.local` / unqualified host, plaintext | not adopted | `NSAllowsLocalNetworking` is itself an ATS key, and the zero-exception policy forbids any ATS key in any configuration; plaintext LAN HTTP is unsupported — run `tailscale serve` on the server instead |
-| Tailscale `100.64.0.0/10` | **Not** covered by `NSAllowsLocalNetworking` (and we add no ATS keys) | Use MagicDNS HTTPS via `tailscale serve --bg --https=443 <port>` |
-| Tailscale with TLS | `tailscale serve` → `https://<device>.<tailnet>.ts.net` | `serve` auto-provisions and auto-renews **Let's Encrypt** certificates — trusted by iOS by default; **no ATS exception, no custom CA** — the only supported remote route |
-| Plaintext anything (LAN HTTP, Tailscale HTTP) | none | ATS blocks it and no configuration adds exceptions; the profile editor rejects HTTP URLs with an explanatory error pointing at `tailscale serve` |
-| LAN IP literal over HTTP | Impossible via exceptions | `NSExceptionDomains` cannot match IP literals |
-| Anything | `NSAllowsArbitraryLoads` | Banned: it is ignored when `NSAllowsLocalNetworking` is present, and it is a blanket exception. `Scripts/check-ats.sh` fails on it |
+| LAN server by IPv4 literal, `http://192.168.x.x:8181` | plaintext | ATS does not apply to IP addresses. This is the primary supported route |
+| Private server reached through a WireGuard tunnel (router VPN) | plaintext inside the tunnel | The phone still dials the private address, so the same scope applies; the tunnel already encrypts the path, so TLS would encrypt twice and add a certificate to manage for nothing |
+| `.local` or unqualified host **name**, plaintext | plaintext | ATS *does* police host names — this one case is the only reason `NSAllowsLocalNetworking` is declared |
+| Any private address over `https://` | TLS | Still fully supported; nothing about the decision forbids TLS on a LAN |
+| Public-internet host | `https://` only, plus outbound opt-in | Enforced in code: `NetworkClass.allowsPlaintext` → `ServerProfile` validation → connection tester, all unit-tested. ATS also blocks plaintext here on its own |
+| Any configuration | `NSAllowsArbitraryLoads` | Banned — a blanket exception, and Apple states it is ignored while `NSAllowsLocalNetworking` is present. `check-ats.sh` fails on it |
+| Any configuration | `NSExceptionDomains` | Banned — a per-host hole is never needed once the private/public rule lives in code, and it cannot match IP literals anyway |
 
-The shipped `App/Info.plist` contains **no** `NSAppTransportSecurity` key, and **no
-configuration adds one later** (decision 2026-11-14: remote access is HTTPS-only via
-`tailscale serve`; this supersedes the earlier Debug-only split-plist plan). The real
-MagicDNS hostname never enters the repository: docs and tests use the placeholder
-`your-host.your-tailnet.ts.net`, and `Scripts/check-hostname.sh` enforces that in CI.
+The shipped `App/Info.plist` therefore carries **exactly one** ATS key,
+`NSAllowsLocalNetworking = true`, and `Scripts/check-ats.sh` fails if it is missing, not true, or
+accompanied by any other ATS key. Separately, iOS gates every connection to a LAN address behind
+the **Local Network** permission, so `NSLocalNetworkUsageDescription` stays: the first request to
+a private server prompts, and a denial surfaces as the connection-refused hint. No hostname for
+the user's own network — MagicDNS or dynamic-DNS — ever enters the repository: docs and tests use
+placeholders or generic RFC 1918 addresses, and `Scripts/check-hostname.sh` enforces that in CI.
 
 ## 8. Memory guardrails (Milestone 3)
 
@@ -188,8 +198,11 @@ when only a device model is available — never a second resident device model.
 - App icon PNG pipeline (the mark is currently drawn in code as `CairnMark`).
 - On-device primary backend: Foundation Models as the guaranteed iOS 26 path, with
   llama.cpp vs mlx-swift evaluated in Milestone 3 for models Apple's API cannot serve.
-- ~~Per-configuration ATS plist split~~ — superseded 2026-11-14 by the zero-ATS-exception
-  decision (ROADMAP **Decisions**): remote is HTTPS-only via `tailscale serve`.
+- ~~Per-configuration ATS plist split~~ — superseded 2026-11-14 by a zero-ATS-exception rule,
+  which was itself superseded on 2026-11-15 (ROADMAP **Decisions**): exactly one key ships,
+  `NSAllowsLocalNetworking`, and a private server is reached over plain http.
+- ~~Tailscale MagicDNS + `tailscale serve` HTTPS as the only remote route~~ — superseded
+  2026-11-15 by the user's own router WireGuard server plus the server's LAN address.
 - Paid Apple Developer Program: revisit only after M3's on-device checklist; the
   free-Apple-ID sideload path is documented in `docs/INSTALL.md`.
 - Bundle id `app.cairn.cairn` — change it if your team prefix differs.

@@ -28,7 +28,7 @@ public struct ServersView: View {
                 ContentUnavailableView {
                     Label("No servers yet", systemImage: "point.3.connected.trianglepath.dotted")
                 } description: {
-                    Text("Add an Ollama or OpenAI-compatible server you run. Only https, so a tailnet server needs tailscale serve.")
+                    Text("Add a server you run — Ollama, or anything OpenAI-compatible such as llama.cpp or LM Studio. A private LAN or VPN address may use http; anything on the public internet needs https.")
                 }
             }
         }
@@ -36,7 +36,9 @@ public struct ServersView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
-                    newProfile = ServerProfile(name: "", kind: .ollama, baseURLString: "https://")
+                    // OpenAI-compatible first: llama.cpp, LM Studio and most self-hosted
+                    // servers speak that dialect, while Ollama's native API is a different one.
+                    newProfile = ServerProfile(name: "", kind: .openAICompatible, baseURLString: "http://")
                 } label: {
                     Image(systemName: "plus")
                 }

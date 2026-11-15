@@ -1,9 +1,10 @@
 # Installing Cairn on your iPhone from CI (Windows PC, free Apple ID)
 
 How to get a CI-built app onto a physical iPhone **without** the App Store, TestFlight,
-or a paid Apple Developer account. Everything personal stays out of the repo: where you
-see `your-host.your-tailnet.ts.net`, substitute your real values locally — never commit
-them.
+or a paid Apple Developer account. Everything personal stays out of the repo: your server's
+LAN address, your VPN address, and your router's DDNS hostname are typed into the app only —
+never committed. Placeholders like `192.168.x.x` and `your-host.your-tailnet.ts.net` stand in
+for them in these docs.
 
 ## What you need
 
@@ -47,27 +48,56 @@ them.
 
 ## Server access (relevant from Milestone 2 on)
 
-Remote providers are **HTTPS-only** — the app has no ATS exceptions, so plain
-`http://` server URLs are refused. The supported route is Tailscale:
+Cairn talks to an inference server you run yourself. Two routes are supported and neither
+needs HTTPS, a certificate, or a VPN product beyond your own router:
 
-- Install Tailscale on the machine that runs Ollama / LM Studio (the `serve` proxy and
-  the inference server must be on the same machine), and on the iPhone (it must stay
-  connected for MagicDNS names to resolve).
-- One-time on the server (verify flags against `tailscale serve --help` on your build):
+**A. On your own network — the common case.** Add the server's LAN address over `http://`:
 
-  ```bash
-  tailscale serve --bg --https=443 11434   # Ollama's default port
-  tailscale serve --bg --https=443 1234    # LM Studio's default port
-  tailscale serve status
-  ```
+```
+Name:   Home box
+Type:   OpenAI-compatible   (llama.cpp, LM Studio, vLLM, llama-swap, …)
+        Ollama              (only for a real Ollama server — see the dialect note)
+URL:    http://192.168.1.20:8181     (your own LAN address, typed in the app)
+Model:  pick it from the model list, never type it from memory
+```
 
-- Prereqs: MagicDNS on, and HTTPS enabled on the tailnet (Admin console → DNS →
-  HTTPS certificates; the interactive `tailscale serve` flow enables it for you).
-  `serve` auto-provisions and renews Let's Encrypt certificates for
-  `<device>.<tailnet>.ts.net` — iOS trusts them out of the box. No `tailscale cert`
-  step, no custom CA, no ATS exceptions.
-- In Cairn, the server URL is `https://your-host.your-tailnet.ts.net` (your real
-  MagicDNS hostname stays only in the app).
+The first time Cairn reaches a LAN address, iOS asks whether Cairn may find and connect to
+devices on your local network. **Allow it** — if it is denied, every request to a private
+address fails, and Settings → Cairn → Local Network is where it is turned back on.
+
+**B. Away from home — through your router's WireGuard server.** Import the router's WireGuard
+client profile into the WireGuard app on iOS, connect, and use **the same private address**,
+`http://192.168.1.20:8181`. The tunnel carries the bytes; Cairn never learns the public
+endpoint, and the tunnel is the access control.
+
+- `AllowedIPs` in the client config must include your LAN subnet (for example
+  `192.168.1.0/24`), or the private address has no route and the request simply fails.
+- **Never** point Cairn at your public DDNS hostname with a forwarded inference port. That
+  puts an open model endpoint on the internet, and it is not what the tunnel is for.
+- At home with the tunnel up and `AllowedIPs 0.0.0.0/0`, the request hairpins out to the
+  router's WAN address and back in, which some routers refuse when NAT loopback is off.
+  Turn the tunnel off at home, or narrow `AllowedIPs` to the subnets you need.
+- Your DDNS hostname, VPN address and port belong to you: type them into the app, never into
+  the repository. `Scripts/check-hostname.sh` fails CI if a real DDNS or MagicDNS hostname
+  appears in a tracked file.
+
+**Why plain HTTP is fine on these two routes.** Apple's App Transport Security "applies only to
+connections made to public host names" and gives no protection to IP addresses, `.local` hosts,
+or unqualified host names, so a private address over `http://` is not blocked and needs no
+exception. Inside a WireGuard tunnel the path is already encrypted end to end, so HTTPS there
+would encrypt twice and add a certificate to manage for nothing. The app declares exactly one
+ATS key, `NSAllowsLocalNetworking`, which covers the remaining case — a `.local` or bare host
+*name* — and Apple states that key makes ATS ignore `NSAllowsArbitraryLoads` outright. A
+public-internet profile still requires `https://` plus an explicit outbound opt-in, and that rule
+is enforced and unit-tested in code, not by an ATS hole. A `Plaintext` badge is shown on any
+profile that reaches its server unencrypted, so the trade-off is always visible.
+
+**Dialect note, verified against a real llama.cpp server.** `GET /v1/models` answers with both
+an OpenAI-style `data[]` array and an Ollama-style `models` array, while `/api/tags` and
+`/api/version` return `404 not_found_error` — the server is **not** Ollama. Choosing **Ollama**
+for such a box makes the connection test fail on an endpoint it does not have; choose
+**OpenAI-compatible**. A single-model server also ignores the `model` field it is sent, so a
+wrong model id produces no error, only a surprise later: always pick the model from the list.
 
 ## Troubleshooting
 

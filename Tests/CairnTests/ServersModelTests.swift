@@ -4,8 +4,9 @@ import CairnAppUI
 import CairnProviderRemote
 
 /// The Servers screen's rules, tested through its view model: validation refuses credentials
-/// and plaintext, the token only ever reaches the secret store, and the engine list follows
-/// the saved profiles through the real provider factory.
+/// and plaintext to a public host but accepts a private address, the token only ever reaches
+/// the secret store, and the engine list follows the saved profiles through the real provider
+/// factory.
 @MainActor
 final class ServersModelTests: XCTestCase {
 
@@ -44,13 +45,29 @@ final class ServersModelTests: XCTestCase {
         XCTAssertTrue(model.notice?.contains("Keychain") ?? false, "the notice must say where the token belongs")
     }
 
-    func testPlaintextOffLoopbackIsRefused() {
+    /// A server on the user's own network over http is the supported route, so it saves —
+    /// and the record keeps its scheme so the row can carry the plaintext badge.
+    func testPlaintextOnAPrivateAddressIsAccepted() throws {
         let (model, store, _) = makeModel()
-        let lanBox = ServerProfile(name: "Wired box", kind: .ollama, baseURLString: "http://10.0.0.5:11434")
+        let lanBox = ServerProfile(name: "Wired box", kind: .openAICompatible,
+                                   baseURLString: "http://192.168.1.20:8181")
 
-        XCTAssertFalse(model.save(lanBox, token: nil))
+        XCTAssertTrue(model.save(lanBox, token: nil), "a LAN server over http must save")
+        XCTAssertFalse(store.saved.isEmpty, "the refuse path must not have been taken")
+        let stored = try XCTUnwrap(store.saved[lanBox.id])
+        XCTAssertTrue(stored.isPlaintext)
+        XCTAssertTrue(stored.usableNow, "a private server is never gated by the outbound opt-in")
+    }
+
+    /// A public-internet host over http is refused, and the notice teaches the fix.
+    func testPlaintextOnAPublicHostIsRefused() {
+        let (model, store, _) = makeModel()
+        let cloud = ServerProfile(name: "Cloud", kind: .openAICompatible,
+                                  baseURLString: "http://api.some-provider.example")
+
+        XCTAssertFalse(model.save(cloud, token: nil))
         XCTAssertTrue(store.saved.isEmpty)
-        XCTAssertTrue(model.notice?.contains("tailscale serve") ?? false, "the notice must teach the fix")
+        XCTAssertTrue(model.notice?.contains("https") ?? false, "the notice must teach the fix")
     }
 
     func testURLIsCanonicalizedAndTheTokenReachesOnlyTheSecretStore() throws {

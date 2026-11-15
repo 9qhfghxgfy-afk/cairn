@@ -1,12 +1,13 @@
 import Foundation
 
 /// User-presentable validation failures for a server profile. Messages never echo
-/// the full URL — the real MagicDNS hostname must not leak into a log, so this text
-/// is UI-only.
+/// the full URL — the user's real hostname or address must not leak into a log, so
+/// this text is UI-only.
 public enum ServerProfileValidationError: Error, Equatable, LocalizedError, Sendable {
     case missingName
     case invalidURL
     case wrongScheme(String)
+    case plaintextPublicInternet
     case userInfoInURL
     case reservedHeader(String)
     case emptyHeaderName
@@ -18,9 +19,12 @@ public enum ServerProfileValidationError: Error, Equatable, LocalizedError, Send
         case .invalidURL:
             return "That is not a valid server URL."
         case .wrongScheme(let scheme):
-            return "Only https:// is allowed (got \(scheme.isEmpty ? "no scheme" : scheme)). "
-                + "Run `tailscale serve` on the server for HTTPS — the app ships zero ATS "
-                + "exceptions, so plaintext http cannot connect (localhost excepted for development)."
+            return "A server URL must start with http:// or https:// (got "
+                + "\(scheme.isEmpty ? "no scheme" : scheme)://)."
+        case .plaintextPublicInternet:
+            return "That host is on the public internet, so it needs https://. Plaintext "
+                + "http is allowed only for a private address: a LAN address, an address "
+                + "inside your VPN, a .local name, or a bare hostname."
         case .userInfoInURL:
             return "Remove the user info from the URL; tokens belong in the token field."
         case .reservedHeader(let name):
@@ -42,13 +46,18 @@ extension ServerProfile {
         let trimmed = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let components = URLComponents(string: trimmed),
               let scheme = components.scheme?.lowercased(),
-              scheme == "https" || scheme == "http"
+              !scheme.isEmpty
         else { throw ServerProfileValidationError.invalidURL }
+        // A foreign scheme gets its own message: "ftp://host" is a different mistake
+        // from a private host over http, and the fix is different too.
+        guard scheme == "https" || scheme == "http" else {
+            throw ServerProfileValidationError.wrongScheme(scheme)
+        }
 
         let host = components.host?.lowercased() ?? ""
         guard !host.isEmpty else { throw ServerProfileValidationError.invalidURL }
-        if scheme == "http" && !loopbackHosts.contains(host) {
-            throw ServerProfileValidationError.wrongScheme(scheme)
+        if scheme == "http" && !NetworkClassRouting.classify(host: host).allowsPlaintext {
+            throw ServerProfileValidationError.plaintextPublicInternet
         }
         if components.user != nil || components.password != nil {
             throw ServerProfileValidationError.userInfoInURL

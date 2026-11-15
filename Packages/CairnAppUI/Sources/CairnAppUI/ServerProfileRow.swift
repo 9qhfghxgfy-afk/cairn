@@ -28,7 +28,12 @@ struct ServerProfileRow: View {
                         .textSelection(.enabled)
                 }
                 Spacer(minLength: 8)
-                NetworkBadge(networkClass: profile.networkClass)
+                VStack(alignment: .trailing, spacing: 3) {
+                    NetworkBadge(networkClass: profile.networkClass)
+                    if profile.isPlaintext {
+                        PlaintextBadge()
+                    }
+                }
             }
 
             HStack(spacing: 10) {
@@ -51,7 +56,7 @@ struct ServerProfileRow: View {
                 .font(.callout)
 
             if profile.networkClass.requiresOptIn {
-                Toggle("Allow requests to leave the tailnet", isOn: optInBinding)
+                Toggle("Allow requests to leave this device", isOn: optInBinding)
                     .font(.callout)
                     .tint(CairnTheme.rust)
                 if !profile.publicInternetOptIn {

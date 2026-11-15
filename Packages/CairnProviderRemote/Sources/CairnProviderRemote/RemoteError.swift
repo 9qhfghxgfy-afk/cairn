@@ -39,15 +39,19 @@ public enum RemoteError: Error, Equatable, Sendable, LocalizedError {
         case .cancelled:
             return "The request was cancelled."
         case .timedOut:
-            return "The server did not answer in time. Is it running, and is Tailscale connected?"
+            return "The server did not answer in time. Is it running, and is the route to it up?"
         case .hostNotFound:
-            return "Hostname not found. Check the Tailscale connection on this iPhone and that MagicDNS is on."
+            return "Host not found. Check the address and port, and check the VPN tunnel if you "
+                + "are away from home."
         case .tlsFailure:
-            return "TLS failed. tailscale serve renews its certificate automatically, so re-check the https URL."
+            return "TLS failed. Re-check the https URL and the certificate the server presents; "
+                + "a plain LAN server is usually addressed with http instead."
         case .connectionRefused:
-            return "Connection refused. Run tailscale serve --bg --https=443 <port> on the server."
+            return "Connection refused. Is the server running on that port, and is it bound to "
+                + "the network interface rather than only to the local machine?"
         case .plainHTTPBlocked:
-            return "Plaintext http is blocked: this app ships zero ATS exceptions. Use tailscale serve HTTPS."
+            return "Plaintext http is allowed only for a private address; this host is on the "
+                + "public internet, so it needs an encrypted https connection."
         case .transport(let reason):
             return "Connection problem: \(reason)"
         }

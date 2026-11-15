@@ -46,10 +46,15 @@ targets:
       - package: CairnAppUI
     info:
       path: App/Info.plist
-      # No NSAppTransportSecurity key, and no configuration will ever add one
-      # (decision 2026-11-14): remote access is HTTPS-only via tailscale serve,
-      # whose Let's Encrypt certificates iOS trusts by default. check-ats.sh and
-      # check-hostname.sh enforce this in CI.
+      # ATS (decision 2026-11-15, supersedes 2026-11-14): exactly one key, and it is the
+      # narrowest one Apple offers. Apple's own scope says ATS "applies only to connections
+      # made to public host names" and gives no protection to IP addresses, unqualified host
+      # names, or .local hosts — so a LAN or VPN inference server addressed by IP works over
+      # http with NO exception at all. NSAllowsLocalNetworking is here for the remaining case,
+      # a .local or unqualified *name*, and Apple states its presence makes ATS ignore
+      # NSAllowsArbitraryLoads outright (treated as NO), so adding it narrows this app's ATS
+      # posture rather than widening it. Public-internet profiles still require https, enforced
+      # in ServerProfile validation. check-ats.sh allows this one key and fails on any other.
       properties:
         CFBundleDisplayName: Cairn
         CFBundleShortVersionString: $(MARKETING_VERSION)
@@ -58,9 +63,13 @@ targets:
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
-        # Local Network + Bonjour are declared now so Milestone 2 does not need
-        # to touch the plist shape. These are INDEPENDENT of ATS.
-        NSLocalNetworkUsageDescription: "Cairn connects to inference servers you run on your own network, such as Ollama or LM Studio."
+        # ATS: the single permitted exception, scoped to the local network only.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        # Local Network + Bonjour are INDEPENDENT of ATS: iOS gates any connection to a
+        # LAN address behind this prompt, so the first request to a private server needs
+        # the user to allow it. Bonjour discovery itself is deferred to M7.
+        NSLocalNetworkUsageDescription: "Cairn connects to the inference server you run on your own network, such as Ollama, llama.cpp, or LM Studio, so your prompts can reach it from this device."
         NSBonjourServices:
           - _http._tcp
         LSApplicationCategoryType: public.app-category.productivity

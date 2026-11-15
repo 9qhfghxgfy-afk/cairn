@@ -18,8 +18,9 @@ extension RemoteError {
         case .timedOut:
             return .timedOut
         case .cannotFindHost, .dnsLookupFailed:
-            // A MagicDNS name that will not resolve almost always means Tailscale
-            // is not connected on this device, or MagicDNS is off.
+            // A name that will not resolve from the phone usually means the VPN tunnel to
+            // the network that owns it is not connected. An IP-literal address cannot fail
+            // this way, so this is the named-host profile path.
             return .hostNotFound
         case .cannotConnectToHost:
             return .connectionRefused
