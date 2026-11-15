@@ -2,9 +2,11 @@
 # Cairn build entry point. This is the same sequence CI runs, so a green CI run and a
 # green local run mean the same thing.
 #
-#   Scripts/ci.sh all        guards + domain tests + generate + build + test  (default)
+#   Scripts/ci.sh all        guards + domain tests + remote tests + generate + build + test
 #   Scripts/ci.sh guards     privacy guards only
 #   Scripts/ci.sh domain     swift test for the pure domain package (fast, macOS host)
+#   Scripts/ci.sh remote     swift test for CairnProviderRemote (stub + loopback, no internet)
+#   Scripts/ci.sh hosts      both host suites, which is what the CI host job runs
 #   Scripts/ci.sh build      xcodegen + xcodebuild build
 #   Scripts/ci.sh test       xcodegen + xcodebuild test on a simulator
 set -euo pipefail
@@ -49,6 +51,12 @@ domain_tests() {
   swift test --package-path Packages/CairnChatDomain
 }
 
+# URLSession, Keychain, and framing against a stub + a loopback server. Runs on the macOS
+# host: none of these tests need a simulator, and none of them touch the real internet.
+remote_tests() {
+  swift test --package-path Packages/CairnProviderRemote
+}
+
 generate() {
   ensure_xcodegen
   xcodegen generate
@@ -82,10 +90,12 @@ run_tests() {
 case "${1:-all}" in
   guards)  guards ;;
   domain)  select_xcode; domain_tests ;;
+  remote)  select_xcode; remote_tests ;;
+  hosts)   select_xcode; domain_tests; remote_tests ;;
   gen)     select_xcode; generate ;;
   build)   select_xcode; generate; run_build ;;
   test)    select_xcode; generate; run_tests ;;
   probe)   select_xcode; probe ;;
-  all)     guards; select_xcode; probe; domain_tests; generate; run_build; run_tests ;;
+  all)     guards; select_xcode; probe; domain_tests; remote_tests; generate; run_build; run_tests ;;
   *) echo "unknown target: ${1:-all}" >&2; exit 2 ;;
 esac

@@ -76,7 +76,8 @@ final class RemoteServerProfileTests: XCTestCase {
     // MARK: network class
 
     func testNetworkClassRouting() {
-        XCTAssertEqual(NetworkClassRouting.classify(host: "phone.your-tailnet.ts.net"), .tailnet)
+        // Only the placeholder hostname may ever appear in a tracked file.
+        XCTAssertEqual(NetworkClassRouting.classify(host: "your-host.your-tailnet.ts.net"), .tailnet)
         XCTAssertEqual(NetworkClassRouting.classify(host: "ts.net"), .tailnet)
         XCTAssertEqual(NetworkClassRouting.classify(host: "100.64.1.2"), .tailnet)
         XCTAssertEqual(NetworkClassRouting.classify(host: "100.127.255.254"), .tailnet)
@@ -92,7 +93,7 @@ final class RemoteServerProfileTests: XCTestCase {
         XCTAssertEqual(NetworkClassRouting.classify(host: "127.0.0.1"), .privateLan)
 
         XCTAssertEqual(NetworkClassRouting.classify(host: "api.openai.example.com"), .publicInternet)
-        XCTAssertEqual(NetworkClassRouting.classify(fromURLString: "https://a.b.ts.net"), .tailnet)
+        XCTAssertEqual(NetworkClassRouting.classify(fromURLString: "https://your-host.your-tailnet.ts.net"), .tailnet)
         XCTAssertEqual(NetworkClassRouting.classify(fromURLString: "garbage"), .publicInternet)
     }
 

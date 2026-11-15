@@ -37,7 +37,7 @@ jobs:
         run: bash Scripts/check-hostname.sh
 
   domain:
-    name: Domain unit tests (macOS host)
+    name: Host unit tests (macOS)
     needs: guards
     runs-on: macos-26
     timeout-minutes: 20
@@ -53,6 +53,10 @@ jobs:
           swift --version
       - name: Tree, streaming, and cancellation tests
         run: swift test --package-path Packages/CairnChatDomain
+      # URLSession delegate, SSE/NDJSON framing, Keychain policy, and Stop against a
+      # loopback listener. No internet access is used, so the job stays hermetic.
+      - name: Remote provider, profile, and secret tests
+        run: swift test --package-path Packages/CairnProviderRemote
 
   app:
     name: Build + test on simulator

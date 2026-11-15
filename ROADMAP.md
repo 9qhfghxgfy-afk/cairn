@@ -12,7 +12,7 @@ Gate for every milestone (from `.clinerules`):
 |---|---|---|---|
 | 0 | Repo + CI lane | **done** | [43684016580](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/43684016580) — first lane run |
 | 1 | Shell + mock streaming loop | **done** — all gates green on `1e7e250` | [43685125186](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/43685125186) |
-| 2 | Remote providers | **in-progress** — domain layer complete, remote package + UI next | |
+| 2 | Remote providers | **in-progress** — provider layer, persistence, Servers UI, and tests are in the tree; awaiting the CI run that closes it | |
 | 3 | On-device inference + memory guardrails | todo | |
 | 4 | Hybrid Parallel & Synthesized engine | todo | |
 | 5 | Advanced controls, interruption recovery, export/import | todo | |
@@ -194,6 +194,41 @@ Acceptance criteria:
 6. `check-ats.sh` proves zero ATS exceptions; `check-hostname.sh` proves no real hostname.
 
 **M2 is CI-verified only.** No stub test may be reported as real Tailscale connectivity.
+
+### Implementation record (2026-11-15 — **not yet CI-verified**)
+
+Everything the milestone scope names is now in the tree, and this record says plainly what is
+proven and what is not:
+
+- `Packages/CairnProviderRemote` (source, 17 files): `RemoteTransport` (delegate transport —
+  bytes only, never a `bytes:` publisher, because a publisher cannot be cancelled cleanly),
+  `RemoteByteStream` with an explicit `abandon` closure so Stop closes the task even when a
+  transport is blocked waiting for the next byte, `RemoteChatPipeline` (`LineStreamParser`
+  over `URLSession.AsyncBytes`, so a chunk may end anywhere, including inside a multibyte
+  character), `RemoteChatProvider`, `RemoteModelService`, `RemoteConnectionTester`,
+  `RemoteProviderFactory`, `KeychainSecretStore` over an injectable `KeychainOperating`,
+  `SecurityKeychainOperator` (`.afterFirstUnlockThisDeviceOnly`, no `kSecUseDataProtectionKeychain`).
+- Tests, all host-only (`Scripts/ci.sh remote`): framing across chunk splits and mid-accent
+  byte splits, unterminated final line, in-band `{"error"}` on a 200, `[DONE]`, usage-only
+  metrics (no metrics at all when the server reports no counts), 401/500 mapping, bearer
+  header from the Keychain, credential headers dropped defensively, catalog decoding for both
+  dialects, opt-in gating, tester outcomes with their teaching hints, Keychain policy through
+  a fake operator, and a real `NWListener` stub on 127.0.0.1 for the delegate, status mapping,
+  and Stop-against-a-live-socket. Loopback only: no test reaches the internet.
+- `CairnPersistence`: `ServerProfileRecord` (headers as JSON, `hasBearerToken` flag, **no
+  token column**) plus `SwiftDataStore+Profiles`; covered in the simulator suite.
+- `CairnAppUI`: `ServersModel` + `ServersView` + `ServerProfileEditor` (+`Sections`, `Row`),
+  wired in `CairnApp` through `ProviderRegistry` and `RemoteProviderFactory`; the app test
+  suite covers validation refusal, token-only-in-Keychain, delete-removes-the-secret, and
+  disabled-profile-leaves-the-engine-list.
+- CI: `Scripts/ci.sh` gained `remote` and `hosts` targets; the host job now runs both host
+  suites. `check-hostname.sh` caught two M1 test fixtures that used invented MagicDNS hosts
+  instead of the one allowed placeholder; both now use the placeholder, and the guard passes.
+  The logging and ATS guards pass locally too.
+
+Not proven yet, and not to be claimed: the CI run for this commit, Keychain behaviour against
+a real keychain (device-only), and any real Tailscale/Ollama/LM Studio connection — the last
+one also needs the server facts still listed under **Blocked on the user**.
 
 
 ## Milestone 3 — On-device inference + memory guardrails

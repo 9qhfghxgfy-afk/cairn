@@ -10,19 +10,21 @@ import CairnChatDomain
 @MainActor
 public final class SwiftDataStore: ChatStore {
     private let container: ModelContainer
-    private let context: ModelContext
+    /// Internal, not private: `SwiftDataStore+Profiles.swift` extends this type in another
+    /// file and needs the same single writer.
+    let context: ModelContext
 
     /// - Parameter inMemory: used by tests and by any "do not write to disk" path.
     public init(inMemory: Bool = false) throws {
         do {
             if inMemory {
                 container = try ModelContainer(
-                    for: ConversationRecord.self, ChatRecord.self,
+                    for: ConversationRecord.self, ChatRecord.self, ServerProfileRecord.self,
                     configurations: ModelConfiguration(isStoredInMemoryOnly: true)
                 )
             } else {
                 container = try ModelContainer(
-                    for: ConversationRecord.self, ChatRecord.self
+                    for: ConversationRecord.self, ChatRecord.self, ServerProfileRecord.self
                 )
             }
         } catch {

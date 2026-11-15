@@ -27,6 +27,8 @@ packages:
     path: Packages/CairnChatDomain
   CairnPersistence:
     path: Packages/CairnPersistence
+  CairnProviderRemote:
+    path: Packages/CairnProviderRemote
   CairnAppUI:
     path: Packages/CairnAppUI
 
@@ -40,6 +42,7 @@ targets:
     dependencies:
       - package: CairnChatDomain
       - package: CairnPersistence
+      - package: CairnProviderRemote
       - package: CairnAppUI
     info:
       path: App/Info.plist
@@ -82,6 +85,10 @@ targets:
     dependencies:
       - package: CairnChatDomain
       - package: CairnPersistence
+      # The Servers screen is tested through its view model, which needs the remote
+      # factory to prove that saved profiles really become engines.
+      - package: CairnAppUI
+      - package: CairnProviderRemote
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.cairn.cairn.tests
