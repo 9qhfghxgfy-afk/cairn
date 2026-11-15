@@ -21,6 +21,9 @@ final class ServersModelTests: XCTestCase {
             managing: StubModelService(),
             secrets: secrets,
             registry: registry,
+            // Same wiring as the app: the mock is a base engine, so publishing remote
+            // engines replaces the list as base + saved servers, never the mock alone.
+            baseEngines: [MockStreamingProvider()],
             engineBuilder: { profiles in factory.providers(from: profiles) }
         )
         return (model, store, secrets)
