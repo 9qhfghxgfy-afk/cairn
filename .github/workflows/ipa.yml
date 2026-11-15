@@ -1,8 +1,9 @@
 # Unsigned device IPA for sideloading. workflow_dispatch only — this is not a
 # milestone gate; CI's ci.yml stays the gate. Output: Cairn-unsigned.ipa, signed
 # later on the authoring PC with Sideloadly + free Apple ID (docs/INSTALL.md).
-# Release configuration so the artifact matches the App Store-clean build shape:
-# zero ATS keys, no entitlements beyond what the signing profile carries.
+# Release configuration so the artifact matches the App Store-clean build shape: the one
+# permitted ATS key (NSAllowsLocalNetworking) and no entitlements beyond what the signing
+# profile carries.
 
 name: IPA (unsigned device build)
 
