@@ -42,6 +42,7 @@ probe() {
 guards() {
   Scripts/check-logging.sh
   Scripts/check-ats.sh
+  Scripts/check-hostname.sh
 }
 
 domain_tests() {

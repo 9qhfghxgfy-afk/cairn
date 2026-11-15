@@ -5,7 +5,7 @@ Status legend: `done` = green CI run cited · `in-progress` · `todo` · `blocke
 Gate for every milestone (from `.clinerules`):
 1. `swift test --package-path Packages/CairnChatDomain`
 2. `xcodegen generate` → `xcodebuild build` → `xcodebuild test` on iPhone 17 / iOS 26.5
-3. `Scripts/check-logging.sh` and `Scripts/check-ats.sh` pass
+3. `Scripts/check-logging.sh`, `Scripts/check-ats.sh`, and `Scripts/check-hostname.sh` pass
 4. `ROADMAP.md` status updated in the same commit, citing the CI run number
 
 | # | Milestone | Status | CI run |

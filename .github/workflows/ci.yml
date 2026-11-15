@@ -33,6 +33,8 @@ jobs:
         run: bash Scripts/check-logging.sh
       - name: Release ships with zero ATS exceptions
         run: bash Scripts/check-ats.sh
+      - name: No real MagicDNS hostname in tracked files
+        run: bash Scripts/check-hostname.sh
 
   domain:
     name: Domain unit tests (macOS host)
