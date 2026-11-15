@@ -8,9 +8,14 @@ Read first: [PRD.md](PRD.md) · [ARCHITECTURE.md](ARCHITECTURE.md) ·
 
 ## Status
 
-Milestone 1: the app shell, the parent-linked chat tree, mock streaming with real
-cancellation and metrics, and the SwiftData store are written and committed. CI has not
-run yet because the repository has no remote — see "Build" below.
+Milestone 1: **done** — the app shell, the parent-linked chat tree, mock streaming with
+real cancellation and metrics, and the SwiftData store are green end to end on CI:
+[run 43685125186](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/43685125186) on
+commit `1e7e250` — privacy guards, domain tests on macOS, generated-project build, and
+the full simulator suite on iPhone 17 / iOS 26.5 all pass. The repository is
+`github.com/9qhfghxgfy-afk/cairn`, public so the macOS CI lane stays free.
+Next: Milestone 2 (remote providers over `tailscale serve` HTTPS). To install a build on
+a physical iPhone: [docs/INSTALL.md](docs/INSTALL.md).
 
 ## Layout
 

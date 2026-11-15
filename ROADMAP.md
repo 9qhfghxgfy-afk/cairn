@@ -10,8 +10,8 @@ Gate for every milestone (from `.clinerules`):
 
 | # | Milestone | Status | CI run |
 |---|---|---|---|
-| 0 | Repo + CI lane | **done** | pending first push |
-| 1 | Shell + mock streaming loop | **in-progress** — guards ✅, domain tests ✅, app build ✅; one workspace bug fixed, re-running | [43684585956](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/43684585956) |
+| 0 | Repo + CI lane | **done** | [43684016580](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/43684016580) — first lane run |
+| 1 | Shell + mock streaming loop | **done** — all gates green on `1e7e250` | [43685125186](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/43685125186) |
 | 2 | Remote providers | todo | |
 | 3 | On-device inference + memory guardrails | todo | |
 | 4 | Hybrid Parallel & Synthesized engine | todo | |
@@ -26,7 +26,7 @@ iPhone 17 / iOS 26.5), XcodeGen installed in CI, privacy guards on a cheap Linux
 nightly `xcode-27` probe. Acceptance: CI runs on push and the probe step prints Xcode,
 SDK, and simulator runtime versions. Public repo, so macOS minutes cost nothing.
 
-## Milestone 1 — Buildable shell + mock streaming loop · in-progress
+## Milestone 1 — Buildable shell + mock streaming loop · done
 
 Files created:
 
@@ -83,6 +83,18 @@ Bugs this loop actually found (not test-noise):
    came back empty. Fixed to re-read the row: the store is the source of truth, cached
    lists are display snapshots only.
 
+### Final green run — M1 closed (run 43685125186, commit `1e7e2506`)
+
+| Gate | Result |
+|---|---|
+| Privacy guards (logging + ATS) | ✅ pass |
+| `swift test` on macOS | ✅ pass |
+| `xcodegen generate` | ✅ pass |
+| `xcodebuild build` (iOS Simulator, unsigned) | ✅ pass |
+| `xcodebuild test` on iPhone 17 / iOS 26.5 | ✅ pass — the rebind fix cleared the last failure |
+
+M1 is **done** on the HEAD commit, all five gates green. No M1 on-device checklist is
+required (M1 is simulator-provable; device checklists arrive at the end of M3 and M5).
 
 ## Milestone 2 — Remote providers (Ollama, OpenAI-compatible / LM Studio)
 
