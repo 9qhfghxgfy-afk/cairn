@@ -66,8 +66,12 @@ compatibility, not copied expression.
   NEVER logged. Log typed metadata only: UUIDs, enums, counts, byte sizes, durations.
 - Secrets go to Keychain with `.afterFirstUnlockThisDeviceOnly`. Never in UserDefaults,
   never in a plist, never in a CI log, never in an issue or PR body.
-- Every request carries a `NetworkClass`: `.onDevice`, `.privateNetwork` (RFC 1918,
-  `.local`, tailnet), or `.publicInternet`. `.publicInternet` requires opt-in + badge.
+- Every request carries a `NetworkClass`: `.onDevice`, `.privateLan` (RFC 1918, `.local`,
+  unqualified, loopback), `.tailnet` (`*.ts.net` or 100.64.0.0/10), or `.publicInternet`.
+  `.publicInternet` requires opt-in + badge. Credential-bearing headers
+  (`Authorization`, `X-API-Key`, `Api-Key`, `Proxy-Authorization`, `Cookie`) go to Keychain
+  only; other custom header values live in SwiftData, are never logged, and the UI warns
+  against putting credentials in ordinary headers.
 - `Scripts/check-ats.sh` fails if ANY configuration carries an ATS exception — the
   Debug-only scoped-exception plan is superseded (2026-11-14, see ROADMAP **Decisions**).
   Remote access is HTTPS-only via `tailscale serve`: `serve` auto-provisions and renews
@@ -85,6 +89,48 @@ compatibility, not copied expression.
 - One milestone at a time. Before a milestone, list the exact files to create/modify and its
   acceptance criteria. After it, run the gate and report results plus known gaps.
 - Update `ROADMAP.md` status in the same commit that completes a milestone.
+- If a fact about Apple APIs cannot be verified from this machine, say so and gate the code
+  behind a runtime check rather than assuming it.
+
+## Working rules (context, files, shell, CI, credentials)
+
+### Context
+- Never print whole logs, `.xcresult` bundles, or large files. Use offset/limit reads and
+  `grep | head/tail`. On a CI failure, read only the failing step plus the test name and the
+  assertion — not the whole log.
+- At ~70% of the context window: finish the current step, commit, update `ROADMAP.md`, then
+  stop and tell the user to start a new task.
+
+### File size
+- Keep Swift files under ~150 lines, one primary type per file. If an edit is rejected for
+  size, split the file by type instead of appending in parts.
+- After any multi-part write, read the file tail and check brace balance before committing.
+
+### Shell
+- The authoring shell is Windows PowerShell and its profile script is blocked: always run
+  `powershell -NoProfile`. `$_` and nested quoting get mangled when inlined, so put non-trivial
+  logic in a `.ps1` file and run `powershell -NoProfile -ExecutionPolicy Bypass -File <file>`.
+- If output is not captured, rerun once redirecting to a temp file and read it with a bounded
+  read. Git Bash lives at `C:\Program Files\Git\bin\bash.exe` for the `*.sh` guards.
+
+### CI
+- Use `gh` at `$env:LOCALAPPDATA\cairn-tools\bin\gh.exe` if it exists and is authenticated;
+  otherwise use the unauthenticated REST API (the repo is public).
+- A run takes ~5-7 minutes: do useful work meanwhile, or report and stop. Do not poll in a loop.
+
+### Credentials
+- Never read, extract, or reuse tokens from the Windows Credential Manager or the git
+  credential helper, and never put tokens in a command line. If an authenticated action is
+  needed (for example triggering a workflow), ask the user to do it from the GitHub Actions
+  page or to authenticate `gh` themselves.
+
+### Commits, memory, verification
+- Small commits. `ROADMAP.md` is durable memory: update it after every meaningful step.
+  Never mark anything done without a green run.
+- Report verification in three separate categories and never merge them:
+  **CI-verified**, **on-device-verified**, **real-network-verified**.
+
+
 - Keep files small and single-purpose. Prefer pure functions in `CairnChatDomain` so
   branching and streaming are unit-testable without a simulator.
 - If a fact about Apple APIs cannot be verified from this machine, say so and gate the code

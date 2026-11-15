@@ -12,7 +12,7 @@ Gate for every milestone (from `.clinerules`):
 |---|---|---|---|
 | 0 | Repo + CI lane | **done** | [43684016580](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/43684016580) — first lane run |
 | 1 | Shell + mock streaming loop | **done** — all gates green on `1e7e250` | [43685125186](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/43685125186) |
-| 2 | Remote providers | todo | |
+| 2 | Remote providers | **in-progress** — domain layer complete, remote package + UI next | |
 | 3 | On-device inference + memory guardrails | todo | |
 | 4 | Hybrid Parallel & Synthesized engine | todo | |
 | 5 | Advanced controls, interruption recovery, export/import | todo | |
@@ -148,22 +148,53 @@ required (M1 is simulator-provable; device checklists arrive at the end of M3 an
 
 ## Milestone 2 — Remote providers (Ollama, OpenAI-compatible / LM Studio)
 
-- `CairnProviderRemote`: multi-server profiles (name, base URL, custom headers, Keychain
-  bearer token), connection tester, model list, Ollama `/api/ps` loaded-models, pull and
-  delete where capabilities allow, OpenAI-compatible `/v1/chat/completions` SSE parsing.
-- Bonjour discovery for `_http._tcp` plus manual `.local` / LAN-IP entry. Ollama does not
-  advertise a Bonjour record by default, so discovery is best-effort and manual entry is
-  first-class.
-- Local Network permission and `NSBonjourServices` handled independently of ATS; per-config
-  plist split so Release has zero ATS exceptions; scoped `NSExceptionDomains` for a
-  MagicDNS hostname in Debug only; plaintext-risk badge on any HTTP profile.
-- Optional Ollama Cloud profile: off by default, `.publicInternet`, opt-in dialog,
-  persistent outbound badge.
-- Tests: SSE parser against a localhost stub server in CI — chunk boundaries, `[DONE]`,
-  malformed JSON, mid-stream error, cancellation — plus capability gating of server actions.
+Scope corrected 2026-11-15 to match **Decisions** (the original body below predated the
+zero-ATS-exception and defer-Bonjour decisions and has been rewritten, not silently ignored):
 
-Acceptance: a real LAN Ollama server streams on the physical iPhone; CI proves the
-parsers; the guard proves the Release build carries no ATS exception.
+- `Packages/CairnChatDomain/Remote` — pure, host-testable contracts: `ServerProfile`
+  (+ `ServerProfileKind`, validation, canonical URL), `NetworkClassRouting` (RFC 1918 /
+  `.local` / unqualified / loopback / `*.ts.net` / 100.64.0.0/10), `LineStreamParser`
+  (byte-level SSE + NDJSON framing), `OllamaCodec`, `OpenAICodec`, `RemoteTestReport`
+  (+ `RemoteTesting`, `ServerProfileStoring`, `SecretStoring`, `RemoteModelManaging`
+  boundaries so the UI never imports a networking module), `ProviderRegistry`.
+- `Packages/CairnProviderRemote` — URLSession streaming (delegate transport, explicit
+  task cancellation), `RemoteChatProvider` per wire protocol, model management
+  (`/api/tags`, `/api/ps`, `/api/pull`, `/api/delete`; listing only on OpenAI-compatible),
+  `RemoteConnectionTester` (typed, teach-the-fix outcomes), `KeychainSecretStore`
+  (`.afterFirstUnlockThisDeviceOnly`, injectable operator so CI never touches a real keychain).
+- `CairnPersistence` — `ServerProfileRecord` + `ServerProfileStore` (`ServerProfileStoring`);
+  headers as JSON in SwiftData, never logged; token never leaves Keychain.
+- `CairnAppUI` — `ServersModel` view model + profile list, profile editor (name, kind, URL,
+  Keychain token, custom headers, HTTPS-only rejection of plaintext with an explanation,
+  public-internet opt-in), capability-gated model management (Pull/Delete/Loaded models on
+  Ollama only; disabled with a reason on OpenAI-compatible), persistent `NetworkBadge`.
+- Optional **Ollama Cloud** profile: created only on explicit opt-in, `.publicInternet`,
+  labelled as internet, off by default.
+- `docs/SERVERS.md`: install Tailscale on server + iPhone, same tailnet, MagicDNS + HTTPS,
+  `tailscale serve --bg --https=443 <port>` (syntax verified against Tailscale's current
+  `cmd/tailscale/cli/serve_v2.go`: `--bg`, `--https`, `--set-path` are live flags and HTTPS is
+  the default serve mode), placeholders only.
+- **Dropped from M2** (superseded by Decisions): Bonjour discovery and `NSBonjourServices`
+  → M7; Debug-only scoped `NSExceptionDomains` and the per-config plist split → never;
+  plaintext LAN HTTP is unsupported, remote is `tailscale serve` HTTPS only.
+
+Acceptance criteria:
+
+1. All five CI gates green: guards, `swift test` (domain + remote packages), `xcodegen`,
+   `xcodebuild build`, `xcodebuild test` on iPhone 17 / iOS 26.5.
+2. Parser/codec/profile tests cover split chunk boundaries, mid-multibyte UTF-8, `[DONE]`,
+   malformed lines, mid-stream errors, cancellation, real-usage-only metrics, network
+   classification, HTTPS-only validation, reserved-header rejection.
+3. Provider tests against a stub transport: Ollama NDJSON and OpenAI SSE end to end, 401/500
+   mapping, tester outcomes, plus a real loopback (127.0.0.1) stub server.
+4. SwiftData profile round trip incl. custom headers and `hasBearerToken`; Keychain logic
+   covered through a fake operator (real Keychain is device-only).
+5. UI: profile editor + tester + model management compile and run in the app; plaintext HTTP
+   is rejected with an explanation; OpenAI-compatible servers expose no Pull/Delete.
+6. `check-ats.sh` proves zero ATS exceptions; `check-hostname.sh` proves no real hostname.
+
+**M2 is CI-verified only.** No stub test may be reported as real Tailscale connectivity.
+
 
 ## Milestone 3 — On-device inference + memory guardrails
 
