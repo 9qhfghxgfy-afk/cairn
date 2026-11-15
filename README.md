@@ -26,10 +26,14 @@ Packages/CairnChatDomain        Swift 6 strict, pure: tree, session, streaming, 
 Packages/CairnPersistence       SwiftData records + store (the only SwiftData module)
 Packages/CairnAppUI             SwiftUI views + Cairn identity
 Tests/CairnTests                simulator tests: SwiftData persistence, workspace wiring
+Entitlements/                   release-clean reference + paid-path memory-limit experiment
+docs/INSTALL.md                 sideloading a CI IPA onto a physical iPhone (Windows)
 Scripts/ci.sh                   the exact sequence CI runs
 Scripts/check-logging.sh        fails on prompt/response/secret logging
-Scripts/check-ats.sh            fails if Release carries an ATS exception
+Scripts/check-ats.sh            fails on ANY ATS exception in any configuration
+Scripts/check-hostname.sh       fails if a real *.ts.net hostname is tracked
 .github/workflows/ci.yml        macos-26 + Xcode 26.6, iPhone 17 / iOS 26.5
+.github/workflows/ipa.yml       workflow_dispatch: unsigned device IPA for sideloading
 ```
 
 ## Build

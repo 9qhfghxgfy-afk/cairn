@@ -1,0 +1,76 @@
+# Unsigned device IPA for sideloading. workflow_dispatch only — this is not a
+# milestone gate; CI's ci.yml stays the gate. Output: Cairn-unsigned.ipa, signed
+# later on the authoring PC with Sideloadly + free Apple ID (docs/INSTALL.md).
+# Release configuration so the artifact matches the App Store-clean build shape:
+# zero ATS keys, no entitlements beyond what the signing profile carries.
+
+name: IPA (unsigned device build)
+
+on:
+  workflow_dispatch:
+
+env:
+  XCODE_VERSION: "26.6"
+
+jobs:
+  ipa:
+    name: Unsigned device IPA
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Select Xcode ${{ env.XCODE_VERSION }}
+        run: sudo xcode-select -s "/Applications/Xcode_${XCODE_VERSION}.app/Contents/Developer"
+
+      - name: Install XcodeGen
+        run: HOMEBREW_NO_AUTO_UPDATE=1 brew install xcodegen
+
+      - name: Generate the .xcodeproj from project.yml
+        run: xcodegen generate
+
+      - name: Build Release for device (unsigned)
+        run: |
+          xcodebuild \
+            -project Cairn.xcodeproj \
+            -scheme Cairn \
+            -destination 'generic/platform=iOS' \
+            -configuration Release \
+            -derivedDataPath DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build
+
+      - name: Verify the built app
+        run: |
+          set -euo pipefail
+          APP="DerivedData/Build/Products/Release-iphoneos/Cairn.app"
+          test -d "$APP"
+          lipo -verify_arch arm64 "$APP/Cairn"
+          plutil -lint "$APP/Info.plist"
+          SIGINFO="$(codesign -dv "$APP" 2>&1 || true)"
+          if ! printf '%s' "$SIGINFO" | grep -q 'not signed'; then
+            echo "FAIL: app carries a signature; it must ship unsigned:"
+            printf '%s\n' "$SIGINFO" | head -3
+            exit 1
+          fi
+          echo "ok: arm64 binary, parseable Info.plist, unsigned"
+
+      - name: Package the .ipa
+        run: |
+          set -euo pipefail
+          STAGE="Package/Payload"
+          mkdir -p "$STAGE"
+          cp -R "DerivedData/Build/Products/Release-iphoneos/Cairn.app" "$STAGE/"
+          (cd Package && zip -qryX ../Cairn-unsigned.ipa Payload)
+          echo "ipa contents (top level):"
+          unzip -l Cairn-unsigned.ipa | sed -n '1,8p'
+
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v7
+        with:
+          name: cairn-unsigned-ipa
+          path: Cairn-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 14
