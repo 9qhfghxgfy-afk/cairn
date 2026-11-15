@@ -127,6 +127,23 @@ final class OllamaCodecTests: XCTestCase {
         XCTAssertEqual(pull["stream"] as? Bool, false)
     }
 
+    /// Applies one decoded NDJSON line to the accumulators under test.
+    private func consume(
+        _ line: Data,
+        text: inout String,
+        thinking: inout String,
+        finished: inout OllamaCodec.FinalInfo?
+    ) throws {
+        for event in try OllamaCodec.decodeNDJSONLine(line) {
+            switch event {
+            case .content(let t): text += t
+            case .thinking(let t): thinking += t
+            case .finished(let info): finished = info
+            case .error: XCTFail("unexpected error event")
+            }
+        }
+    }
+
     /// End-to-end: NDJSON split one byte at a time still yields the exact
     /// concatenated answer and exactly one finished event.
     func testFuzzByteByByteStream() throws {
@@ -144,15 +161,13 @@ final class OllamaCodecTests: XCTestCase {
         var finished: OllamaCodec.FinalInfo?
         for byte in data {
             for line in parser.feed(Data([byte])) {
-                for event in try OllamaCodec.decodeNDJSONLine(line) {
-                    switch event {
-                    case .content(let t): text += t
-                    case .thinking(let t): thinking += t
-                    case .finished(let info): finished = info
-                    case .error: XCTFail("unexpected error event")
-                    }
-                }
+                try consume(line, text: &text, thinking: &thinking, finished: &finished)
             }
+        }
+        // A producer may end without a trailing newline, so the tail still has to be
+        // taken from the parser - exactly what the streaming pipeline does.
+        if let tail = parser.takeTrailingPartialLine() {
+            try consume(tail, text: &text, thinking: &thinking, finished: &finished)
         }
         XCTAssertEqual(text, "AB")
         XCTAssertEqual(thinking, "why")

@@ -23,6 +23,13 @@ public enum OpenAICodec: Sendable {
         let text: String?
         let imageURL: WireImageURL?
         struct WireImageURL: Encodable { let url: String }
+
+        // The wire key is `image_url`; without this mapping the synthesized key
+        // would be `imageURL`, which every OpenAI-compatible server ignores.
+        enum CodingKeys: String, CodingKey {
+            case type, text
+            case imageURL = "image_url"
+        }
     }
 
     private struct WireMessage: Encodable {
@@ -56,7 +63,16 @@ public enum OpenAICodec: Sendable {
         let topP: Double
         let maxTokens: Int
 
-        struct StreamOptions: Encodable { let includeUsage: Bool }
+        struct StreamOptions: Encodable {
+            let includeUsage: Bool
+
+            // `stream_options.include_usage` is the field the server needs to send a
+            // final usage chunk; a camelCase key would be accepted and then ignored,
+            // which is worse than an error - metrics would silently stay nil.
+            enum CodingKeys: String, CodingKey {
+                case includeUsage = "include_usage"
+            }
+        }
 
         enum CodingKeys: String, CodingKey {
             case model, messages, stream, temperature
