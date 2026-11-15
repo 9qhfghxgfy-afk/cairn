@@ -26,6 +26,9 @@ public final class ChatSessionModel {
     // ChatSessionModel+Streaming.swift are two files of the same type.
     let store: any ChatStore
     let providers: [String: any InferenceProvider]
+    /// When set, the live registry (server profiles can come and go) wins over
+    /// the static snapshot; the static path keeps tests and M1 wiring intact.
+    let registry: ProviderRegistry?
     var streamTask: Task<Void, Never>?
 
     public init(
@@ -39,11 +42,30 @@ public final class ChatSessionModel {
             providers.map { ($0.id, $0) },
             uniquingKeysWith: { _, last in last }
         )
+        self.registry = nil
         self.selectedProviderID = providers.first?.id ?? "mock"
         self.selectedModelID = ""
     }
 
-    public var activeProvider: (any InferenceProvider)? { providers[selectedProviderID] }
+    public init(
+        conversation: Conversation,
+        store: any ChatStore,
+        registry: ProviderRegistry
+    ) {
+        self.conversation = conversation
+        self.store = store
+        self.providers = [:]
+        self.registry = registry
+        self.selectedProviderID = registry.providers.first?.id ?? "mock"
+        self.selectedModelID = ""
+    }
+
+    public var activeProvider: (any InferenceProvider)? {
+        if let fromRegistry = registry?.provider(id: selectedProviderID) {
+            return fromRegistry
+        }
+        return providers[selectedProviderID]
+    }
 
     /// True only if a provider actually emitted reasoning for this turn.
     public var showsReasoningPanel: Bool { accumulator.hasReasoning }
@@ -77,7 +99,9 @@ public final class ChatSessionModel {
     }
 
     public func select(providerID: String) {
-        guard providers[providerID] != nil else { return }
+        guard registry?.provider(id: providerID) != nil || providers[providerID] != nil else {
+            return
+        }
         selectedProviderID = providerID
         selectedModelID = ""
         Task { await loadModels() }

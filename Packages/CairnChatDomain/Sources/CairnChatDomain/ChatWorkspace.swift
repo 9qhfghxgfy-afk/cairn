@@ -29,6 +29,9 @@ public final class ChatWorkspace {
     private let persistentStore: any ChatStore
     private let ephemeralStore: EphemeralStore
     private let providerList: [any InferenceProvider]
+    /// Live registry when the app wires one (server profiles can change at
+    /// runtime); the static list keeps tests and simple wiring working.
+    private let registry: ProviderRegistry?
 
     public init(
         persistentStore: any ChatStore,
@@ -40,6 +43,22 @@ public final class ChatWorkspace {
         self.persistentStore = persistentStore
         self.ephemeralStore = ephemeralStore
         self.providerList = providers
+        self.registry = nil
+        self.mode = mode
+        self.temporaryChat = temporaryChat
+    }
+
+    public init(
+        persistentStore: any ChatStore,
+        ephemeralStore: EphemeralStore = EphemeralStore(),
+        registry: ProviderRegistry,
+        mode: InferenceMode = .onDeviceOnly,
+        temporaryChat: Bool = false
+    ) {
+        self.persistentStore = persistentStore
+        self.ephemeralStore = ephemeralStore
+        self.providerList = []
+        self.registry = registry
         self.mode = mode
         self.temporaryChat = temporaryChat
     }
@@ -49,7 +68,16 @@ public final class ChatWorkspace {
     }
 
     /// Ids of every configured engine, for the selector in the UI layer.
-    public var providerIDs: [String] { providerList.map(\.id) }
+    public var providerIDs: [String] {
+        registry?.ids ?? providerList.map(\.id)
+    }
+
+    public func providerDisplayName(_ id: String) -> String {
+        if let fromRegistry = registry?.displayName(for: id), fromRegistry != id {
+            return fromRegistry
+        }
+        return providerList.first { $0.id == id }?.displayName ?? id
+    }
 
     public func start() async {
         do {
@@ -112,6 +140,16 @@ public final class ChatWorkspace {
         }
     }
 
+    private func makeSession(
+        conversation: Conversation,
+        store: any ChatStore
+    ) -> ChatSessionModel {
+        if let registry {
+            return ChatSessionModel(conversation: conversation, store: store, registry: registry)
+        }
+        return ChatSessionModel(conversation: conversation, store: store, providers: providerList)
+    }
+
     private func createAndBind() {
         do {
             let conversation = try activeStore.createConversation(
@@ -120,7 +158,7 @@ public final class ChatWorkspace {
                 params: .default,
                 isTemporary: temporaryChat
             )
-            session = ChatSessionModel(conversation: conversation, store: activeStore, providers: providerList)
+            session = makeSession(conversation: conversation, store: activeStore)
             if !temporaryChat { reloadConversations() }
         } catch {
             lastError = error.localizedDescription
@@ -128,7 +166,7 @@ public final class ChatWorkspace {
     }
 
     private func bind(to conversation: Conversation) {
-        session = ChatSessionModel(conversation: conversation, store: persistentStore, providers: providerList)
+        session = makeSession(conversation: conversation, store: persistentStore)
     }
 
     private func applyMode(_ newMode: InferenceMode) {
