@@ -47,7 +47,8 @@ jobs:
           set -euo pipefail
           APP="DerivedData/Build/Products/Release-iphoneos/Cairn.app"
           test -d "$APP"
-          lipo -verify_arch arm64 "$APP/Cairn"
+          # lipo wants the input file FIRST, then the operation
+          lipo "$APP/Cairn" -verify_arch arm64
           plutil -lint "$APP/Info.plist"
           SIGINFO="$(codesign -dv "$APP" 2>&1 || true)"
           if ! printf '%s' "$SIGINFO" | grep -q 'not signed'; then
