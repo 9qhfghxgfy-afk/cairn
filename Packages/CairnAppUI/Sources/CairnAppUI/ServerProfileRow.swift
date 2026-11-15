@@ -4,6 +4,9 @@ import CairnChatDomain
 /// One server row: what it is, where its traffic goes, and only the actions its dialect can
 /// actually serve. The badge is never hidden — the user should not have to guess whether
 /// their prompt left the device.
+///
+/// `@MainActor` because the enable / opt-in bindings call straight into `ServersModel`.
+@MainActor
 struct ServerProfileRow: View {
     private var model: ServersModel
     private var profile: ServerProfile

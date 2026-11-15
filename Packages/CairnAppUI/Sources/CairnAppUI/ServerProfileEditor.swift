@@ -8,6 +8,10 @@ import CairnChatDomain
 /// an explanation instead of being silently dropped. The section bodies live in
 /// `ServerProfileEditor+Sections.swift`; members are module-internal so that file can bind
 /// to them.
+///
+/// `@MainActor` because every action here goes through `ServersModel`, which is main-actor
+/// isolated, and the save path touches the Keychain.
+@MainActor
 struct ServerProfileEditor: View {
     struct HeaderRow: Identifiable {
         let id = UUID()
@@ -25,15 +29,17 @@ struct ServerProfileEditor: View {
     var profile: ServerProfile
     @Environment(\.dismiss) private var dismiss
 
-    var name: String
-    var kind: ServerProfileKind
-    var urlString: String
-    var headerRows: [HeaderRow]
-    var enabled: Bool
-    var optIn: Bool
+    // @State, not plain vars: the editor owns these while the sheet is open, and the
+    // section file binds to them with $name, $urlString, and so on.
+    @State var name: String
+    @State var kind: ServerProfileKind
+    @State var urlString: String
+    @State var headerRows: [HeaderRow]
+    @State var enabled: Bool
+    @State var optIn: Bool
     /// Written to the Keychain on save: never to the settings store, never kept in memory
     /// once the sheet closes.
-    var token = ""
+    @State var token = String()
 
     init(model: ServersModel, profile: ServerProfile) {
         self.model = model
