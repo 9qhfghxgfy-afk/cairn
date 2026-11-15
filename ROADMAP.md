@@ -12,7 +12,7 @@ Gate for every milestone (from `.clinerules`):
 |---|---|---|---|
 | 0 | Repo + CI lane | **done** | [43684016580](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/43684016580) — first lane run |
 | 1 | Shell + mock streaming loop | **done** — all gates green on `1e7e250` | [43685125186](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/43685125186) |
-| 2 | Remote providers | **in-progress** — provider layer, persistence, Servers UI, and tests are in the tree; awaiting the CI run that closes it | |
+| 2 | Remote providers | **done** — all gates green on `a5466dd` | [43764696840](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/43764696840) |
 | 3 | On-device inference + memory guardrails | todo | |
 | 4 | Hybrid Parallel & Synthesized engine | todo | |
 | 5 | Advanced controls, interruption recovery, export/import | todo | |
@@ -146,7 +146,7 @@ Bugs this loop actually found (not test-noise):
 M1 is **done** on the HEAD commit, all five gates green. No M1 on-device checklist is
 required (M1 is simulator-provable; device checklists arrive at the end of M3 and M5).
 
-## Milestone 2 — Remote providers (Ollama, OpenAI-compatible / LM Studio)
+## Milestone 2 — Remote providers (Ollama, OpenAI-compatible / LM Studio) · done
 
 Scope corrected 2026-11-15 to match **Decisions** (the original body below predated the
 zero-ATS-exception and defer-Bonjour decisions and has been rewritten, not silently ignored):
@@ -162,8 +162,9 @@ zero-ATS-exception and defer-Bonjour decisions and has been rewritten, not silen
   (`/api/tags`, `/api/ps`, `/api/pull`, `/api/delete`; listing only on OpenAI-compatible),
   `RemoteConnectionTester` (typed, teach-the-fix outcomes), `KeychainSecretStore`
   (`.afterFirstUnlockThisDeviceOnly`, injectable operator so CI never touches a real keychain).
-- `CairnPersistence` — `ServerProfileRecord` + `ServerProfileStore` (`ServerProfileStoring`);
-  headers as JSON in SwiftData, never logged; token never leaves Keychain.
+- `CairnPersistence` — `ServerProfileRecord`, with `SwiftDataStore` conforming to
+  `ServerProfileStoring` in `SwiftDataStore+Profiles`; headers as JSON in SwiftData, never
+  logged; token never leaves Keychain.
 - `CairnAppUI` — `ServersModel` view model + profile list, profile editor (name, kind, URL,
   Keychain token, custom headers, HTTPS-only rejection of plaintext with an explanation,
   public-internet opt-in), capability-gated model management (Pull/Delete/Loaded models on
@@ -195,7 +196,7 @@ Acceptance criteria:
 
 **M2 is CI-verified only.** No stub test may be reported as real Tailscale connectivity.
 
-### Implementation record (2026-11-15 — **not yet CI-verified**)
+### Implementation and verification record (2026-11-15, CI run [43764696840](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/43764696840) on `a5466dd`)
 
 Everything the milestone scope names is now in the tree, and this record says plainly what is
 proven and what is not:
@@ -203,9 +204,9 @@ proven and what is not:
 - `Packages/CairnProviderRemote` (source, 17 files): `RemoteTransport` (delegate transport —
   bytes only, never a `bytes:` publisher, because a publisher cannot be cancelled cleanly),
   `RemoteByteStream` with an explicit `abandon` closure so Stop closes the task even when a
-  transport is blocked waiting for the next byte, `RemoteChatPipeline` (`LineStreamParser`
-  over `URLSession.AsyncBytes`, so a chunk may end anywhere, including inside a multibyte
-  character), `RemoteChatProvider`, `RemoteModelService`, `RemoteConnectionTester`,
+  transport is blocked waiting for the next byte, `RemoteChatPipeline` (a `URLSessionDataDelegate`
+  hands raw chunks to `LineStreamParser`, so a chunk may end anywhere, including inside a
+  multibyte character), `RemoteChatProvider`, `RemoteModelService`, `RemoteConnectionTester`,
   `RemoteProviderFactory`, `KeychainSecretStore` over an injectable `KeychainOperating`,
   `SecurityKeychainOperator` (`.afterFirstUnlockThisDeviceOnly`, no `kSecUseDataProtectionKeychain`).
 - Tests, all host-only (`Scripts/ci.sh remote`): framing across chunk splits and mid-accent
@@ -221,15 +222,63 @@ proven and what is not:
   wired in `CairnApp` through `ProviderRegistry` and `RemoteProviderFactory`; the app test
   suite covers validation refusal, token-only-in-Keychain, delete-removes-the-secret, and
   disabled-profile-leaves-the-engine-list.
-- CI: `Scripts/ci.sh` gained `remote` and `hosts` targets; the host job now runs both host
-  suites. `check-hostname.sh` caught two M1 test fixtures that used invented MagicDNS hosts
-  instead of the one allowed placeholder; both now use the placeholder, and the guard passes.
-  The logging and ATS guards pass locally too.
+- CI: `Scripts/ci.sh` gained `remote` and `hosts` targets, and the host job runs both host
+  suites. Run #15: guards green; 59 domain tests green; the remote package suite green against
+  the stub transport and the 127.0.0.1 listener; xcodegen + simulator build green; 22 simulator
+  tests green with no failures. `check-hostname.sh` also caught two M1 test fixtures that used
+  invented MagicDNS hosts instead of the one allowed placeholder; both now use the placeholder.
 
-Not proven yet, and not to be claimed: the CI run for this commit, Keychain behaviour against
-a real keychain (device-only), and any real Tailscale/Ollama/LM Studio connection — the last
-one also needs the server facts still listed under **Blocked on the user**.
+What CI cannot prove, and what therefore stays unclaimed: Keychain behaviour against a real
+keychain (device-only — the policy is covered here through a fake operator), and any real
+Tailscale, Ollama, or LM Studio connection. The last one also needs the server facts still
+listed under **Blocked on the user**; until then no real-server result may be reported, and
+the loopback stub is not a substitute for one.
 
+### Final green run — M2 closed (run 43764696840, commit `a5466dd`)
+
+| Gate | Result |
+|---|---|
+| Privacy guards (logging + ATS + hostname) | ✅ pass |
+| `swift test` on macOS — domain package | ✅ pass (59 tests) |
+| `swift test` on macOS — `CairnProviderRemote` | ✅ pass (34 tests, incl. the 127.0.0.1 `NWListener` stub) |
+| `xcodegen generate` | ✅ pass |
+| `xcodebuild build` (iOS Simulator, unsigned) | ✅ pass |
+| `xcodebuild test` on iPhone 17 / iOS 26.5 | ✅ pass (22 tests) |
+
+It took eleven failing runs to get there, and the fixes were mostly real defects rather than
+test noise:
+
+1. **Two OpenAI wire keys were camelCase.** `OpenAICodec` serialized `stream_options` as
+   `{"includeUsage":true}` and the image part as `{"imageURL":{…}}`. Both are accepted by the
+   server and then ignored, which is worse than an error: usage chunks never arrive, so every
+   OpenAI-compatible turn would report *no usage reported* forever, and image attachments would
+   silently vanish. Now mapped to `include_usage` / `image_url`.
+2. **A streaming tail can be a complete line.** The byte-at-a-time codec test built a body with
+   no trailing newline and never drained `takeTrailingPartialLine()`, so its final `done` line
+   was dropped. The production pipeline does drain the tail; the fixture now matches it instead
+   of quietly requiring a trailing newline that real servers do not always send.
+3. **Main-actor isolation was assumed, not written.** `ServersModel` took the engine builder as a
+   nonisolated function type while the app hands it a `@MainActor` factory method, and the
+   profile editor and row call into `ServersModel` from members that are not `body`. Both views
+   are now `@MainActor`, and the builder carries its isolation in its type.
+4. **The editor never had state.** Every editable field was assigned
+   `State(initialValue:)` in `init` while declared as a plain `var`, so `$name`, `$urlString`,
+   and `$headerRows` referred to storage that did not exist.
+5. **`any Error` is not `Sendable`.** The failing-transport test double stored an error value in
+   a `Sendable` struct; it stores a `URLError.Code` and builds the error at use.
+
+Plus the ordinary compile corrections CI caught in code written on a machine with no Swift
+toolchain: `flatMap` cannot infer across differently shaped `switch` arms, `URLError.Code` has
+no `cannotParseURL`, a throwing `decodeVersion` call had no `try`, `KeychainQuery` needed
+`Hashable` to key a dictionary, `NWConnection.receive` takes `maximumLength`, and a stub `init`
+had a declaration with no body. One test expectation was wrong too: it expected the mock engine
+to survive a publish while passing no `baseEngines`, so publishing correctly dropped it.
+
+The honest limitation of this loop: those eleven runs were compile-and-unit feedback, not
+behaviour proof against a server. The wire keys in item 1 are exactly the class of defect that
+unit tests against a stub cannot catch, and they were caught by asserting our own serialized
+body. Whether Cairn really talks to a real Ollama or LM Studio over Tailscale is still untested
+and is the first thing the device checklist must establish.
 
 ## Milestone 3 — On-device inference + memory guardrails
 
@@ -291,7 +340,9 @@ Resolved facts (device, signing identity, distribution route, repo visibility) m
 - M2 server facts: which engines and versions run on the server machine(s) (Ollama
   version, LM Studio version), which models will be used (thinking-capable or not),
   whether Tailscale is installed on that machine, and whether MagicDNS + HTTPS are
-  already enabled on the tailnet.
+  already enabled on the tailnet. M2's code and CI gates are done, so these facts are no
+  longer needed to write the provider layer — they are what the M2 device checklist needs
+  before any real-server claim can be made.
 - `increased-memory-limit` availability: assumed unavailable (see Decisions); confirmed
   only by on-device measurement in M3.
 - App-icon asset pipeline (the mark is currently code-drawn `CairnMark`).
