@@ -67,7 +67,11 @@ public final class SwiftDataStore: ChatStore {
         guard !conversation.isTemporary else {
             throw StoreError.writeFailed("Temporary chats are never written to disk.")
         }
-        var descriptor = FetchDescriptor<ConversationRecord>(predicate: #Predicate { $0.id == conversation.id })
+        // Hoist captures: `#Predicate` is happiest with plain locals.
+        let conversationID = conversation.id
+        var descriptor = FetchDescriptor<ConversationRecord>(
+            predicate: #Predicate { $0.id == conversationID }
+        )
         descriptor.fetchLimit = 1
         if let existing = try context.fetch(descriptor).first {
             existing.title = conversation.title
@@ -106,7 +110,8 @@ public final class SwiftDataStore: ChatStore {
     }
 
     public func saveNode(_ node: ChatNode) throws {
-        var descriptor = FetchDescriptor<ChatRecord>(predicate: #Predicate { $0.id == node.id })
+        let nodeID = node.id
+        var descriptor = FetchDescriptor<ChatRecord>(predicate: #Predicate { $0.id == nodeID })
         descriptor.fetchLimit = 1
         if let existing = try context.fetch(descriptor).first {
             // Streaming updates land here: one row, in place, no array rewrite.
