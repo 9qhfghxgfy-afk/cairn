@@ -14,6 +14,15 @@ final class StubTransport: RemoteTransport, @unchecked Sendable {
         /// `abandon()` can close, which is what the Stop tests need.
         var finishes: Bool
 
+        // Explicit init with defaults: the memberwise one would require `errorBody` and
+        // `finishes` at every call site.
+        init(chunks: [[UInt8]], status: Int? = nil, errorBody: Data = Data(), finishes: Bool = true) {
+            self.chunks = chunks
+            self.status = status
+            self.errorBody = errorBody
+            self.finishes = finishes
+        }
+
         static func body(_ text: String) -> Reply { Reply(chunks: [Array(text.utf8)]) }
         static func pieces(_ pieces: [String]) -> Reply { Reply(chunks: pieces.map { Array($0.utf8) }) }
         /// Raw byte pieces, so a fixture can split a line inside a multibyte character.

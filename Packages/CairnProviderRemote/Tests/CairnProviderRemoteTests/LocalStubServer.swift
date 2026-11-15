@@ -97,7 +97,7 @@ final class LocalStubServer: @unchecked Sendable {
     }
 
     private func readRequest(from socket: SocketBox) {
-        socket.connection.receive(minimumIncompleteLength: 1, maximumExpectedLength: 4096) { [weak self] data, _, _, error in
+        socket.connection.receive(minimumIncompleteLength: 1, maximumLength: 4096) { [weak self] data, _, _, error in
             guard let self, error == nil, let data else {
                 self?.close(socket)
                 return
