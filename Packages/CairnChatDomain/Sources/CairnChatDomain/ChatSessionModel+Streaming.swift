@@ -24,8 +24,16 @@ extension ChatSessionModel {
                     accumulator.consume(chunk)
                     persist(assistantNodeID: assistantNodeID, state: accumulator.nodeState)
                 }
-                accumulator.complete()
-                persist(assistantNodeID: assistantNodeID, state: .complete)
+                // A cancelled Task does not necessarily make AsyncThrowingStream throw:
+                // cancellation can end the iteration cleanly, so we would otherwise mark
+                // a truncated answer as a completed one. Check before declaring success.
+                if Task.isCancelled || accumulator.phase == .cancelling {
+                    accumulator.finishCancelled()
+                    persist(assistantNodeID: assistantNodeID, state: .cancelled)
+                } else {
+                    accumulator.complete()
+                    persist(assistantNodeID: assistantNodeID, state: .complete)
+                }
             } catch is CancellationError {
                 accumulator.finishCancelled()
                 persist(assistantNodeID: assistantNodeID, state: .cancelled)
