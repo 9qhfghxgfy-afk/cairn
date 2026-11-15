@@ -62,7 +62,8 @@ extension ChatRecord {
             modelID: node.modelID,
             createdAt: node.createdAt,
             draftsJSON: JSONCodec.encodeIfNotEmpty(node.drafts),
-            metricsJSON: JSONCodec.encode(node.metrics)
+            // nil stays nil rather than storing a "null" blob.
+            metricsJSON: node.metrics.flatMap { JSONCodec.encode($0) }
         )
     }
 

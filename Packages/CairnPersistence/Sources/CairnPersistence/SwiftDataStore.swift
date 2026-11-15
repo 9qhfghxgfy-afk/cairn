@@ -120,7 +120,7 @@ public final class SwiftDataStore: ChatStore {
             existing.stateRaw = node.state.rawValue
             existing.modelID = node.modelID
             existing.draftsJSON = JSONCodec.encodeIfNotEmpty(node.drafts)
-            existing.metricsJSON = JSONCodec.encode(node.metrics)
+            existing.metricsJSON = node.metrics.flatMap { JSONCodec.encode($0) }
         } else {
             context.insert(ChatRecord(node))
         }
