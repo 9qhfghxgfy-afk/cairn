@@ -12,7 +12,7 @@ final class ChatTreeQueryTests: XCTestCase {
         nodes = ChatTree.append(to: nodes, conversationID: cid, parentID: user.id, role: .assistant, text: "v1").nodes
         let a1 = nodes.last!
         let a2 = ChatTree.append(to: nodes, conversationID: cid, parentID: user.id, role: .assistant, text: "v2").node
-        nodes = ChatTree.append(to: nodes, conversationID: cid, parentID: a2.id, role: .user, text: "next").node
+        nodes = ChatTree.append(to: nodes, conversationID: cid, parentID: a2.id, role: .user, text: "next").nodes
         return (a1, a2, nodes)
     }
 
