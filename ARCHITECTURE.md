@@ -87,6 +87,20 @@ testable), and **persists the partial turn on every chunk**. Cancel flips the ph
 partial text with state `.cancelled`. A mid-stream provider error keeps the partial
 text and marks `.failed`; `interrupted` is reserved for Milestone 5 background recovery.
 
+> **Finding from the first CI run (M1):** cancelling a `Task` that is suspended inside
+> `for try await` over an `AsyncThrowingStream` does **not** reliably throw — the stream
+> can end the iteration cleanly. Draining code must therefore check `Task.isCancelled`
+> (or the `.cancelling` phase) *after* the loop before declaring a turn `.complete`,
+> otherwise a truncated answer is reported as a finished one. The test
+> `testCancellationKeepsPartialTextAndMarksNodeCancelled` pins this.
+
+The same run exposed an API footgun: the pure `ChatTree` functions are value-in /
+value-out, so `let node = append(...).node` silently discards the returned array and
+leaves parents missing from the tree. `ChatDraftTree` wraps those functions, keeps the
+array on every mutation, and returns `@discardableResult` nodes — use it for fixtures,
+import (M5), and any code that builds a tree incrementally.
+
+
 ## 6. Temporary chat is a store choice, not a UI flag
 
 `ChatWorkspace` owns two stores: `SwiftDataStore` (disk) and `EphemeralStore` (memory).
