@@ -24,7 +24,9 @@ public final class ServersModel {
     private let baseEngines: [any InferenceProvider]
     /// Not `@Sendable` on purpose: this is only ever called from the main actor, and keeping
     /// it main-actor-bound lets the App pass a factory that owns the URLSession transport.
-    private let engineBuilder: ([ServerProfile]) -> [any InferenceProvider]
+    /// The isolation is written out because the builder is a `@MainActor` method on that
+    /// factory, and Swift 6 will not convert a main-actor function to a nonisolated type.
+    private let engineBuilder: @MainActor ([ServerProfile]) -> [any InferenceProvider]
 
     public init(
         storing: any ServerProfileStoring,
@@ -33,7 +35,7 @@ public final class ServersModel {
         secrets: any SecretStoring,
         registry: ProviderRegistry? = nil,
         baseEngines: [any InferenceProvider] = [],
-        engineBuilder: @escaping ([ServerProfile]) -> [any InferenceProvider] = { _ in [] }
+        engineBuilder: @escaping @MainActor ([ServerProfile]) -> [any InferenceProvider] = { _ in [] }
     ) {
         self.storing = storing
         self.testing = testing
