@@ -1,0 +1,115 @@
+# Cairn CI. macOS runners are the build box because there is no Xcode on the
+# authoring machine. Standard GitHub-hosted macOS runners are free for public
+# repositories, which keeps this repo subscription-free.
+#
+# Pinned: macos-26 + Xcode_26.6 (SDK ceiling iOS 26.5). The xcode-27 image is
+# public preview and is only exercised by nightly.yml — never a milestone gate.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  XCODE_VERSION: "26.6"
+  SIMULATOR_NAME: "iPhone 17"
+  SIMULATOR_OS: "26.5"
+
+jobs:
+  guards:
+    name: Privacy guards
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: No prompt / response / secret logging
+        run: bash Scripts/check-logging.sh
+      - name: Release ships with zero ATS exceptions
+        run: bash Scripts/check-ats.sh
+
+  domain:
+    name: Domain unit tests (macOS host)
+    needs: guards
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode ${{ env.XCODE_VERSION }}
+        run: sudo xcode-select -s "/Applications/Xcode_${XCODE_VERSION}.app/Contents/Developer"
+      - name: Toolchain probe
+        run: |
+          xcodebuild -version
+          xcodebuild -showsdks | grep -i -E 'iphoneos|iphonesimulator' || true
+          xcrun simctl list runtimes | grep -i ios || true
+          swift --version
+      - name: Tree, streaming, and cancellation tests
+        run: swift test --package-path Packages/CairnChatDomain
+
+  app:
+    name: Build + test on simulator
+    needs: domain
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode ${{ env.XCODE_VERSION }}
+        run: sudo xcode-select -s "/Applications/Xcode_${XCODE_VERSION}.app/Contents/Developer"
+
+      - name: Install XcodeGen (not preinstalled on macOS runners)
+        run: HOMEBREW_NO_AUTO_UPDATE=1 brew install xcodegen
+
+      - name: Generate the .xcodeproj from project.yml
+        run: xcodegen generate
+
+      - name: Resolve package dependencies
+        run: xcodebuild -resolvePackageDependencies -project Cairn.xcodeproj -scheme Cairn
+
+      - name: Build
+        run: |
+          xcodebuild \
+            -project Cairn.xcodeproj \
+            -scheme Cairn \
+            -destination 'generic/platform=iOS Simulator' \
+            -configuration Debug \
+            -derivedDataPath DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Test on ${{ env.SIMULATOR_NAME }} / iOS ${{ env.SIMULATOR_OS }}
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project Cairn.xcodeproj \
+            -scheme Cairn \
+            -destination "platform=iOS Simulator,name=${SIMULATOR_NAME},OS=${SIMULATOR_OS}" \
+            -configuration Debug \
+            -derivedDataPath DerivedData \
+            -resultBundlePath ResultBundles/Cairn.xcresult \
+            CODE_SIGNING_ALLOWED=NO \
+            test 2>&1 | xcbeautify
+
+      - name: Upload test results on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cairn-test-results
+          path: ResultBundles/
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Upload generated project on failure (for debugging CI drift)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-xcodeproj
+          path: Cairn.xcodeproj
+          if-no-files-found: ignore
+          retention-days: 3

@@ -1,0 +1,39 @@
+# Nightly forward-compatibility probe on the public-preview xcode-27 image.
+# Never a milestone gate: preview images can be unavailable or shift under us, so this
+# job reports drift instead of blocking work.
+
+name: Nightly Xcode 27 probe
+
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+jobs:
+  probe:
+    name: Build against the iOS 27 SDK
+    runs-on: xcode-27
+    continue-on-error: true
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain probe
+        run: |
+          xcodebuild -version
+          xcodebuild -showsdks | grep -i -E 'iphoneos|iphonesimulator' || true
+          xcrun simctl list runtimes | grep -i ios || true
+      - name: Install XcodeGen
+        run: HOMEBREW_NO_AUTO_UPDATE=1 brew install xcodegen
+      - name: Generate
+        run: xcodegen generate
+      - name: Build (warnings are informative here, not fatal)
+        continue-on-error: true
+        run: |
+          xcodebuild \
+            -project Cairn.xcodeproj \
+            -scheme Cairn \
+            -destination 'generic/platform=iOS Simulator' \
+            -configuration Debug \
+            -derivedDataPath DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            build

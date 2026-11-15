@@ -1,0 +1,18 @@
+# The Xcode project is generated from project.yml — never commit it.
+Cairn.xcodeproj/
+DerivedData/
+build/
+.swiftpm/
+.netrc
+*.xcuserstate
+xcuserdata/
+ResultBundles/
+*.xcresult
+
+.DS_Store
+*.log
+
+# Local-only secrets must never be tracked (tokens live in Keychain at runtime).
+.env
+*.tokens
+Secrets/

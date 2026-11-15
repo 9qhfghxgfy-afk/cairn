@@ -1,0 +1,14 @@
+# Sources are authored on Windows and compiled on macOS. Normalize everything to LF
+# so Swift/XcodeGen never sees CRLF, and keep shell scripts executable-safe.
+* text=auto eol=lf
+
+*.sh text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.swift text eol=lf
+*.md text eol=lf
+*.plist text eol=lf
+
+*.png binary
+*.ico binary
+*.strings bin

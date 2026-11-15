@@ -1,0 +1,104 @@
+# Cairn — XcodeGen spec.
+# The .xcodeproj is GENERATED from this file and is NOT committed.
+#   xcodegen generate        (XcodeGen is not preinstalled on GitHub macOS runners)
+# SwiftPM here is only for internal module boundaries; the app target below is
+# the real iOS application target.
+
+name: Cairn
+options:
+  bundleIdPrefix: app.cairn
+  deploymentTarget:
+    iOS: "26.0"
+  createIntermediateGroups: true
+  developmentLanguage: en
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    IPHONEOS_DEPLOYMENT_TARGET: "26.0"
+    SWIFT_TREAT_WARNINGS_AS_ERRORS: "NO"
+    ENABLE_USER_SCRIPT_SANDBOXING: "NO"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+
+packages:
+  CairnChatDomain:
+    path: Packages/CairnChatDomain
+  CairnPersistence:
+    path: Packages/CairnPersistence
+  CairnAppUI:
+    path: Packages/CairnAppUI
+
+targets:
+  Cairn:
+    name: Cairn
+    type: application
+    platform: iOS
+    sources:
+      - App
+    dependencies:
+      - package: CairnChatDomain
+      - package: CairnPersistence
+      - package: CairnAppUI
+    info:
+      path: App/Info.plist
+      # MILESTONE 1: no NSAppTransportSecurity key at all (no networking yet).
+      # Milestone 2 splits this into per-configuration plists so that any
+      # NSAllowsLocalNetworking / NSExceptionDomains entry exists in Debug only
+      # and Release/App Store builds ship with zero ATS exceptions.
+      properties:
+        CFBundleDisplayName: Cairn
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundleIdentifier: $(PRODUCT_BUNDLE_IDENTIFIER)
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        # Local Network + Bonjour are declared now so Milestone 2 does not need
+        # to touch the plist shape. These are INDEPENDENT of ATS.
+        NSLocalNetworkUsageDescription: "Cairn connects to inference servers you run on your own network, such as Ollama or LM Studio."
+        NSBonjourServices:
+          - _http._tcp
+        LSApplicationCategoryType: public.app-category.productivity
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.cairn.cairn
+        PRODUCT_NAME: Cairn
+        GENERATE_INFOPLIST_FILE: "NO"
+        TARGETED_DEVICE_FAMILY: "1,2"
+      configs:
+        Debug:
+          CODE_SIGN_IDENTITY: "iPhone Developer"
+        Release:
+          CODE_SIGN_IDENTITY: ""
+
+  CairnTests:
+    name: CairnTests
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - Tests/CairnTests
+    dependencies:
+      - package: CairnChatDomain
+      - package: CairnPersistence
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.cairn.cairn.tests
+        GENERATE_INFOPLIST_FILE: "YES"
+
+schemes:
+  Cairn:
+    build:
+      targets:
+        Cairn: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - CairnTests
+    profile:
+      config: Release
+    archive:
+      config: Release
