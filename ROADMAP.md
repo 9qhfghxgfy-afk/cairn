@@ -12,7 +12,7 @@ Gate for every milestone (from `.clinerules`):
 |---|---|---|---|
 | 0 | Repo + CI lane | **done** | [43684016580](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/43684016580) — first lane run |
 | 1 | Shell + mock streaming loop | **done** — all gates green on `1e7e250` | [43685125186](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/43685125186) |
-| 2 | Remote providers | **done** — all gates green on `a5466dd` | [43764696840](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/43764696840) |
+| 2 | Remote providers | **done** — all gates green on `a5466dd`; re-verified on `b58a916` after the networking reversal | [43764696840](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/43764696840), [43771679253](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/43771679253) |
 | 3 | On-device inference + memory guardrails | todo | |
 | 4 | Hybrid Parallel & Synthesized engine | todo | |
 | 5 | Advanced controls, interruption recovery, export/import | todo | |
@@ -380,6 +380,31 @@ not evidence for the next.
 
 Any line that fails is a real defect, and its fix belongs in the same milestone. Until 1–10 are
 checked on the device, M2 remains CI-verified only.
+
+### CI record for the reversal (2026-11-15, CI run [43771679253](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/43771679253) on `b58a916`)
+
+All three jobs green on the branch push:
+
+- `Privacy guards` (`ubuntu-latest`) — hostname guard (MagicDNS plus the new public-DDNS
+  rule) and the ATS guard. This is the run that proves the guard works from a **spec-only**
+  checkout, because the Linux runner has no XcodeGen and therefore no `App/Info.plist`.
+- `Host unit tests (macOS)` — domain and remote suites green.
+- `Build + test on simulator` (`iPhone 17 / iOS 26.5`) — build green, `Executed 23 tests,
+  with 0 failures`. The build job also re-runs the ATS guard against the **generated**
+  `Info.plist`, where it reports `ok: the shipped Info.plist sets NSAllowsLocalNetworking =
+  true` — the proof that XcodeGen emits exactly the intended key and nothing else, which is
+  the part a YAML-only check cannot establish.
+
+Two CI failures came up on the way and both were the guards' own doing, not the policy's: the
+ATS guard matched a comment that merely named a banned key (now anchored to real plist/YAML
+keys), and it ran on Ubuntu where the generated plist does not exist (it now validates the
+spec there). The hostname guard also failed on the literal DDNS domain written into the new
+docs, which is why that rule is now spelled as a regex and the docs name the class rather than
+a real hostname.
+
+What this run still does not prove is the device side: the Local Network prompt, the route to
+a private address over Wi-Fi and over the WireGuard tunnel, and streaming over that tunnel.
+**1–10 above** remain the gate for those.
 
 ## Milestone 3 — On-device inference + memory guardrails
 
