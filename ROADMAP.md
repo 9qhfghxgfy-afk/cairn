@@ -11,7 +11,7 @@ Gate for every milestone (from `.clinerules`):
 | # | Milestone | Status | CI run |
 |---|---|---|---|
 | 0 | Repo + CI lane | **done** | pending first push |
-| 1 | Shell + mock streaming loop | **in-progress** — code complete, awaiting first green run | — |
+| 1 | Shell + mock streaming loop | **in-progress** — guards ✅, domain tests ✅, app build ✅; one workspace bug fixed, re-running | [43684585956](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/43684585956) |
 | 2 | Remote providers | todo | |
 | 3 | On-device inference + memory guardrails | todo | |
 | 4 | Hybrid Parallel & Synthesized engine | todo | |
@@ -60,6 +60,29 @@ Acceptance criteria:
 
 Known gaps at M1: no AppIcon asset set; hybrid modes visible but disabled; no network code
 at all, so no Local Network prompt and no ATS surface yet.
+
+### Verification record (run 43684585956, `47f1c7e`)
+
+| Gate | Result |
+|---|---|
+| Privacy guards (logging + ATS) | ✅ pass |
+| `swift test` on macOS | ✅ pass (after 2 fixes) |
+| `xcodegen generate` | ✅ pass |
+| `xcodebuild build` (iOS Simulator, unsigned) | ✅ pass |
+| `xcodebuild test` on iPhone 17 / iOS 26.5 | ❌ 1 failure — all SwiftData tests green |
+
+Bugs this loop actually found (not test-noise):
+
+1. **Cancelled turns reported `.complete`.** `AsyncThrowingStream` can end iteration
+   cleanly on cancellation instead of throwing, so a truncated answer was marked
+   finished. Fixed by checking `Task.isCancelled` / `.cancelling` after the loop.
+2. **Dropped-array footgun.** `ChatTree` value-in/value-out let fixtures silently lose
+   parent nodes. Fixed by adding `ChatDraftTree`, which keeps the array on every mutation.
+3. **Stale conversation on rebind.** `ChatWorkspace.select()` rebound from the cached
+   `conversations` snapshot, whose `activeLeafID` predated the last send — the transcript
+   came back empty. Fixed to re-read the row: the store is the source of truth, cached
+   lists are display snapshots only.
+
 
 ## Milestone 2 — Remote providers (Ollama, OpenAI-compatible / LM Studio)
 

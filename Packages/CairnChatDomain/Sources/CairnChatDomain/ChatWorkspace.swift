@@ -53,9 +53,14 @@ public final class ChatWorkspace {
 
     public func start() async {
         do {
-            conversations = try persistentStore.loadConversations()
+            reloadConversations()
             if !temporaryChat, let mostRecent = conversations.first {
-                bind(to: mostRecent)
+                // Re-read so the rebound session cannot inherit a stale activeLeafID.
+                if let fresh = try persistentStore.conversation(id: mostRecent.id) {
+                    bind(to: fresh)
+                } else {
+                    bind(to: mostRecent)
+                }
             } else {
                 createAndBind()
             }
@@ -72,9 +77,21 @@ public final class ChatWorkspace {
     }
 
     public func select(conversationID: UUID) {
-        guard !temporaryChat, let conversation = conversations.first(where: { $0.id == conversationID }) else { return }
-        bind(to: conversation)
-        Task { await session?.bootstrap() }
+        // The store is the source of truth. `conversations` is only a display
+        // snapshot: reusing it here rebinds the session to a stale conversation
+        // whose activeLeafID predates the last send, which silently shows an
+        // empty transcript. Re-read the row instead.
+        guard !temporaryChat else { return }
+        do {
+            guard let conversation = try persistentStore.conversation(id: conversationID) else {
+                lastError = StoreError.conversationNotFound(conversationID).errorDescription
+                return
+            }
+            bind(to: conversation)
+            Task { await session?.bootstrap() }
+        } catch {
+            lastError = error.localizedDescription
+        }
     }
 
     public func delete(conversationID: UUID) {
