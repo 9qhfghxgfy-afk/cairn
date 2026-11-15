@@ -43,10 +43,10 @@ targets:
       - package: CairnAppUI
     info:
       path: App/Info.plist
-      # MILESTONE 1: no NSAppTransportSecurity key at all (no networking yet).
-      # Milestone 2 splits this into per-configuration plists so that any
-      # NSAllowsLocalNetworking / NSExceptionDomains entry exists in Debug only
-      # and Release/App Store builds ship with zero ATS exceptions.
+      # No NSAppTransportSecurity key, and no configuration will ever add one
+      # (decision 2026-11-14): remote access is HTTPS-only via tailscale serve,
+      # whose Let's Encrypt certificates iOS trusts by default. check-ats.sh and
+      # check-hostname.sh enforce this in CI.
       properties:
         CFBundleDisplayName: Cairn
         CFBundleShortVersionString: $(MARKETING_VERSION)

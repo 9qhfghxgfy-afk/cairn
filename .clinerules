@@ -68,11 +68,16 @@ compatibility, not copied expression.
   never in a plist, never in a CI log, never in an issue or PR body.
 - Every request carries a `NetworkClass`: `.onDevice`, `.privateNetwork` (RFC 1918,
   `.local`, tailnet), or `.publicInternet`. `.publicInternet` requires opt-in + badge.
-- `Scripts/check-ats.sh` fails if a Release configuration contains any ATS exception.
-  Prefer HTTPS (`tailscale serve`). `NSAllowsLocalNetworking` does NOT cover Tailscale's
-  100.64.0.0/10; `NSAllowsArbitraryLoads` is ignored when `NSAllowsLocalNetworking` is
-  present; `NSExceptionDomains` cannot match IP literals — so plaintext Tailscale must use
-  a MagicDNS `*.ts.net` hostname, scoped as narrowly as possible, Debug configuration only.
+- `Scripts/check-ats.sh` fails if ANY configuration carries an ATS exception — the
+  Debug-only scoped-exception plan is superseded (2026-11-14, see ROADMAP **Decisions**).
+  Remote access is HTTPS-only via `tailscale serve`: `serve` auto-provisions and renews
+  Let's Encrypt certificates for the MagicDNS hostname, which iOS trusts by default.
+  Technical facts kept for reference: `NSAllowsLocalNetworking` does NOT cover
+  Tailscale's 100.64.0.0/10; `NSAllowsArbitraryLoads` is ignored when
+  `NSAllowsLocalNetworking` is present; `NSExceptionDomains` cannot match IP literals.
+- The real MagicDNS hostname never enters the repo, commits, tests, docs, or CI logs.
+  Use the placeholder `your-host.your-tailnet.ts.net` — the only `*.ts.net` value
+  allowed in tracked files; `Scripts/check-hostname.sh` fails CI on any other one.
 - HTTP is a warning condition: the UI must show a plaintext-risk badge whenever a profile
   resolves to plaintext.
 

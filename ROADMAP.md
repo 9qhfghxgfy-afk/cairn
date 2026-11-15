@@ -19,6 +19,46 @@ Gate for every milestone (from `.clinerules`):
 | 6 | Local RAG, vision, web search, voice | todo | |
 | 7 | Parity backlog | todo (per-item approval) | |
 
+## Decisions (durable — update here, not in chat)
+
+Recorded 2026-11-14. These supersede anything older in the repo.
+
+- **Distribution / signing.** Free Apple ID (Personal Team). Primary install path: an
+  **unsigned device IPA** built by CI (`ipa.yml`, workflow_dispatch only) → signed on
+  the Windows authoring PC with **Sideloadly** (v0.71+, Windows builds, iOS 7–27+
+  supported) using the free Apple ID. Apple's free-account limits: 7-day signing expiry
+  (Sideloadly's auto-refresh daemon re-signs near expiry while the PC can reach the
+  device over USB or Wi-Fi), at most 3 sideloaded apps active per device, ~10 App IDs
+  created per year. No App Store or TestFlight unless the paid Apple Developer Program
+  is joined later; the Release configuration stays App Store-clean either way (zero ATS
+  exceptions, no private APIs).
+- **Entitlements.** `com.apple.developer.kernel.increased-memory-limit` is treated as
+  **unavailable**: free-Apple-ID signing tools cannot attach custom entitlements
+  (Sideloadly's custom-entitlement support is Apple Developer Program only; extended
+  virtual addressing is paid-only). M3 must work **with and without** the entitlement;
+  confirm availability by measuring `os_proc_available_memory()` on the physical device
+  in M3 — never trust community reports. The app must never *require* an entitlement.
+- **Networking.** Servers are reached over **Tailscale MagicDNS via `tailscale serve`
+  HTTPS**. **Zero ATS exceptions in any configuration** — this supersedes the earlier
+  plan for a Debug-only scoped `NSExceptionDomains` entry. `serve` auto-provisions and
+  auto-renews **Let's Encrypt** certificates for `<device>.<tailnet>.ts.net`; iOS trusts
+  them by default, so URLSession needs no custom trust handling and `tailscale cert` is
+  not part of the flow. Plaintext HTTP remote profiles are blocked by ATS and get
+  rejected at profile-save time with an explanatory error instead of an exception.
+  Bonjour discovery of plaintext LAN servers is deferred to M7 (it would only find
+  servers ATS refuses to talk to).
+- **Hostname policy.** The real MagicDNS hostname must never appear in the repo,
+  commits, tests, docs, screenshots, or CI logs. Docs and tests use the placeholder
+  `your-host.your-tailnet.ts.net` — the only `*.ts.net` value permitted in tracked
+  files (`Scripts/check-hostname.sh` enforces this in CI). The real hostname lives only
+  in the app (per-server profile; token in Keychain) or gitignored local config.
+- **Test device.** iPhone 15 Pro on **iOS 26.2** (8 GB RAM per Apple's specs — confirm
+  on device). Do not assume iOS 27. The CI simulator lane stays iPhone 17 / iOS 26.5.
+- **CI lane.** `macos-26` + Xcode 26.6 pinned (SDK ceiling iOS 26.5), deployment target
+  iOS 26.0, repo stays **public** (that is what keeps macOS minutes free),
+  `actions/checkout@v7` + `actions/upload-artifact@v7` (clears the Node 20 deprecation
+  warnings).
+
 ## Milestone 0 — Repo + CI lane · done
 
 Repo scaffold, `project.yml`, three SwiftPM packages, pinned CI (macos-26 + Xcode 26.6,
@@ -169,8 +209,13 @@ vault, device-to-device sync, meeting capture.
 
 ## Blocked on the user
 
-Device model, RAM, and iOS version; signing identity (paid Apple Developer Program vs
-free Personal Team); distribution route — which decides whether any ATS exception may
-exist at all and how an `.ipa` can reach the phone; GitHub repo visibility and how I get
-push access; and the M2 server facts (LAN IP, `.local`, or MagicDNS hostname, plus engine
-names and versions).
+Resolved facts (device, signing identity, distribution route, repo visibility) moved to
+**Decisions** above. Still open:
+
+- M2 server facts: which engines and versions run on the server machine(s) (Ollama
+  version, LM Studio version), which models will be used (thinking-capable or not),
+  whether Tailscale is installed on that machine, and whether MagicDNS + HTTPS are
+  already enabled on the tailnet.
+- `increased-memory-limit` availability: assumed unavailable (see Decisions); confirmed
+  only by on-device measurement in M3.
+- App-icon asset pipeline (the mark is currently code-drawn `CairnMark`).

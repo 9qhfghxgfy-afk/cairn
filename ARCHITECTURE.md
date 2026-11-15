@@ -17,6 +17,7 @@ no code, assets, branding, or UI copied from Off Grid AI, Reins, or any other cl
 | App deployment target | **iOS 26.0** (`IPHONEOS_DEPLOYMENT_TARGET` in `project.yml`) |
 | Package platform floors | iOS 18 / macOS 14 — lower floors keep `Package.swift` parseable across toolchains and let `#available(iOS 26.*)` gates do the work; the shipped minimum is still 26.0 |
 | CI cost | Standard macOS runners are **free on public repositories**; private repos bill macOS at $0.062/min |
+| Distribution | unsigned device IPA via `ipa.yml` (workflow_dispatch) → Sideloadly + free Apple ID (7-day expiry, ≤3 apps/device); see ROADMAP **Decisions** and `docs/INSTALL.md` |
 
 ## 2. Module graph
 
@@ -26,7 +27,9 @@ Cairn (app target, iOS 26.0, generated from project.yml)
  ├─ CairnChatDomain   Swift 6 strict, pure. Chat tree, session, streaming state,
  │                    providers protocol, ChatWorkspace, MockStreamingProvider.
  ├─ CairnPersistence  Swift 6 strict. SwiftData records + SwiftDataStore.
- └─ (M2) CairnProviderRemote   URLSession, SSE, Bonjour, Keychain profiles
+ └─ (M2) CairnProviderRemote   URLSession, SSE, Keychain profiles
+                               (Bonjour discovery deferred to M7: the zero-ATS-exception
+                               policy makes plaintext LAN servers unreachable anyway)
     (M3) CairnInferenceLocal   Foundation Models, memory budget, model downloads
     (M3) CairnInferenceNative  Swift 5 MODE ONLY — llama.cpp / mlx-swift C++ interop
                                is not strict-concurrency-clean; isolated and actor-wrapped
@@ -125,16 +128,18 @@ never copied between stores, so an ephemeral conversation has no code path to di
 
 | Situation | Mechanism | Notes |
 |---|---|---|
-| LAN over RFC 1918 / `.local` / unqualified host, plaintext | `NSLocalNetworkUsageDescription` + `NSBonjourServices`, plus `NSAllowsLocalNetworking` | Local Network permission and Bonjour are **independent of ATS**; `NSAllowsLocalNetworking` covers RFC 1918, `.local`, unqualified hosts |
-| Tailscale `100.64.0.0/10` | **Not** covered by `NSAllowsLocalNetworking` | Use MagicDNS HTTPS instead |
-| Tailscale with TLS | `tailscale serve` → `https://<host>.<tailnet>.ts.net` | Needs the Tailscale-provisioned CA trust on the device; **no ATS exception at all** — the preferred route |
-| Plaintext Tailscale (only if unavoidable) | `NSExceptionDomains` naming the user's exact MagicDNS hostname (else `ts.net`, which is broader than one tailnet) | **Debug configuration only**; Release is HTTPS-only with zero exceptions |
+| LAN over RFC 1918 / `.local` / unqualified host, plaintext | not adopted | `NSAllowsLocalNetworking` is itself an ATS key, and the zero-exception policy forbids any ATS key in any configuration; plaintext LAN HTTP is unsupported — run `tailscale serve` on the server instead |
+| Tailscale `100.64.0.0/10` | **Not** covered by `NSAllowsLocalNetworking` (and we add no ATS keys) | Use MagicDNS HTTPS via `tailscale serve --bg --https=443 <port>` |
+| Tailscale with TLS | `tailscale serve` → `https://<device>.<tailnet>.ts.net` | `serve` auto-provisions and auto-renews **Let's Encrypt** certificates — trusted by iOS by default; **no ATS exception, no custom CA** — the only supported remote route |
+| Plaintext anything (LAN HTTP, Tailscale HTTP) | none | ATS blocks it and no configuration adds exceptions; the profile editor rejects HTTP URLs with an explanatory error pointing at `tailscale serve` |
 | LAN IP literal over HTTP | Impossible via exceptions | `NSExceptionDomains` cannot match IP literals |
 | Anything | `NSAllowsArbitraryLoads` | Banned: it is ignored when `NSAllowsLocalNetworking` is present, and it is a blanket exception. `Scripts/check-ats.sh` fails on it |
 
-The shipped `App/Info.plist` therefore contains **no** `NSAppTransportSecurity` key; the
-Debug-only split plist arrives in Milestone 2 with a scoped exception. Any HTTP profile
-shows a plaintext-risk warning in the UI.
+The shipped `App/Info.plist` contains **no** `NSAppTransportSecurity` key, and **no
+configuration adds one later** (decision 2026-11-14: remote access is HTTPS-only via
+`tailscale serve`; this supersedes the earlier Debug-only split-plist plan). The real
+MagicDNS hostname never enters the repository: docs and tests use the placeholder
+`your-host.your-tailnet.ts.net`, and `Scripts/check-hostname.sh` enforces that in CI.
 
 ## 8. Memory guardrails (Milestone 3)
 
@@ -183,6 +188,25 @@ when only a device model is available — never a second resident device model.
 - App icon PNG pipeline (the mark is currently drawn in code as `CairnMark`).
 - On-device primary backend: Foundation Models as the guaranteed iOS 26 path, with
   llama.cpp vs mlx-swift evaluated in Milestone 3 for models Apple's API cannot serve.
-- Per-configuration ATS plist split (Milestone 2).
+- ~~Per-configuration ATS plist split~~ — superseded 2026-11-14 by the zero-ATS-exception
+  decision (ROADMAP **Decisions**): remote is HTTPS-only via `tailscale serve`.
+- Paid Apple Developer Program: revisit only after M3's on-device checklist; the
+  free-Apple-ID sideload path is documented in `docs/INSTALL.md`.
 - Bundle id `app.cairn.cairn` — change it if your team prefix differs.
+
+## 13. Distribution & signing (verified 2026-11-14)
+
+- CI `ipa.yml` (workflow_dispatch only): Release build for `generic/platform=iOS` with
+  `CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""`, then
+  `Payload/Cairn.app` is zipped into `Cairn-unsigned.ipa` and uploaded as an artifact.
+  The job asserts: arm64 binary, parseable Info.plist, **app is unsigned**.
+- Install: Windows PC + Sideloadly (v0.71+) + free Apple ID. Free-account limits: 7-day
+  expiry (auto-refresh daemon re-signs near expiry), ≤3 active sideloaded apps per
+  device, ~10 App IDs/year. Downloading a workflow artifact needs a signed-in GitHub
+  account even for a public repo. Full steps in `docs/INSTALL.md`.
+- Free-Apple-ID signing carries **no custom entitlements** (Sideloadly's entitlements
+  feature is Apple Developer Program only), so Cairn never requires
+  `com.apple.developer.kernel.increased-memory-limit`. `Entitlements/Cairn.entitlements`
+  (release-clean, empty) and `Entitlements/Cairn-sideload-experiment.entitlements`
+  (memory-limit experiment) exist for the later paid/Xcode signing path only.
 
