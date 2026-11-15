@@ -46,7 +46,7 @@ public final class RemoteConnectionTester: RemoteTesting {
 
     private func versionNumber(_ profile: ServerProfile) async throws -> String? {
         let data = try await exchange(profile, path: "/api/version", accept: "application/json")
-        return OllamaCodec.decodeVersion(data)
+        return try OllamaCodec.decodeVersion(data)
     }
 
     private func exchange(_ profile: ServerProfile, path: String, accept: String) async throws -> Data {

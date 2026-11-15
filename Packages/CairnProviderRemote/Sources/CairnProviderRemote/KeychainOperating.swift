@@ -2,7 +2,7 @@ import Foundation
 
 /// Typed, `Sendable` seam over the Keychain, so the token store can be unit-tested on any
 /// platform with a fake instead of a real secure enclave.
-public struct KeychainQuery: Sendable, Equatable {
+public struct KeychainQuery: Sendable, Equatable, Hashable {
     public var service: String
     public var account: String
 

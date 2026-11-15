@@ -33,23 +33,27 @@ struct OllamaWire: RemoteWire {
     }
 
     func decodeLine(_ line: Data) throws -> [RemoteEvent] {
-        try OllamaCodec.decodeNDJSONLine(line).flatMap { event in
+        // Built with an explicit accumulator rather than flatMap: the switch arms return
+        // differently shaped arrays, and the overload set for flatMap cannot infer that.
+        var events: [RemoteEvent] = []
+        for event in try OllamaCodec.decodeNDJSONLine(line) {
             switch event {
             case .thinking(let text):
-                return [.thinking(text)]
+                events.append(.thinking(text))
             case .content(let text):
-                return [.content(text)]
+                events.append(.content(text))
             case .error(let message):
-                return [.error(message)]
+                events.append(.error(message))
             case .finished(let info):
-                var events: [RemoteEvent] = []
                 if info.promptEvalCount != nil || info.evalCount != nil {
-                    events.append(.usage(promptTokens: info.promptEvalCount, completionTokens: info.evalCount))
+                    events.append(
+                        .usage(promptTokens: info.promptEvalCount, completionTokens: info.evalCount)
+                    )
                 }
                 events.append(.finished(FinishReason(ollamaDoneReason: info.doneReason)))
-                return events
             }
         }
+        return events
     }
 
     func decodeModels(_ data: Data, providerID: String) throws -> [ModelInfo] {

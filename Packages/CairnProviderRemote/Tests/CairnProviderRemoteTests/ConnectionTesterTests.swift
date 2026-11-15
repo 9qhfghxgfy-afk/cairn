@@ -4,12 +4,14 @@ import CairnChatDomain
 @testable import CairnProviderRemote
 
 /// A transport that fails on demand, so the hint-carrying outcomes can be reached without a
-/// real dead hostname.
+/// real dead hostname. The stored value is a code, not an error value: `any Error` is not
+/// `Sendable`, and a transport has to be.
 private struct AlwaysFailingTransport: RemoteTransport {
-    var failure: any Error
+    var code: URLError.Code
 
     func open(_ request: URLRequest) -> RemoteByteStream {
-        RemoteByteStream(
+        let failure = URLError(code)
+        return RemoteByteStream(
             bytes: AsyncThrowingStream(Data.self, bufferingPolicy: .unbounded) {
                 $0.finish(throwing: failure)
             },
@@ -61,7 +63,7 @@ final class ConnectionTesterTests: XCTestCase {
     }
 
     func testUnreachableHostBecomesTheTailscaleHint() async {
-        let outcome = await tester(AlwaysFailingTransport(failure: URLError(.cannotFindHost)))
+        let outcome = await tester(AlwaysFailingTransport(code: .cannotFindHost))
             .test(Fixtures.ollama(base: Fixtures.tailnet))
         XCTAssertEqual(outcome, .hostNotFound)
         XCTAssertTrue(outcome.userMessage.contains("MagicDNS"), "the hint must teach the fix")

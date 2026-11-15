@@ -27,7 +27,7 @@ extension RemoteError {
             return .transport("connection lost")
         case .notConnectedToInternet:
             return .transport("no network route")
-        case .cannotParseURL, .unsupportedURL:
+        case .unsupportedURL, .badURL:
             return .invalidURL
         case .appTransportSecurityRequiresSecureConnection:
             return .plainHTTPBlocked
