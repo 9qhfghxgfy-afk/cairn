@@ -14,8 +14,22 @@ EXCLUDE_TESTS="Tests/"
 
 matches() {
   # $1 = pattern
-  grep -rnE --include='*.swift' "$1" "${SCAN[@]}" 2>/dev/null \
-    | grep -v "/Tests/" || true
+  # Build output is excluded, and only build output. `.build/` and `DerivedData/` hold compiler
+  # products plus SwiftPM's own generated test runner, which legitimately contains fatalError();
+  # scanning them made this guard fail on any machine that had ever run `swift test`, which is
+  # every Mac in the primary loop. The guard polices hand-written sources. CI is unaffected: it
+  # checks out a clean tree where those directories do not exist, so every tracked source is
+  # still scanned there. check-hostname.sh and check-signing.sh are immune to the same problem
+  # because they enumerate `git ls-files` rather than the working tree.
+  #
+  # Only file:line is printed, never the matched line. The matched line is the one place a prompt
+  # body, a response body, or a token-bearing URL could actually be echoed, and a CI log on a public
+  # repo is a published artifact. The developer gets the position; the value stays out of the log.
+  grep -rnE --include='*.swift' \
+    --exclude-dir=.build --exclude-dir=.swiftpm --exclude-dir=DerivedData --exclude-dir=build \
+    "$1" "${SCAN[@]}" 2>/dev/null \
+    | grep -v "/Tests/" \
+    | cut -d: -f1,2 || true
 }
 
 check() {

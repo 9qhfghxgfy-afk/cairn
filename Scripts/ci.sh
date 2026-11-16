@@ -33,18 +33,60 @@ DERIVED="${DERIVED_DATA_PATH:-DerivedData}"
 select_xcode() {
   local app="/Applications/Xcode_${XCODE_VERSION}.app"
   if [[ -d "$app" ]]; then
-    # CI keeps several Xcodes side by side, so it switches by path. A local Mac normally has one
-    # Xcode at /Applications/Xcode.app and needs no switch; `sudo` here only runs when the pinned
-    # versioned app really is installed.
+    # CI keeps several Xcodes side by side, so it switches by path. `sudo` here only runs when the
+    # pinned versioned app really is installed, which is the CI case.
     sudo xcode-select -s "${app}/Contents/Developer"
+  elif ! xcodebuild -version >/dev/null 2>&1; then
+    # A local Mac normally has one Xcode at /Applications/Xcode.app, and `xcode-select` can still
+    # point at the Command Line Tools right after an App Store install. Rather than demanding a
+    # system-wide `sudo xcode-select -s`, point THIS process at the app with DEVELOPER_DIR, which
+    # writes nothing to disk and cannot affect CI, where the versioned app above is what is selected.
+    if [[ -d "/Applications/Xcode.app/Contents/Developer" ]]; then
+      export DEVELOPER_DIR="/Applications/Xcode.app/Contents/Developer"
+      echo "note: active developer dir is not Xcode; using DEVELOPER_DIR=${DEVELOPER_DIR} for this run"
+    fi
   fi
-  xcodebuild -version
+
+  local out
+  if ! out="$(xcodebuild -version 2>&1)"; then
+    # Fail with the fix attached, not with a tool error nobody can act on.
+    echo "xcodebuild cannot run. Fix in this order:" >&2
+    case "$out" in
+      *"license agreement"*)
+        echo "  1. sudo xcodebuild -license accept" >&2
+        echo "  2. sudo xcodebuild -runFirstLaunch" >&2 ;;
+      *)
+        echo "  1. sudo xcode-select -s /Applications/Xcode.app/Contents/Developer" >&2 ;;
+    esac
+    echo "detail: ${out%%$'\n'*}" >&2
+    exit 1
+  fi
+  echo "$out"
 }
 
 # A local Mac will not have the exact runtime CI pins. Falling back to the device name alone lets
 # xcodebuild pick the newest runtime that exists instead of failing on a version nobody installed.
 resolve_destination() {
-  if [[ -n "$SIMULATOR_OS" ]] && ! xcrun simctl list runtimes 2>/dev/null | grep -q "iOS ${SIMULATOR_OS}"; then
+  local runtimes devices
+  runtimes="$(xcrun simctl list runtimes 2>/dev/null || true)"
+  if ! printf '%s' "$runtimes" | grep -qi "iOS"; then
+    # The usual fresh-Mac gap: Xcode installs with no simulator runtime at all, so every simulator
+    # destination fails. Say it here, with the command that fixes it, before xcodebuild fails
+    # cryptically. CI has its pinned runtime and is unaffected by this check.
+    echo "no iOS simulator runtime is installed, so no simulator lane can run on this machine." >&2
+    echo "  install one (check free space first: 'df -h /'):  xcodebuild -downloadPlatform iOS" >&2
+    echo "  or skip the simulator and run the host suites:    Scripts/ci.sh hosts" >&2
+    exit 1
+  fi
+  devices="$(xcrun simctl list devices available 2>/dev/null || true)"
+  if ! printf '%s' "$devices" | grep -q "  ${SIMULATOR_NAME} ("; then
+    echo "no '${SIMULATOR_NAME}' simulator on this machine. Available iOS simulators:" >&2
+    printf '%s\n' "$devices" | grep -E '^    (iPhone|iPad)' | sed 's/ (.*//' | sort -u | head -8 >&2
+    echo "  choose one with: SIMULATOR_NAME='iPhone 15' Scripts/ci.sh test" >&2
+    echo "  CI stays pinned to iPhone 17 / iOS 26.5 whatever is chosen here." >&2
+    exit 1
+  fi
+  if [[ -n "$SIMULATOR_OS" ]] && ! printf '%s' "$runtimes" | grep -q "iOS ${SIMULATOR_OS}"; then
     echo "note: no iOS ${SIMULATOR_OS} runtime installed; using ${SIMULATOR_NAME} with its newest available runtime"
     SIMULATOR_OS=""
   fi
@@ -71,11 +113,14 @@ probe() {
 }
 
 guards() {
-  Scripts/check-logging.sh
-  Scripts/check-ats.sh
-  Scripts/check-hostname.sh
-  Scripts/check-signing.sh
-  Scripts/test-guards.sh
+  # Invoked through `bash` on purpose: the exec bit survives a normal clone, but a Windows checkout
+  # or a zip transfer can drop it, and the guards are the one lane that must run on every machine.
+  # CI already calls them as `bash Scripts/check-*.sh`; this keeps the two entry points equivalent.
+  bash Scripts/check-logging.sh
+  bash Scripts/check-ats.sh
+  bash Scripts/check-hostname.sh
+  bash Scripts/check-signing.sh
+  bash Scripts/test-guards.sh
 }
 
 domain_tests() {

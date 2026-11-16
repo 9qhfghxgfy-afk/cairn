@@ -23,7 +23,10 @@ TREE=''; pass=0; fails=0
 tree() {
   local d="$WORK/t"; rm -rf "$d"; mkdir -p "$d/Scripts"
   cp "$ROOT/Scripts/check-hostname.sh" "$ROOT/Scripts/check-ats.sh" \
-     "$ROOT/Scripts/check-signing.sh" "$d/Scripts/"
+     "$ROOT/Scripts/check-signing.sh" "$ROOT/Scripts/check-logging.sh" "$d/Scripts/"
+  # The logging guard greps `Packages App` for *.swift, so the scratch tree needs those directories
+  # to exist — otherwise an accept case would pass only because there was nowhere to scan.
+  mkdir -p "$d/Packages/CairnChatDomain/Sources/CairnChatDomain" "$d/App"
   cat > "$d/project.yml" <<'SPEC'
 name: Cairn
 targets:
@@ -150,6 +153,31 @@ expect_accept "$SIGN" 'a bare signing identity with no team in it'
 wipe notes.md; wipe Config/Signing.xcconfig; wipe Config/Local.xcconfig.example
 expect_accept "$SIGN" 'the unplanted copy still passes'
 expect_accept "$SIGN" 'the committed tree' "$ROOT"
+
+LOGS=check-logging.sh
+# The logging guard is the guard whose own failure output is the leak risk: the matched line is
+# where a prompt body, a response body, or a token-bearing URL would be echoed, into a public CI
+# log. So it prints file:line only. These cases prove the three things that matter: it still rejects
+# console logging, it does not echo what was logged, and it ignores generated build output.
+canary='promptbody'
+echo '--- logging guard: must reject, and must not print the logged string ---'
+TREE="$(tree)"
+SRC=Packages/CairnChatDomain/Sources/CairnChatDomain/Planted.swift
+plant "$SRC" "// ${canary}-42" 'print("a greeting")'
+expect_reject "$LOGS" 'print() in library code' "${canary}-42"
+plant "$SRC" "NSLog(\"${canary}-43\")"
+expect_reject "$LOGS" 'NSLog() in library code' "${canary}-43"
+plant "$SRC" 'debugPrint("a greeting")'
+expect_reject "$LOGS" 'debugPrint() in library code' ''
+
+echo '--- logging guard: must accept ---'
+plant "$SRC" 'let greeting = "hello"'
+expect_accept "$LOGS" 'a source file with no console logging'
+plant Packages/CairnChatDomain/.build/gen/runner.swift "// ${canary}-44" 'fatalError("generated test runner")'
+expect_accept "$LOGS" 'generated build output, which is not hand-written source'
+wipe "$SRC"
+expect_accept "$LOGS" 'the unplanted copy still passes'
+expect_accept "$LOGS" 'the committed tree' "$ROOT"
 
 echo "guard self-test: ${pass} ok, ${fails} failed"
 [[ $fails -eq 0 ]] || exit 1
