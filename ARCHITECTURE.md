@@ -123,6 +123,15 @@ never copied between stores, so an ephemeral conversation has no code path to di
   `.privateLan`, `.privateVPN`, or `.publicInternet`, and the header shows a `NetworkBadge`
   for the active provider. `.publicInternet` requires explicit opt-in before the first
   request and keeps a persistent badge afterwards (web search, Ollama Cloud).
+- **Network class is derived, never stored.** `ServerProfile.networkClass` computes the value from
+  `baseURLString` through `NetworkClassRouting.classify(fromURLString:)`; `ServerProfileRecord` has
+  no column for it and stores only `name`, `kindRaw`, `baseURLString`, `enabled`,
+  `publicInternetOptIn`, `hasBearerToken`, and `headersJSON`. That is deliberate: a persisted privacy
+  label can drift out of agreement with the address it describes, and a stale label is worse than no
+  label. It also means the `tailnet` → `.privateVPN` rename needed **no decode shim and no
+  migration** — no stored record ever carried the old raw value. If a future version ever does
+  persist a class, it must decode an unknown or legacy raw value by re-deriving it from the URL,
+  never by defaulting to a class.
 
 ### ATS / Local Network matrix (decision 2026-11-15, superseding 2026-11-14)
 
