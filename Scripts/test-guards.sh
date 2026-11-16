@@ -62,6 +62,7 @@ expect_accept() { # <script> <label> [tree]
 HOSTS=check-hostname.sh; ATS=check-ats.sh
 # Fragments, so no line here is a full IPv4 literal and no assembled value is allow-listed.
 lan='192.168.50'; lan_ip="${lan}.36"
+rfc='172.16';     rfc_ip="${rfc}.10.5"
 tun='10.8.0';     tun_ip="${tun}.42"
 cgn='100.64';     cgn_ip="${cgn}.7.9"
 lld='169.254';    lld_ip="${lld}.11.7"
@@ -79,6 +80,7 @@ plant notes.md "loopback, not an example: ${lp_ip}";     expect_reject "$HOSTS" 
 plant notes.md "old profile host: ${mesh_host}";            expect_reject "$HOSTS" 'a mesh-VPN DNS name' "$mesh_host"
 plant notes.md "router answers at ${ddns_host}:51820";   expect_reject "$HOSTS" 'a dynamic-DNS router name' "$ddns_host"
 plant notes.md "192.168.1.20 is the example, ${lan_ip} real"; expect_reject "$HOSTS" 'a real address beside an example on one line' "$lan_ip"
+plant notes.md "the NAS sits on ${rfc_ip}, inside 172.16/12"; expect_reject "$HOSTS" 'an in-range 172.16/12 address that is not an example' "$rfc_ip"
 plant App/Info.plist "plist value holding ${lan_ip}";    expect_reject "$HOSTS" 'an address in a generated plist' "$lan_ip"
 
 echo '--- hostname / address guard: must accept ---'
