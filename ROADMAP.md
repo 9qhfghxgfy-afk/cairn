@@ -502,6 +502,15 @@ Memory Limit capability question is untouched. The Mac is the primary loop in th
 not yet been demonstrated as one. M2 stays **CI-verified only**: the 10-line device checklist remains
 the gate, and nothing in this batch is on-device-verified or real-network-verified.
 
+Run [43796151531](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/43796151531) closed this batch:
+`Privacy guards`, `Host unit tests (macOS)` and `Build + test on simulator` all green on `8ee064e`, the
+commit that carries the Mac build-loop docs, the rules entry and the CI record above. The run between
+them, [43795785723](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/43795785723) on `ad1bd9f`, ended
+`cancelled` — the next push superseded it under the workflow's concurrency rule, which is that rule
+working as intended and not a test failure. The Mac is now the documented primary loop; it has still not
+been *used* as one from this workspace.
+
+
 ## Plan change (2026-11-15) — LAN plus the router's own WireGuard; the mesh-VPN route is out
 
 Recorded with its date, because this is what Milestone 2 was originally scoped around and the
