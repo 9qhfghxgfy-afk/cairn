@@ -24,9 +24,11 @@ Gate for every milestone (from `.clinerules`):
 
 Recorded 2026-11-14. These supersede anything older in the repo.
 
-- **Development machine and build loop (2026-11-15).** The development machine is now a **MacBook
-  Pro (Apple Silicon)** on macOS 26.x with Xcode installed, 48 GB unified memory, no paid Apple
-  developer account, repo still public.
+- **Development machine and build loop (2026-11-15; machine corrected 2026-11-16).** The development
+  machine is a **MacBook Pro 13-inch (M1, 2020)** on macOS 27.2.1 with Xcode 27.2, **8 GB** unified
+  memory, no paid Apple developer account, repo still public. The "48 GB" recorded on 2026-11-15 was
+  wrong — it described a different machine — and nothing may be scoped against headroom this Mac
+  does not have.
   - **Local Xcode is the primary build loop; CI is a second check, not the way to learn that code
     compiles.** Run `Scripts/ci.sh` locally — `guards`, `hosts`, `build`, `test`, `all`, `probe`,
     `device` — because that is the same sequence CI runs. `device` needs the iPhone connected to
@@ -38,12 +40,14 @@ Recorded 2026-11-14. These supersede anything older in the repo.
     If the Mac is ahead of the pin — which is the expected case — that is a divergence to **record
     here**, not to fix. Never bump the pin because something builds locally; only a green CI run on
     the new version moves it, and the nightly Xcode 27 probe stays informational.
-  - 48 GB changes what is worth testing in M3: bigger on-device models are realistic and there is
-    more room for a second resident model. It changes no budget code — `os_proc_available_memory()`
-    is still the per-process limit on the iPhone, and the iPhone is the target.
-  - The Mac is on the **same tailnet** as the inference machine (same WireGuard router, not another
-    VPN product). This adds no requirement and no app: `docs/SERVERS.md` notes only that a Mac on
-    the tailnet can reach a served model over the tunnel for testing, and nothing else may change.
+  - 8 GB, not 48, is what this Mac has, so M3's on-device work is tighter here than that note
+    implied: one `xcodebuild` process at a time, and simulators shut down after testing. It changes
+    no budget code — `os_proc_available_memory()` is still the per-process limit on the iPhone, and
+    the iPhone is the target.
+  - The Mac reaches the inference machine over the **same home LAN**, and through the **router's own
+    WireGuard tunnel** when away — no VPN product and no mesh service is part of the plan. This adds
+    no requirement and no app: `docs/SERVERS.md` notes only that a Mac on that LAN or tunnel can
+    reach a served model for testing, and nothing else may change.
     No shipped code may assume any VPN is installed, and a Mac-only debug convenience must not leak
     into shipped behaviour.
   - **Signing is configured by config files, never by hand.** `Config/Signing.xcconfig` is tracked
@@ -625,3 +629,61 @@ and address) moved to **Decisions** above. Still open:
   honoured — free Personal Team profiles may accept the key and silently drop it. Until it is
   reported, it stays assumed unavailable, and M3 code must work with **and** without it either way.
 - App-icon asset pipeline (the mark is currently code-drawn `CairnMark`).
+
+## Mac environment record — 2026-11-16 (first session on the M1)
+
+Recorded because the entry above described the wrong machine, and because a local result must never
+be read as a CI result. Everything in the table was produced by running the command and reading its
+output on this machine; nothing here is inferred from a document.
+
+| Check | Result |
+|---|---|
+| Model / arch | MacBook Pro 13-inch (M1, 2020), `arm64` |
+| macOS | 27.2.1 (build 26B131) |
+| Memory | 8 GB unified (8,589,934,592 bytes) |
+| Free disk | ~24 GiB free on the data volume |
+| Xcode | 27.2, build 27B52, `/Applications/Xcode.app` (Mac App Store install) |
+| Swift — Xcode toolchain | 6.4.2 |
+| Swift — Command Line Tools | 6.2.3, and **XCTest does not ship here** |
+| SDKs installed | iPhoneOS 27.2, iPhoneSimulator 27.2 |
+| iOS simulator runtimes | **none installed** |
+| git / gh / XcodeGen | 2.56.1 / 2.104.0 (authenticated) / 2.46.0 |
+| Repository | clean clone, `main` at `3352604`, HTTPS origin, no credential in the remote URL |
+
+Blocked on one `sudo` that only the user can run — a script must not select the system toolchain or
+accept a license, and until this is done `xcodebuild` and `xcrun simctl` both refuse:
+
+```bash
+sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+sudo xcodebuild -license accept
+sudo xcodebuild -runFirstLaunch
+xcodebuild -downloadPlatform iOS    # several GB against ~24 GiB free — check `df -h /` first
+```
+
+**Local Mac verified on `3b4e756`:**
+
+- `Scripts/ci.sh guards` — **green, exit 0**: logging, ATS, hostname/address, signing, and the
+  guards' self-test, now **41 ok, 0 failed** with the logging guard covered for the first time.
+- `xcodegen generate` — **green**; the generated `App/Info.plist` carries `NSAllowsLocalNetworking`,
+  and the ATS guard passes against that generated plist, not only against `project.yml`.
+- `CairnChatDomain` and `CairnProviderRemote` library sources — **compile clean** on the host. The
+  only diagnostic is the pre-existing unused `id` binding in `ChatStore.swift`.
+- Those packages' **test targets — not run.** The Command Line Tools carry no XCTest and Xcode is
+  unusable until the license is accepted, so `no such module 'XCTest'` is a toolchain gap here, not a
+  code defect.
+- Simulator build and simulator test — **not run**; there is no iOS simulator runtime on disk.
+
+The four verification lanes, moved by this session or not:
+
+- **CI-verified** — M2 holds at `3352604`: CI run
+  [43797177054](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/43797177054) green, and the
+  nightly Xcode 27 probe green on the same SHA at
+  [43899619930](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/43899619930).
+- **Local Mac verified** — guards and XcodeGen only, exactly as listed above. Nothing more.
+- **Physical-device verified** — **pending.** The iPhone 15 Pro has never been attached to Xcode on
+  this Mac; the checklist under *M2 device checklist* is what closes it.
+- **Real-network verified** — **pending.** No LAN request and no WireGuard-tunnelled request has been
+  made from this Mac.
+
+M2 therefore stays **CI-verified only**.
+

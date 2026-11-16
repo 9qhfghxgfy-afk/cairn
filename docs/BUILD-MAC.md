@@ -45,6 +45,50 @@ you installed the tools rather than Xcode — the `xcode-select` line above fixe
 simulator runtime if you do not have one (Xcode → Settings → Components, or let the first build
 offer to download it). `Scripts/ci.sh probe` prints the toolchain, SDKs and runtimes in one go.
 
+## 1b. The verified development machine (recorded 2026-11-16)
+
+What `Scripts/ci.sh probe` and the checks in this section were actually run against:
+
+| | |
+|---|---|
+| Model | MacBook Pro 13-inch (M1, 2020), Apple Silicon `arm64` |
+| Memory | 8 GB unified — one `xcodebuild` process at a time, always |
+| Free disk | ~24 GiB — an iOS simulator runtime is several GB, so check `df -h /` first |
+| macOS | 27.2.1 |
+| Xcode | 27.2 (build 27B52) at `/Applications/Xcode.app`, installed from the Mac App Store |
+| Swift | 6.4.2 (from `XcodeDefault.xctoolchain`) |
+| SDKs | iOS 27.2 device, iOS 27.2 simulator |
+| CI pin | `macos-26` + Xcode 26.6 + iOS 26.5 SDK + iPhone 17 — unchanged, and still the milestone gate |
+| Minimum deployment target | iOS 26.0 |
+| Physical device | iPhone 15 Pro on iOS 26.2 (reported; not yet attached to Xcode) |
+
+An App Store install of Xcode leaves two things undone that this project needs, and both need
+`sudo`, so they are run once by hand rather than by a script:
+
+```bash
+sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+sudo xcodebuild -license accept
+sudo xcodebuild -runFirstLaunch
+```
+
+Until the license is accepted, `xcrun simctl` and any `xcodebuild` build fail with *"You have not
+agreed to the Xcode license agreements"*. If `swift test` is then run without Xcode selected, it
+fails with `no such module 'XCTest'` — XCTest ships with Xcode, not with the Command Line Tools, and
+that failure is a toolchain gap, not a code defect.
+
+Xcode also installs **no iOS simulator runtime**. `xcrun simctl list runtimes` returns no iOS entry;
+download one (several GB, check free space first):
+
+```bash
+xcodebuild -downloadPlatform iOS
+```
+
+`Scripts/ci.sh` never runs `sudo` on a Mac. When the active developer directory is not Xcode it points
+its own process at `/Applications/Xcode.app` through `DEVELOPER_DIR` and prints that it did so, which
+writes nothing to disk; CI, which has a versioned `Xcode_26.6.app`, keeps using the `xcode-select`
+path. When the pinned simulator or runtime is not on the machine it prints what is available and how
+to choose one with `SIMULATOR_NAME=` / `SIMULATOR_OS=` instead of failing inside `xcodebuild`.
+
 ## 2. XcodeGen, clone, generate
 
 ```bash
