@@ -22,7 +22,8 @@ TREE=''; pass=0; fails=0
 # URL would be testing the exemption, not the rule.
 tree() {
   local d="$WORK/t"; rm -rf "$d"; mkdir -p "$d/Scripts"
-  cp "$ROOT/Scripts/check-hostname.sh" "$ROOT/Scripts/check-ats.sh" "$d/Scripts/"
+  cp "$ROOT/Scripts/check-hostname.sh" "$ROOT/Scripts/check-ats.sh" \
+     "$ROOT/Scripts/check-signing.sh" "$d/Scripts/"
   cat > "$d/project.yml" <<'SPEC'
 name: Cairn
 targets:
@@ -117,6 +118,36 @@ wipe App/Info.plist
 expect_accept "$ATS" 'the spec-only checkout, which is what the CI guards job sees'
 expect_accept "$HOSTS" 'the committed tree' "$ROOT"
 expect_accept "$ATS" 'the committed tree' "$ROOT"
+
+SIGN=check-signing.sh
+# Setting names are assembled so no line of this file is a real-looking assignment, and the Team
+# ID is assembled so no line here has the 10-character shape of one. Otherwise the guards would
+# fail when they scan the committed tree, which this file also asserts must pass.
+dtkey='DEVELOPMENT''_TEAM'; idkey='CODE_SIGN''_IDENTITY'; ppkey='PROVISIONING''_PROFILE_SPECIFIER'
+team='ABCD12'"34EF"; ident='Apple Development: someone@example.com ('"ABCD12""34EF"')'
+profile='home-lan-profile'
+
+echo '--- signing-identity guard: must reject, and must not print ---'
+TREE="$(tree)"
+plant project.yml "          ${dtkey}: ${team}"      ; expect_reject "$SIGN" 'a Team ID in project.yml' "$team"
+plant Config/Signing.xcconfig "${dtkey} = ${team}"   ; expect_reject "$SIGN" 'a Team ID in an xcconfig' "$team"
+plant notes.md "${dtkey}[sdk=iphoneos*] = ${team}"   ; expect_reject "$SIGN" 'a Team ID in a conditional setting' "$team"
+plant notes.md "${idkey} = \"${ident}\""             ; expect_reject "$SIGN" 'a signing identity naming a person and a team' "$team"
+plant project.yml "          ${ppkey}: ${profile}"   ; expect_reject "$SIGN" 'a pinned provisioning profile' "$profile"
+
+echo '--- signing-identity guard: must accept ---'
+# Fresh tree: the reject block above plants a Team ID into project.yml and Config/Signing.xcconfig,
+# and leftovers from it would fail these cases for the wrong reason.
+TREE="$(tree)"
+plant notes.md "set ${dtkey} in Config/Local.xcconfig, never in a tracked file"
+expect_accept "$SIGN" 'prose that names the setting without assigning it'
+plant Config/Local.xcconfig.example "${dtkey} = XXXXXXXXXX"
+expect_accept "$SIGN" 'the tracked template carrying only the placeholder'
+plant Config/Signing.xcconfig "${idkey} = iPhone Developer"
+expect_accept "$SIGN" 'a bare signing identity with no team in it'
+wipe notes.md; wipe Config/Signing.xcconfig; wipe Config/Local.xcconfig.example
+expect_accept "$SIGN" 'the unplanted copy still passes'
+expect_accept "$SIGN" 'the committed tree' "$ROOT"
 
 echo "guard self-test: ${pass} ok, ${fails} failed"
 [[ $fails -eq 0 ]] || exit 1
