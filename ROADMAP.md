@@ -5,7 +5,8 @@ Status legend: `done` = green CI run cited · `in-progress` · `todo` · `blocke
 Gate for every milestone (from `.clinerules`):
 1. `swift test --package-path Packages/CairnChatDomain`
 2. `xcodegen generate` → `xcodebuild build` → `xcodebuild test` on iPhone 17 / iOS 26.5
-3. `Scripts/check-logging.sh`, `Scripts/check-ats.sh`, and `Scripts/check-hostname.sh` pass
+3. `Scripts/ci.sh guards` passes — `check-logging.sh`, `check-ats.sh`, `check-hostname.sh`,
+   `check-signing.sh`, and `test-guards.sh` (the guards' own self-test)
 4. `ROADMAP.md` status updated in the same commit, citing the CI run number
 
 | # | Milestone | Status | CI run |
@@ -23,9 +24,40 @@ Gate for every milestone (from `.clinerules`):
 
 Recorded 2026-11-14. These supersede anything older in the repo.
 
-- **Distribution / signing.** Free Apple ID (Personal Team). Primary install path: an
-  **unsigned device IPA** built by CI (`ipa.yml`, workflow_dispatch only) → signed on
-  the Windows authoring PC with **Sideloadly** (v0.71+, Windows builds, iOS 7–27+
+- **Development machine and build loop (2026-11-15).** The development machine is now a **MacBook
+  Pro (Apple Silicon)** on macOS 26.x with Xcode installed, 48 GB unified memory, no paid Apple
+  developer account, repo still public.
+  - **Local Xcode is the primary build loop; CI is a second check, not the way to learn that code
+    compiles.** Run `Scripts/ci.sh` locally — `guards`, `hosts`, `build`, `test`, `all`, `probe`,
+    `device` — because that is the same sequence CI runs. `device` needs the iPhone connected to
+    the Mac, and that is what M2 actually needs.
+  - A milestone is still closed only with a green CI run cited on the commit: CI is the environment
+    that is not this laptop, and it still runs the whole pipeline on every push.
+  - On a fresh Mac, run `Scripts/ci.sh probe` once and record what it prints. It compares local
+    macOS and Xcode with the CI pin (runner `macos-26`, Xcode selected to **26.6** in the workflow).
+    If the Mac is ahead of the pin — which is the expected case — that is a divergence to **record
+    here**, not to fix. Never bump the pin because something builds locally; only a green CI run on
+    the new version moves it, and the nightly Xcode 27 probe stays informational.
+  - 48 GB changes what is worth testing in M3: bigger on-device models are realistic and there is
+    more room for a second resident model. It changes no budget code — `os_proc_available_memory()`
+    is still the per-process limit on the iPhone, and the iPhone is the target.
+  - The Mac is on the **same tailnet** as the inference machine (same WireGuard router, not another
+    VPN product). This adds no requirement and no app: `docs/SERVERS.md` notes only that a Mac on
+    the tailnet can reach a served model over the tunnel for testing, and nothing else may change.
+    No shipped code may assume any VPN is installed, and a Mac-only debug convenience must not leak
+    into shipped behaviour.
+  - **Signing is configured by config files, never by hand.** `Config/Signing.xcconfig` is tracked
+    and holds no identity; it does `#include? Local.xcconfig`, which each machine keeps locally,
+    git-ignored, with `DEVELOPMENT_TEAM` and `CODE_SIGN_STYLE`. CI has no `Local.xcconfig`, so CI
+    builds unsigned — no conditional logic anywhere. `project.yml` carries no Team ID, and
+    `Scripts/check-signing.sh` fails CI if a Team ID, an Apple-ID-stamped identity, or a pinned
+    profile appears in a tracked file. Set a device build destination in Xcode by hand or with
+    `xcodebuild -destination`; do not put a destination in `project.yml`.
+- **Distribution / signing.** Free Apple ID (Personal Team). The primary install path is now **Xcode
+  on the Mac** — run on the connected device, or Archive → Distribute → *Direct Distribution* to
+  the device. The fallback, for when the Mac is not at hand, is an **unsigned device IPA** built by
+  CI (`ipa.yml`, workflow_dispatch only) → signed on
+  the Windows machine with **Sideloadly** (v0.71+, Windows builds, iOS 7–27+
   supported) using the free Apple ID. Apple's free-account limits: 7-day signing expiry
   (Sideloadly's auto-refresh daemon re-signs near expiry while the PC can reach the
   device over USB or Wi-Fi), at most 3 sideloaded apps active per device, ~10 App IDs
@@ -365,7 +397,9 @@ must include the LAN subnet for the private address to be routable at all.
 Each line states what it proves. Anything not checked stays unclaimed; a pass on one line is
 not evidence for the next.
 
-1. **Sideload the CI artifact and launch.** Proves the signing path still works.
+1. **Build and run from Xcode on the Mac** — ⌘R with the iPhone connected (from the Windows machine
+   the fallback is the CI artifact sideloaded with Sideloadly). Proves the signing path still works
+   on the route actually used.
 2. **Servers → Add server → OpenAI-compatible → `http://<lan-address>:<port>` → Save.**
    Must save, not be refused, and the row must show the **LAN** badge and the **Plaintext**
    badge. A refusal here means the private-address rule regressed.
@@ -519,4 +553,13 @@ and address) moved to **Decisions** above. Still open:
   closes them.
 - `increased-memory-limit` availability: assumed unavailable (see Decisions); confirmed
   only by on-device measurement in M3.
+- **Increased Memory Limit on a free Personal Team — run this test and report the result.** On the
+  Mac: `xcodegen generate`, open `Cairn.xcodeproj`, select the `Cairn` target → **Signing &
+  Capabilities** → `+ Capability`, and search for **Increased Memory Limit**. Report two things:
+  whether the capability can be added at all (it writes a
+  `com.apple.developer.kernel.increased-memory-limit` line into `Cairn.entitlements`), and whether
+  the project then still builds and runs on the connected iPhone. **Do not add that entitlement to
+  the shipped entitlements file before the test**, and do not treat a successful add as proof it is
+  honoured — free Personal Team profiles may accept the key and silently drop it. Until it is
+  reported, it stays assumed unavailable, and M3 code must work with **and** without it either way.
 - App-icon asset pipeline (the mark is currently code-drawn `CairnMark`).
