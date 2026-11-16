@@ -37,6 +37,8 @@ Scripts/check-logging.sh        fails on prompt/response/secret logging
 Scripts/check-ats.sh            requires the one NSAllowsLocalNetworking key; fails on any other
 Scripts/check-hostname.sh       fails on a real private hostname, or a private IP that is
                                 not one of the documented example addresses
+Scripts/test-guards.sh          proves the guards still *reject* planted values, accept the
+                                documented examples, and never print what they caught
 .github/workflows/ci.yml        macos-26 + Xcode 26.6, iPhone 17 / iOS 26.5
 .github/workflows/ipa.yml       workflow_dispatch: unsigned device IPA for sideloading
 ```

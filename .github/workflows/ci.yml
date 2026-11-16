@@ -35,6 +35,11 @@ jobs:
         run: bash Scripts/check-ats.sh
       - name: No real private hostname in tracked files
         run: bash Scripts/check-hostname.sh
+      # The guards above are only worth what their patterns are worth. This re-runs them against
+      # planted values in a throwaway tree and fails if any guard stops rejecting them, or if a
+      # guard prints the value it caught.
+      - name: Guard self-test (guards must still fail on planted values)
+        run: bash Scripts/test-guards.sh
 
   domain:
     name: Host unit tests (macOS)

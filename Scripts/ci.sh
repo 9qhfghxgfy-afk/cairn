@@ -45,6 +45,7 @@ guards() {
   Scripts/check-logging.sh
   Scripts/check-ats.sh
   Scripts/check-hostname.sh
+  Scripts/test-guards.sh
 }
 
 domain_tests() {
