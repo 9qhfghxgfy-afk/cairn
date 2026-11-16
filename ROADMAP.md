@@ -650,15 +650,27 @@ output on this machine; nothing here is inferred from a document.
 | git / gh / XcodeGen | 2.56.1 / 2.104.0 (authenticated) / 2.46.0 |
 | Repository | clean clone, `main` at `3352604`, HTTPS origin, no credential in the remote URL |
 
-Blocked on one `sudo` that only the user can run — a script must not select the system toolchain or
-accept a license, and until this is done `xcodebuild` and `xcrun simctl` both refuse:
+**Done:** `sudo xcode-select -s` — the active developer directory is now
+`/Applications/Xcode.app/Contents/Developer`, and `xcodebuild -version` answers **Xcode 27.2, build
+27B52**. **Still outstanding**, and this needs the user's password — a script must not accept a
+license on someone's behalf:
 
 ```bash
-sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
 sudo xcodebuild -license accept
 sudo xcodebuild -runFirstLaunch
 xcodebuild -downloadPlatform iOS    # several GB against ~24 GiB free — check `df -h /` first
 ```
+
+The block is total, and it was probed rather than assumed: `xcodebuild -showsdks`,
+`xcodebuild -downloadPlatform iOS`, and `xcodebuild -license print` each refuse with the same license
+error. `xcrun simctl` reports `unable to find utility "simctl"`, which is **misleading** — `simctl` is
+present at `Contents/Developer/usr/bin/simctl`, so this is the license gate hiding a tool that is
+installed, not a missing tool to chase. Until the license is accepted there can be no simulator
+runtime download, no simulator build, no simulator test, and no host test run.
+
+One Apple-API fact is **not verifiable from this machine**: the `-downloadPlatform` spelling, because
+`xcodebuild -help` sits behind the same license gate. If that form is rejected, install a runtime from
+Xcode → Settings → Components, or let the first build offer to download it.
 
 **Local Mac verified across the three local commits (`3b4e756`, `69f7416`, `db11982`):**
 
