@@ -64,9 +64,29 @@ select_xcode() {
   echo "$out"
 }
 
+# The Xcode license is a separate failure from a missing toolchain, and it is the one an App Store
+# install leaves behind. It is checked on its own because `xcodebuild -version` succeeds without it
+# while every SDK lookup, simulator listing, and build fails — a report of "no iOS runtime" in that
+# state would send the reader to the wrong fix.
+check_license() {
+  local out
+  out="$(xcrun simctl list runtimes 2>&1 || true)"
+  case "$out" in
+    *"license agreement"*)
+      echo "the Xcode license has not been accepted, so SDKs and simulators are unavailable:" >&2
+      echo "  sudo xcodebuild -license accept" >&2
+      echo "  sudo xcodebuild -runFirstLaunch" >&2
+      return 1 ;;
+  esac
+  return 0
+}
+
 # A local Mac will not have the exact runtime CI pins. Falling back to the device name alone lets
 # xcodebuild pick the newest runtime that exists instead of failing on a version nobody installed.
 resolve_destination() {
+  # Before concluding anything about runtimes, rule out the license, which makes every runtime list
+  # come back empty and would otherwise be reported as "no simulator runtime installed".
+  check_license || exit 1
   local runtimes devices
   runtimes="$(xcrun simctl list runtimes 2>/dev/null || true)"
   if ! printf '%s' "$runtimes" | grep -qi "iOS"; then
@@ -108,8 +128,10 @@ ensure_xcodegen() {
 probe() {
   echo "--- toolchain probe ---"
   xcodebuild -version
-  xcodebuild -showsdks | grep -i -E 'iphoneos|iphonesimulator' || true
-  xcrun simctl list runtimes | grep -i ios || true
+  # Prints the fix once, rather than letting two SDK lookups each print the same license error.
+  check_license || true
+  xcodebuild -showsdks 2>/dev/null | grep -i -E 'iphoneos|iphonesimulator' || true
+  xcrun simctl list runtimes 2>/dev/null | grep -i ios || true
 }
 
 guards() {
