@@ -52,6 +52,13 @@ struct ServerProfileRow: View {
                 }
             }
 
+            // The key is in the Keychain, but the path is http — so it goes out in the clear on
+            // every request. Shown on the row for the same reason the Plaintext badge is: the
+            // user should not have to open the editor to learn how a prompt leaves the phone.
+            if profile.credentialSentInClear {
+                CredentialInClearWarning()
+            }
+
             Toggle("Enabled", isOn: enabledBinding)
                 .font(.callout)
 

@@ -168,4 +168,23 @@ final class RemoteServerProfileTests: XCTestCase {
         XCTAssertTrue(NetworkClass.privateVPN.allowsPlaintext)
         XCTAssertTrue(NetworkClass.onDevice.allowsPlaintext)
     }
+
+    /// The rule the UI reads when it warns that a token crosses the network unencrypted:
+    /// a token plus an http URL, whatever the network class. A public profile can never be
+    /// plaintext (validation refuses it), so this only ever fires on a private server the
+    /// user chose to put a key in front of.
+    func testTokenOnPlaintextProfileIsFlagged() {
+        let keyed = ServerProfile(name: "Home box", kind: .openAICompatible,
+                                  baseURLString: "http://192.168.1.20:8181", hasBearerToken: true)
+        XCTAssertTrue(keyed.credentialSentInClear,
+                      "a bearer token over http crosses the LAN in the clear")
+
+        let open = ServerProfile(name: "Home box", kind: .openAICompatible,
+                                 baseURLString: "http://192.168.1.20:8181")
+        XCTAssertFalse(open.credentialSentInClear, "no token means nothing to leak")
+
+        let tls = ServerProfile(name: "Tunnel box", kind: .openAICompatible,
+                                baseURLString: "https://192.168.1.20:8443", hasBearerToken: true)
+        XCTAssertFalse(tls.credentialSentInClear, "the same key over https is not a warning")
+    }
 }

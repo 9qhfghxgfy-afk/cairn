@@ -191,7 +191,8 @@ zero-ATS-exception and defer-Bonjour decisions and has been rewritten, not silen
   Keychain token, custom headers, plaintext accepted on a private address and refused on a
   public-internet host with an explanation, public-internet opt-in, `Plaintext` badge),
   capability-gated model management (Pull/Delete/Loaded models on
-  Ollama only; disabled with a reason on OpenAI-compatible), persistent `NetworkBadge`.
+  Ollama only; disabled with a reason on OpenAI-compatible), persistent `NetworkBadge`, and a
+  `CredentialInClearWarning` wherever a bearer token is set on an `http://` profile.
 - Optional **Ollama Cloud** profile: created only on explicit opt-in, `.publicInternet`,
   labelled as internet, off by default.
 - `docs/SERVERS.md` — the server-access guide, written 2026-11-15: binding the server so the LAN
@@ -444,6 +445,13 @@ repository must stop reading as though a mesh VPN were the plan.
   and public or RFC 5737 documentation addresses pass; a real LAN address, a real tunnel
   address, a real `100.64/10` address, a link-local address, a real VPN DNS name, and an
   example-plus-real pair on one line each fail with `file:line` only; the tree passes clean.
+- **A token on a plaintext profile now warns** (this commit). `ServerProfile.credentialSentInClear`
+  is the single rule — a Keychain-backed token plus an `http://` URL — and both the server row
+  and the profile editor show `CredentialInClearWarning` ("Token crosses the network
+  unencrypted"). The editor counts a token being typed into the open sheet, and stops warning the
+  moment a stored token is removed inside it. Keying a LAN server is legitimate, so this warns
+  rather than refuses. Host-level unit test covers token+http (warns), no token (silent), and the
+  same key over https (silent).
 - **What this still does not claim.** None of it is device proof. The M2 device checklist above
   is unchanged and remains the gate for the Local Network prompt, the tunnel route into the LAN
   subnet, and streaming over that tunnel.

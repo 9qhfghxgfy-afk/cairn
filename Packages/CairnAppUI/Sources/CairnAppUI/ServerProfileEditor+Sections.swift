@@ -57,9 +57,15 @@ extension ServerProfileEditor {
             if profile.hasBearerToken {
                 Button("Remove stored token") {
                     token = ""
+                    tokenClearedHere = true
                     model.removeToken(profile)
                 }
                 .font(.caption)
+            }
+            // A token and an http URL: the key will cross the network in the clear. Allowed on
+            // a private network, but never shown silently.
+            if credentialSentInClear {
+                CredentialInClearWarning()
             }
         } header: {
             Text("Token")

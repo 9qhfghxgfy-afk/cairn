@@ -53,6 +53,13 @@ public struct ServerProfile: Sendable, Equatable, Identifiable, Codable {
 
     public var isPlaintext: Bool { baseURLString.hasPrefix("http://") }
 
+    /// A Keychain-backed bearer token **and** an unencrypted path: the token then travels in
+    /// the clear on every request to this server. A key on a LAN box is legitimate — the
+    /// firewall and the LAN decide who arrives — so this is a condition to warn about, never
+    /// one to forbid. It can only be true of a private profile, because validation refuses
+    /// `http://` for a public-internet host.
+    public var credentialSentInClear: Bool { hasBearerToken && isPlaintext }
+
     /// A `.publicInternet` profile may not be registered until the user opted in.
     public var usableNow: Bool {
         enabled && (!networkClass.requiresOptIn || publicInternetOptIn)
