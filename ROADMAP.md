@@ -660,10 +660,14 @@ sudo xcodebuild -runFirstLaunch
 xcodebuild -downloadPlatform iOS    # several GB against ~24 GiB free — check `df -h /` first
 ```
 
-**Local Mac verified on `3b4e756`:**
+**Local Mac verified across the three local commits (`3b4e756`, `69f7416`, `db11982`):**
 
 - `Scripts/ci.sh guards` — **green, exit 0**: logging, ATS, hostname/address, signing, and the
   guards' self-test, now **41 ok, 0 failed** with the logging guard covered for the first time.
+- `Scripts/ci.sh probe` and the simulator lane — **fail fast with the fix attached**, verified against
+  this machine's real broken state instead of assumed: `probe` names the unaccepted license once
+  instead of letting two SDK lookups repeat it, and `ci.sh test` refuses before `xcodebuild` can
+  report a missing runtime as something else.
 - `xcodegen generate` — **green**; the generated `App/Info.plist` carries `NSAllowsLocalNetworking`,
   and the ATS guard passes against that generated plist, not only against `project.yml`.
 - `CairnChatDomain` and `CairnProviderRemote` library sources — **compile clean** on the host. The
