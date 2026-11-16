@@ -30,6 +30,10 @@ compatibility, not copied expression.
   Apple-ID-stamped signing identity, or a pinned provisioning profile in a tracked file, and never
   add `DEVELOPMENT_TEAM` to `project.yml`. `Scripts/check-signing.sh` enforces this. CI has no
   Local.xcconfig and builds unsigned, which is the intended behaviour.
+- **One xcconfig, relative includes only.** Both targets point at `Config/Signing.xcconfig`; never add
+  a second xcconfig that includes another to share settings, and never write an include as
+  `$(SRCROOT)/...` — Xcode does not resolve that path while reading an include, so a plain `#include`
+  fails the build (CI run 43794042407) and `#include?` would silently drop the Team ID.
 - SwiftPM is for internal module boundaries only. It is never a substitute for the app
   target in the generated `.xcodeproj`.
 - Milestone gate = all green:
