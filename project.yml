@@ -107,10 +107,15 @@ targets:
       - package: CairnAppUI
       - package: CairnProviderRemote
     configFiles:
-      # Same chain as the app target, so one Local.xcconfig sets the Team ID for both; the bundle
-      # ids stay distinct because the test bundle is derived as $(CAIRN_BUNDLE_ID).tests.
-      Debug: Config/Signing.Tests.xcconfig
-      Release: Config/Signing.Tests.xcconfig
+      # The one shared xcconfig, same as the app target, so a local Team ID in Local.xcconfig covers
+      # app and tests together; the bundle ids stay distinct because the test bundle is derived as
+      # $(CAIRN_BUNDLE_ID).tests. A separate test xcconfig that included this one was tried and broke
+      # CI: Xcode does not resolve an `#include "$(SRCROOT)/..."` path from an xcconfig, so the test
+      # target failed before any test ran (run 43794042407, "could not find included file
+      # '$(SRCROOT)/Config/Signing.xcconfig' in search paths (in target 'CairnTests')"). One file, one
+      # include, no nesting — that is what makes CAIRN_BUNDLE_ID resolve for both targets.
+      Debug: Config/Signing.xcconfig
+      Release: Config/Signing.xcconfig
     settings:
       base:
         # Derived from CAIRN_BUNDLE_ID so a personal override in the git-ignored

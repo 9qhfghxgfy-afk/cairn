@@ -30,7 +30,7 @@ Packages/CairnPersistence        SwiftData records + store (the only SwiftData m
 Packages/CairnAppUI              SwiftUI views + Cairn identity
 Tests/CairnTests                 simulator tests: SwiftData persistence, workspace wiring
 Entitlements/                    release-clean reference + paid-path memory-limit experiment
-Config/Signing.xcconfig          bundle-id default; optionally #includes the git-ignored Local.xcconfig
+Config/Signing.xcconfig          bundle-id default for both targets; #includes the git-ignored Local.xcconfig
 Config/Local.xcconfig.example    template for your Team ID and bundle id (copy to Local.xcconfig)
 docs/BUILD-MAC.md                the main loop: build and test on a Mac, run on a real iPhone
 docs/INSTALL.md                  fallback: sideload a CI-built IPA onto an iPhone from Windows

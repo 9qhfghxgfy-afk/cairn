@@ -13,6 +13,8 @@
 // Scripts/check-signing.sh fails CI if a real DEVELOPMENT_TEAM value appears in a tracked file.
 CAIRN_BUNDLE_ID = app.cairn.cairn
 // Relative include: Xcode resolves it next to this file, which is where Local.xcconfig lives.
-// A $(SRCROOT)-based path can fail to resolve while the include is being read, and `#include?`
-// fails silently — the personal settings would simply be ignored with no error to find.
+// Do NOT write this as `#include? "$(SRCROOT)/Config/Local.xcconfig"`. Xcode does not resolve a
+// $(SRCROOT) path while it is reading an include: with a non-optional include it errors out of the
+// build (CI run 43794042407, from a test-target xcconfig that did exactly this), and with `#include?`
+// it would fail silently, leaving the personal settings simply ignored with nothing to find.
 #include? "Local.xcconfig"
