@@ -23,21 +23,26 @@ and tunnel routes is still open — see ROADMAP.
 ## Layout
 
 ```
-project.yml                     the .xcodeproj is generated from this, never committed
-App/CairnApp.swift              app entry; wires SwiftDataStore + EphemeralStore + mock engine
-Packages/CairnChatDomain        Swift 6 strict, pure: tree, session, streaming, providers
-Packages/CairnPersistence       SwiftData records + store (the only SwiftData module)
-Packages/CairnAppUI             SwiftUI views + Cairn identity
-Tests/CairnTests                simulator tests: SwiftData persistence, workspace wiring
-Entitlements/                   release-clean reference + paid-path memory-limit experiment
-docs/INSTALL.md                 sideloading a CI IPA onto a physical iPhone (Windows)
-docs/SERVERS.md                 exposing your own server on the LAN, and reaching it over WireGuard
-Scripts/ci.sh                   the exact sequence CI runs
-Scripts/check-logging.sh        fails on prompt/response/secret logging
-Scripts/check-ats.sh            requires the one NSAllowsLocalNetworking key; fails on any other
-Scripts/check-hostname.sh       fails on a real private hostname, or a private IP that is
+project.yml                      the .xcodeproj is generated from this, never committed
+App/CairnApp.swift               app entry; wires SwiftDataStore + EphemeralStore + mock engine
+Packages/CairnChatDomain         Swift 6 strict, pure: tree, session, streaming, providers
+Packages/CairnPersistence        SwiftData records + store (the only SwiftData module)
+Packages/CairnAppUI              SwiftUI views + Cairn identity
+Tests/CairnTests                 simulator tests: SwiftData persistence, workspace wiring
+Entitlements/                    release-clean reference + paid-path memory-limit experiment
+Config/Signing.xcconfig          bundle-id default; optionally #includes the git-ignored Local.xcconfig
+Config/Local.xcconfig.example    template for your Team ID and bundle id (copy to Local.xcconfig)
+docs/BUILD-MAC.md                the main loop: build and test on a Mac, run on a real iPhone
+docs/INSTALL.md                  fallback: sideload a CI-built IPA onto an iPhone from Windows
+docs/SERVERS.md                  exposing your own server on the LAN, and reaching it over WireGuard
+Scripts/ci.sh                    the exact sequence CI runs; on a Mac this is the local equivalent
+Scripts/check-logging.sh         fails on prompt/response/secret logging
+Scripts/check-ats.sh             requires the one NSAllowsLocalNetworking key; fails on any other
+Scripts/check-hostname.sh        fails on a real private hostname, or a private IP that is
                                 not one of the documented example addresses
-Scripts/test-guards.sh          proves the guards still *reject* planted values, accept the
+Scripts/check-signing.sh         fails on a Team ID, a personal signing identity, or a pinned
+                                profile in tracked files
+Scripts/test-guards.sh           proves the guards still *reject* planted values, accept the
                                 documented examples, and never print what they caught
 .github/workflows/ci.yml        macos-26 + Xcode 26.6, iPhone 17 / iOS 26.5
 .github/workflows/ipa.yml       workflow_dispatch: unsigned device IPA for sideloading
@@ -45,20 +50,23 @@ Scripts/test-guards.sh          proves the guards still *reject* planted values,
 
 ## Build
 
-The authoring machine is Windows with no Xcode, so builds happen on CI, and the same
-commands work on any Mac:
+The development machine is an Apple Silicon Mac with Xcode, and **that is the main loop**. CI is a
+second check, not the way to find out whether code compiles. The full walkthrough — signing config,
+simulator, running on a real iPhone — is [docs/BUILD-MAC.md](docs/BUILD-MAC.md).
 
 ```bash
 brew install xcodegen
 xcodegen generate
-xcodebuild -project Cairn.xcodeproj -scheme Cairn \
-  -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
-xcodebuild -project Cairn.xcodeproj -scheme Cairn \
-  -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' test
+cp Config/Local.xcconfig.example Config/Local.xcconfig   # then set your Personal Team ID in it
+Scripts/ci.sh all      # guards + swift test + build + simulator test: the sequence CI runs
 ```
 
-Or one shot: `Scripts/ci.sh all`. Fast loop for the pure domain:
-`swift test --package-path Packages/CairnChatDomain`.
+Fast loop for the pure domain: `swift test --package-path Packages/CairnChatDomain`. To build and
+test on an iPhone connected to the Mac, `Scripts/ci.sh device`. `Scripts/ci.sh probe` prints local
+macOS/Xcode against the CI pin when the two disagree.
+
+The Windows route needs no Xcode at all: CI builds the guards, and a device IPA from
+`ipa.yml` + Sideloadly puts a build on the phone — see [docs/INSTALL.md](docs/INSTALL.md).
 
 ## Why the CI lane is shaped this way
 

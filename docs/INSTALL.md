@@ -1,4 +1,10 @@
-# Installing Cairn on your iPhone from CI (Windows PC, free Apple ID)
+# Installing Cairn on your iPhone from a CI-built IPA — the fallback route
+
+**Prefer [docs/BUILD-MAC.md](BUILD-MAC.md) if you have a Mac.** Building and running from Xcode on
+an Apple Silicon Mac is the main loop: it signs with your free Personal Team, it takes seconds rather
+than a CI round trip, and it does not need Sideloadly, iTunes, or a Windows machine at all. This file
+is the **fallback** for the case where no Mac is available: an unsigned IPA built by CI, signed and
+installed from a Windows PC.
 
 How to get a CI-built app onto a physical iPhone **without** the App Store, TestFlight,
 or a paid Apple Developer account. Everything personal stays out of the repo: your server's

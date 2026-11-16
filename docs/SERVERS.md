@@ -176,6 +176,11 @@ PersistentKeepalive = 25                     # iOS drops idle UDP state
 - `PersistentKeepalive = 25` matters on iOS: without it a quiet tunnel ages out and the first
   request after a break is the one that times out.
 
+The development Mac sits on this same tunnel, and that is a **testing convenience only**: with the
+tunnel up, `curl http://192.168.1.20:8181/v1/models` from the laptop proves the route is sound
+before the phone is involved. Cairn does not know or care about it — no code, doc, or test may
+assume a VPN is installed, and the app behaves identically whether or not the laptop is connected.
+
 ## 5. What Cairn shows you
 
 - **Badges on the server row**: `LAN`, `VPN`, or `Internet` for where the address resolves, plus
