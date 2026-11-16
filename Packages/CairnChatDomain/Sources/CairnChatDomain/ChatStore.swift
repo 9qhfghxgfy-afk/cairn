@@ -10,7 +10,7 @@ public enum StoreError: Error, Equatable, Sendable, LocalizedError {
         switch self {
         case .conversationNotFound(let id): return "Conversation \(id.uuidString.prefix(8)) was not found."
         case .nodeNotFound(let id): return "Message \(id.uuidString.prefix(8)) was not found."
-        case .parentNotFound(let id): return "The parent of that message is missing."
+        case .parentNotFound: return "The parent of that message is missing."
         case .writeFailed(let reason): return "Could not save: \(reason)"
         }
     }

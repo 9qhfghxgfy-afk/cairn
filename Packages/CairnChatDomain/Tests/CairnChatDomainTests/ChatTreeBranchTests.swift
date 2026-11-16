@@ -85,7 +85,7 @@ final class ChatTreeBranchTests: XCTestCase {
         XCTAssertTrue(appended.nodes.contains { $0.id == appended.node.id })
 
         // Taking only `.node` and keeping an empty array is the exact mistake:
-        var lostRoot = ChatDraftTree()
+        let lostRoot = ChatDraftTree()
         XCTAssertNil(
             ChatTree.edit(nodes: lostRoot.nodes, nodeID: appended.node.id, newText: "x"),
             "a tree that lost its root cannot even find the node to edit"
