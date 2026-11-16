@@ -64,7 +64,7 @@ final class ConnectionTesterTests: XCTestCase {
 
     func testUnreachableHostBecomesTheVPNHint() async {
         let outcome = await tester(AlwaysFailingTransport(code: .cannotFindHost))
-            .test(Fixtures.ollama(base: Fixtures.tailnet))
+            .test(Fixtures.ollama(base: Fixtures.vpnName))
         XCTAssertEqual(outcome, .hostNotFound)
         XCTAssertTrue(outcome.userMessage.contains("VPN"), "the hint must teach the fix")
     }

@@ -31,13 +31,13 @@ final class ServersModelTests: XCTestCase {
     }
 
     /// A fresh profile each time it is read, so a test must hold one value and reuse it.
-    private var tailnet: ServerProfile {
-        ServerProfile(name: "Studio box", kind: .ollama, baseURLString: "https://your-host.your-tailnet.ts.net")
+    private var vpnServer: ServerProfile {
+        ServerProfile(name: "Studio box", kind: .ollama, baseURLString: "https://your-host.your-vpn.ts.net")
     }
 
     func testCredentialHeaderIsRefusedBeforeAnythingIsStored() {
         let (model, store, _) = makeModel()
-        var profile = tailnet
+        var profile = vpnServer
         profile.customHeaders = ["Authorization": "Bearer pasted-by-mistake"]
 
         XCTAssertFalse(model.save(profile, token: nil))
@@ -72,14 +72,14 @@ final class ServersModelTests: XCTestCase {
 
     func testURLIsCanonicalizedAndTheTokenReachesOnlyTheSecretStore() throws {
         let (model, store, secrets) = makeModel()
-        var profile = tailnet
+        var profile = vpnServer
         profile.name = "  Studio box  "
-        profile.baseURLString = "https://your-host.your-tailnet.ts.net/"
+        profile.baseURLString = "https://your-host.your-vpn.ts.net/"
 
         XCTAssertTrue(model.save(profile, token: "sk-secret"))
         let stored = try XCTUnwrap(store.saved[profile.id])
         XCTAssertEqual(stored.name, "Studio box")
-        XCTAssertEqual(stored.baseURLString, "https://your-host.your-tailnet.ts.net")
+        XCTAssertEqual(stored.baseURLString, "https://your-host.your-vpn.ts.net")
         XCTAssertTrue(stored.hasBearerToken)
         XCTAssertEqual(secrets.items[profile.id], "sk-secret")
         XCTAssertFalse(store.saved.description.contains("sk-"), "the settings store never sees the token")
@@ -87,7 +87,7 @@ final class ServersModelTests: XCTestCase {
 
     func testRemovingTheTokenClearsBothTheSecretAndTheFlag() throws {
         let (model, store, secrets) = makeModel()
-        let profile = tailnet
+        let profile = vpnServer
         XCTAssertTrue(model.save(profile, token: "sk-secret"))
         let stored = try XCTUnwrap(store.saved[profile.id])
         XCTAssertTrue(model.hasToken(stored))
@@ -101,7 +101,7 @@ final class ServersModelTests: XCTestCase {
 
     func testDeletingAProfileDeletesItsTokenToo() throws {
         let (model, store, secrets) = makeModel()
-        let profile = tailnet
+        let profile = vpnServer
         XCTAssertTrue(model.save(profile, token: "sk-secret"))
         let stored = try XCTUnwrap(store.saved[profile.id])
 
@@ -115,7 +115,7 @@ final class ServersModelTests: XCTestCase {
     func testDisabledServerLeavesTheEngineList() throws {
         let registry = ProviderRegistry(providers: [MockStreamingProvider()])
         let (model, store, _) = makeModel(registry: registry)
-        let profile = tailnet
+        let profile = vpnServer
         XCTAssertTrue(model.save(profile, token: nil))
 
         XCTAssertEqual(registry.providers.count, 2, "the mock plus the saved server")
@@ -131,7 +131,7 @@ final class ServersModelTests: XCTestCase {
 
     func testTestAndRefreshUpdateTheRowWithoutLeavingItBusy() async throws {
         let (model, _, _) = makeModel()
-        let profile = tailnet
+        let profile = vpnServer
         XCTAssertTrue(model.save(profile, token: nil))
         let stored = try XCTUnwrap(model.profiles.first)
 

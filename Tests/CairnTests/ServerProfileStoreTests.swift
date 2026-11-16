@@ -16,7 +16,7 @@ final class ServerProfileStoreTests: XCTestCase {
         var profile = ServerProfile(
             name: "Studio box",
             kind: .ollama,
-            baseURLString: "https://your-host.your-tailnet.ts.net",
+            baseURLString: "https://your-host.your-vpn.ts.net",
             customHeaders: ["X-Request-Tag": "cairn"],
             hasBearerToken: true,
             publicInternetOptIn: false
@@ -30,7 +30,7 @@ final class ServerProfileStoreTests: XCTestCase {
         let read = try XCTUnwrap(stored.first)
         XCTAssertEqual(read.id, profile.id)
         XCTAssertEqual(read.kind, .ollama)
-        XCTAssertEqual(read.baseURLString, "https://your-host.your-tailnet.ts.net")
+        XCTAssertEqual(read.baseURLString, "https://your-host.your-vpn.ts.net")
         XCTAssertEqual(read.customHeaders, ["X-Request-Tag": "cairn"])
         XCTAssertTrue(read.hasBearerToken)
         XCTAssertEqual(read.updatedAt, profile.updatedAt)
@@ -60,7 +60,7 @@ final class ServerProfileStoreTests: XCTestCase {
     func testStoredRowsNeverContainTheToken() throws {
         let store = try makeStore()
         var profile = ServerProfile(
-            name: "Token box", kind: .ollama, baseURLString: "https://your-host.your-tailnet.ts.net"
+            name: "Token box", kind: .ollama, baseURLString: "https://your-host.your-vpn.ts.net"
         )
         profile.hasBearerToken = true
         try store.save(profile)
@@ -72,7 +72,7 @@ final class ServerProfileStoreTests: XCTestCase {
 
     func testProfilesComeBackSortedByNameAndDeleteIsPermanent() throws {
         let store = try makeStore()
-        try store.save(ServerProfile(name: "Zeta", kind: .ollama, baseURLString: "https://your-host.your-tailnet.ts.net"))
+        try store.save(ServerProfile(name: "Zeta", kind: .ollama, baseURLString: "https://your-host.your-vpn.ts.net"))
         let second = ServerProfile(name: "Alpha", kind: .openAICompatible, baseURLString: "https://api.example.com")
         try store.save(second)
 
@@ -91,7 +91,7 @@ final class ServerProfileStoreTests: XCTestCase {
         let conversation = try store.createConversation(
             title: "Trail notes", mode: .remoteOnly, params: .default, isTemporary: false
         )
-        try store.save(ServerProfile(name: "Box", kind: .ollama, baseURLString: "https://your-host.your-tailnet.ts.net"))
+        try store.save(ServerProfile(name: "Box", kind: .ollama, baseURLString: "https://your-host.your-vpn.ts.net"))
 
         XCTAssertEqual(try store.loadConversations().count, 1)
         XCTAssertEqual(try store.profiles().count, 1, "adding a server must not disturb the chat")

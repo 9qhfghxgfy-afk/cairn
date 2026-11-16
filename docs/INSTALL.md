@@ -2,9 +2,10 @@
 
 How to get a CI-built app onto a physical iPhone **without** the App Store, TestFlight,
 or a paid Apple Developer account. Everything personal stays out of the repo: your server's
-LAN address, your VPN address, and your router's DDNS hostname are typed into the app only —
-never committed. Placeholders like `192.168.x.x` and `your-host.your-tailnet.ts.net` stand in
-for them in these docs.
+LAN address, your tunnel address, and your router's dynamic-DNS hostname are typed into the app
+only — never committed. These docs use documented placeholder addresses only
+(`192.168.1.20`, `192.168.1.0/24`, `10.8.0.2`); the server side of the setup is
+[docs/SERVERS.md](SERVERS.md).
 
 ## What you need
 
@@ -80,9 +81,10 @@ endpoint, and the tunnel is the access control.
 - At home with the tunnel up and `AllowedIPs 0.0.0.0/0`, the request hairpins out to the
   router's WAN address and back in, which some routers refuse when NAT loopback is off.
   Turn the tunnel off at home, or narrow `AllowedIPs` to the subnets you need.
-- Your DDNS hostname, VPN address and port belong to you: type them into the app, never into
-  the repository. `Scripts/check-hostname.sh` fails CI if a real DDNS or MagicDNS hostname
-  appears in a tracked file.
+- Your router's hostname, your tunnel address and its port belong to you: type them into the app,
+  never into the repository. `Scripts/check-hostname.sh` fails CI if a real private hostname —
+  a VPN DNS name or a dynamic-DNS name — appears in a tracked file, and since 2026-11-15 it also
+  fails on any private IP literal that is not one of the documented examples.
 
 **Why plain HTTP is fine on these two routes.** Apple's App Transport Security "applies only to
 connections made to public host names" and gives no protection to IP addresses, `.local` hosts,

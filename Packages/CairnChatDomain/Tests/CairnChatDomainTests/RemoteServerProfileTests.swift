@@ -7,12 +7,12 @@ final class RemoteServerProfileTests: XCTestCase {
 
     func testCanonicalizeAcceptsHTTPSWithoutPath() {
         XCTAssertEqual(
-            ServerProfile.canonicalize(urlString: "https://your-host.your-tailnet.ts.net"),
-            "https://your-host.your-tailnet.ts.net"
+            ServerProfile.canonicalize(urlString: "https://your-host.your-vpn.ts.net"),
+            "https://your-host.your-vpn.ts.net"
         )
         XCTAssertEqual(
-            ServerProfile.canonicalize(urlString: "https://your-host.your-tailnet.ts.net/"),
-            "https://your-host.your-tailnet.ts.net"
+            ServerProfile.canonicalize(urlString: "https://your-host.your-vpn.ts.net/"),
+            "https://your-host.your-vpn.ts.net"
         )
         XCTAssertEqual(
             ServerProfile.canonicalize(urlString: "HTTPS://Example.COM:8443"),
@@ -103,10 +103,10 @@ final class RemoteServerProfileTests: XCTestCase {
 
     func testNetworkClassRouting() {
         // Only the placeholder hostname may ever appear in a tracked file.
-        XCTAssertEqual(NetworkClassRouting.classify(host: "your-host.your-tailnet.ts.net"), .tailnet)
-        XCTAssertEqual(NetworkClassRouting.classify(host: "ts.net"), .tailnet)
-        XCTAssertEqual(NetworkClassRouting.classify(host: "100.64.1.2"), .tailnet)
-        XCTAssertEqual(NetworkClassRouting.classify(host: "100.127.255.254"), .tailnet)
+        XCTAssertEqual(NetworkClassRouting.classify(host: "your-host.your-vpn.ts.net"), .privateVPN)
+        XCTAssertEqual(NetworkClassRouting.classify(host: "ts.net"), .privateVPN)
+        XCTAssertEqual(NetworkClassRouting.classify(host: "100.64.1.2"), .privateVPN)
+        XCTAssertEqual(NetworkClassRouting.classify(host: "100.127.255.254"), .privateVPN)
         XCTAssertEqual(NetworkClassRouting.classify(host: "100.128.0.1"), .publicInternet)
 
         XCTAssertEqual(NetworkClassRouting.classify(host: "10.1.2.3"), .privateLan)
@@ -119,7 +119,7 @@ final class RemoteServerProfileTests: XCTestCase {
         XCTAssertEqual(NetworkClassRouting.classify(host: "127.0.0.1"), .privateLan)
 
         XCTAssertEqual(NetworkClassRouting.classify(host: "api.openai.example.com"), .publicInternet)
-        XCTAssertEqual(NetworkClassRouting.classify(fromURLString: "https://your-host.your-tailnet.ts.net"), .tailnet)
+        XCTAssertEqual(NetworkClassRouting.classify(fromURLString: "https://your-host.your-vpn.ts.net"), .privateVPN)
         XCTAssertEqual(NetworkClassRouting.classify(fromURLString: "garbage"), .publicInternet)
     }
 
@@ -136,12 +136,12 @@ final class RemoteServerProfileTests: XCTestCase {
         XCTAssertFalse(profile.usableNow)
     }
 
-    func testTailnetIsPrivateAndNotPlaintext() {
+    func testPrivateVpnIsPrivateAndNotPlaintext() {
         let profile = ServerProfile(name: "home", kind: .openAICompatible,
-                                    baseURLString: "https://your-host.your-tailnet.ts.net")
-        XCTAssertEqual(profile.networkClass, .tailnet)
+                                    baseURLString: "https://your-host.your-vpn.ts.net")
+        XCTAssertEqual(profile.networkClass, .privateVPN)
         XCTAssertFalse(profile.isPlaintext)
-        XCTAssertTrue(profile.usableNow, "tailnet never needs an outbound opt-in")
+        XCTAssertTrue(profile.usableNow, "a private VPN address never needs an outbound opt-in")
     }
 
     func testLoopbackProfileIsPrivateLanAndPlaintext() {
@@ -165,7 +165,7 @@ final class RemoteServerProfileTests: XCTestCase {
     func testPublicInternetNeverAllowsPlaintextButPrivateClassesDo() {
         XCTAssertFalse(NetworkClass.publicInternet.allowsPlaintext)
         XCTAssertTrue(NetworkClass.privateLan.allowsPlaintext)
-        XCTAssertTrue(NetworkClass.tailnet.allowsPlaintext)
+        XCTAssertTrue(NetworkClass.privateVPN.allowsPlaintext)
         XCTAssertTrue(NetworkClass.onDevice.allowsPlaintext)
     }
 }

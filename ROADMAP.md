@@ -30,18 +30,20 @@ Recorded 2026-11-14. These supersede anything older in the repo.
   (Sideloadly's auto-refresh daemon re-signs near expiry while the PC can reach the
   device over USB or Wi-Fi), at most 3 sideloaded apps active per device, ~10 App IDs
   created per year. No App Store or TestFlight unless the paid Apple Developer Program
-  is joined later; the Release configuration stays App Store-clean either way (zero ATS
-  exceptions, no private APIs).
+  is joined later; the Release configuration stays App Store-clean either way — exactly one ATS
+  key (`NSAllowsLocalNetworking`, which narrows rather than widens) and no private APIs.
 - **Entitlements.** `com.apple.developer.kernel.increased-memory-limit` is treated as
   **unavailable**: free-Apple-ID signing tools cannot attach custom entitlements
   (Sideloadly's custom-entitlement support is Apple Developer Program only; extended
   virtual addressing is paid-only). M3 must work **with and without** the entitlement;
   confirm availability by measuring `os_proc_available_memory()` on the physical device
   in M3 — never trust community reports. The app must never *require* an entitlement.
-- **Networking (2026-11-15, superseding the 2026-11-14 Tailscale-only rule).** A server the
+- **Networking (2026-11-15, superseding the 2026-11-14 mesh-VPN-only rule).** A server the
   user runs is reached over **plain `http://` at its private address** — a LAN IPv4 literal, or
-  that same private address through **the router's own WireGuard server**. No Tailscale, no
-  MagicDNS, no HTTPS requirement, no certificate management. Two facts carry this:
+  that same private address through **the router's own WireGuard server**. No third-party VPN
+  product, no mesh network, no VPN DNS name, no HTTPS requirement, no certificate management.
+  Nothing beyond the user's own router belongs to this plan, and no code, doc, or test may
+  assume a VPN product is installed. Two facts carry this:
   - Apple's ATS scope: ATS "applies only to connections made to public host names", and the
     system provides no ATS protection for **IP addresses**, **unqualified host names**, or
     **`.local` hosts** (Cocoa Keys, *Availability of ATS for Remote and Local Connections*).
@@ -62,13 +64,16 @@ Recorded 2026-11-14. These supersede anything older in the repo.
   unit-tested — never by an ATS hole. Plaintext always carries a visible `Plaintext` badge.
   iOS's **Local Network** permission is now load-bearing, not cosmetic: the first request to a
   LAN address prompts, and a denial breaks the connection. Bonjour discovery stays in M7.
-- **Hostname policy.** No real hostname belonging to the user's own network ever appears in
-  the repo, commits, tests, docs, screenshots, or CI logs — that now covers **dynamic-DNS**
-  names (a router's DDNS endpoint for its WireGuard port) as well as MagicDNS names. Docs and
-  tests use `your-host.your-tailnet.ts.net`, `<your-ddns-hostname>` in prose, or generic
-  RFC 1918 addresses (`192.168.x.x`, `10.x`, `100.64.x.x`); `Scripts/check-hostname.sh`
-  enforces both classes in CI. Cairn dials the **private** address through the tunnel and
-  never the public endpoint, so a DDNS name has no reason to exist in this repository at all.
+- **Hostname and address policy (extended 2026-11-15).** No real hostname **and no real
+  address** belonging to the user's own network ever appears in the repo, commits, tests, docs,
+  screenshots, or CI logs — not a VPN DNS name, not a router's dynamic-DNS name, not a LAN
+  address. Docs and tests use documented placeholders only: `your-host.your-vpn.ts.net` is the
+  single allowed `*.ts.net` value, `<your-router-hostname>` stands in prose, and addresses come
+  from the example set `Scripts/check-hostname.sh` allow-lists. Cairn dials the **private**
+  address through the tunnel and never the public endpoint, so a router hostname has no reason to
+  exist in this repository at all. The guard now also rejects a **private IP literal** outside
+  that allow-list, which is the rule that actually catches a real LAN or tunnel address pasted in
+  by mistake.
 - **Test device.** iPhone 15 Pro on **iOS 26.2** (8 GB RAM per Apple's specs — confirm
   on device). Do not assume iOS 27. The CI simulator lane stays iPhone 17 / iOS 26.5.
 - **CI lane.** `macos-26` + Xcode 26.6 pinned (SDK ceiling iOS 26.5), deployment target
@@ -197,7 +202,7 @@ zero-ATS-exception and defer-Bonjour decisions and has been rewritten, not silen
   networking decision, and the guide was written against the new one instead.
 - **Dropped from M2** (superseded by Decisions): Bonjour discovery and `NSBonjourServices`
   → M7; Debug-only scoped `NSExceptionDomains` and the per-config plist split → never;
-  the Tailscale-serve-HTTPS requirement → superseded on 2026-11-15 by private plaintext
+  the VPN-provided-HTTPS requirement → superseded on 2026-11-15 by private plaintext
   (LAN address, or that address through the router's WireGuard tunnel).
 
 Acceptance criteria:
@@ -216,7 +221,8 @@ Acceptance criteria:
    over http is rejected with an explanation, a private host over http saves and carries the
    `Plaintext` badge; OpenAI-compatible servers expose no Pull/Delete.
 6. `check-ats.sh` proves the single permitted ATS key and no other; `check-hostname.sh`
-   proves no real private hostname (MagicDNS **or** DDNS) is tracked.
+   proves no real private hostname (a VPN DNS name **or** a dynamic-DNS name) is tracked, and since
+   2026-11-15 also that no private IP outside the documented example set is tracked.
 
 **M2 is CI-verified only.** No stub test may be reported as a real LAN or VPN connection.
 
@@ -250,7 +256,7 @@ proven and what is not:
   suites. Run #15: guards green; 59 domain tests green; the remote package suite green against
   the stub transport and the 127.0.0.1 listener; xcodegen + simulator build green; 22 simulator
   tests green with no failures. `check-hostname.sh` also caught two M1 test fixtures that used
-  invented MagicDNS hosts instead of the one allowed placeholder; both now use the placeholder.
+  invented VPN DNS hosts instead of the one allowed placeholder; both now use the placeholder.
 
 What CI cannot prove, and what therefore stays unclaimed: Keychain behaviour against a real
 keychain (device-only — the policy is covered here through a fake operator), and any real
@@ -324,8 +330,8 @@ hostnames stay out of this file by policy):
 3. **The server is reachable at its LAN IPv4 address over plain http**, which is what the
    2026-11-14 decision said was unreachable. That is the reversal recorded in **Decisions**:
    Apple's ATS scope excludes IP addresses, unqualified names, and `.local` hosts, and the
-   router's WireGuard tunnel — not TLS — is the protection when away from home. Tailscale,
-   MagicDNS, and `tailscale serve` are dropped from the supported path entirely.
+   router's WireGuard tunnel — not TLS — is the protection when away from home. No third-party VPN product,
+   no VPN DNS name, and no HTTPS-on-the-tunnel requirement survived that reversal.
 4. **A single-model server ignores the `model` field it is sent**, so a wrong model id produces
    no error, only a surprise later. Model ids must be chosen from the fetched list; typing one
    from memory is not a supported workflow.
@@ -334,10 +340,10 @@ Code and guard changes that followed, all verified locally (no Swift toolchain h
 the compile gate): `NetworkClass.allowsPlaintext` as the single rule; profile canonicalization
 and validation accept private plaintext and refuse public plaintext with a distinct
 `plaintextPublicInternet` error; the connection tester refuses only public plaintext;
-`PlaintextBadge` on rows and the editor; every Tailscale/MagicDNS-specific error hint rewritten
+`PlaintextBadge` on rows and the editor; every VPN-DNS-specific error hint rewritten
 to speak in terms of address, port, route, and VPN; `check-ats.sh` rewritten to require the one
-permitted key and reject any other; `check-hostname.sh` extended to catch real DDNS hostnames as
-well as MagicDNS ones.
+permitted key and reject any other; `check-hostname.sh` extended to catch a router's dynamic-DNS hostname
+as well as a VPN DNS name.
 
 Guard verification run locally (8 scenarios, all behaving as specified): spec-only checkout
 passes; generated plist with the one key passes; a plist adding `NSAllowsArbitraryLoads`, a
@@ -387,7 +393,7 @@ checked on the device, M2 remains CI-verified only.
 
 All three jobs green on the branch push:
 
-- `Privacy guards` (`ubuntu-latest`) — hostname guard (MagicDNS plus the new public-DDNS
+- `Privacy guards` (`ubuntu-latest`) — hostname guard (a VPN DNS name plus the new dynamic-DNS
   rule) and the ATS guard. This is the run that proves the guard works from a **spec-only**
   checkout, because the Linux runner has no XcodeGen and therefore no `App/Info.plist`.
 - `Host unit tests (macOS)` — domain and remote suites green.
@@ -400,7 +406,7 @@ All three jobs green on the branch push:
 Two CI failures came up on the way and both were the guards' own doing, not the policy's: the
 ATS guard matched a comment that merely named a banned key (now anchored to real plist/YAML
 keys), and it ran on Ubuntu where the generated plist does not exist (it now validates the
-spec there). The hostname guard also failed on the literal DDNS domain written into the new
+spec there). The hostname guard also failed on a literal dynamic-DNS domain written into the new
 docs, which is why that rule is now spelled as a regex and the docs name the class rather than
 a real hostname.
 

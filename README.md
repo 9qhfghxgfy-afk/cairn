@@ -14,8 +14,11 @@ real cancellation and metrics, and the SwiftData store are green end to end on C
 commit `1e7e250` — privacy guards, domain tests on macOS, generated-project build, and
 the full simulator suite on iPhone 17 / iOS 26.5 all pass. The repository is
 `github.com/9qhfghxgfy-afk/cairn`, public so the macOS CI lane stays free.
-Next: Milestone 2 (remote providers over `tailscale serve` HTTPS). To install a build on
-a physical iPhone: [docs/INSTALL.md](docs/INSTALL.md).
+Milestone 2: **CI-verified** — remote providers over a private address: `http://` to a server on
+your LAN, or that same private address carried through your router's WireGuard tunnel, with no
+certificate and no hosted account. The server side is [docs/SERVERS.md](docs/SERVERS.md); getting
+a build onto a physical iPhone is [docs/INSTALL.md](docs/INSTALL.md). On-device proof of the LAN
+and tunnel routes is still open — see ROADMAP.
 
 ## Layout
 
@@ -31,8 +34,9 @@ docs/INSTALL.md                 sideloading a CI IPA onto a physical iPhone (Win
 docs/SERVERS.md                 exposing your own server on the LAN, and reaching it over WireGuard
 Scripts/ci.sh                   the exact sequence CI runs
 Scripts/check-logging.sh        fails on prompt/response/secret logging
-Scripts/check-ats.sh            fails on ANY ATS exception in any configuration
-Scripts/check-hostname.sh       fails if a real *.ts.net hostname is tracked
+Scripts/check-ats.sh            requires the one NSAllowsLocalNetworking key; fails on any other
+Scripts/check-hostname.sh       fails on a real private hostname, or a private IP that is
+                                not one of the documented example addresses
 .github/workflows/ci.yml        macos-26 + Xcode 26.6, iPhone 17 / iOS 26.5
 .github/workflows/ipa.yml       workflow_dispatch: unsigned device IPA for sideloading
 ```

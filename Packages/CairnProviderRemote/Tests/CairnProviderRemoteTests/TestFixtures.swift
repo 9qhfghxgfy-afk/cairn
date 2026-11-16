@@ -33,12 +33,13 @@ final class FakeKeychainOperator: KeychainOperating, @unchecked Sendable {
     }
 }
 
-/// Loopback and placeholder hosts only: the real MagicDNS name never enters the repo, so
-/// Scripts/check-hostname.sh stays green (only your-host.your-tailnet.ts.net is allowed).
+/// Loopback and documented placeholder hosts only. A real hostname of the user's own network
+/// never enters the repo, which is what keeps Scripts/check-hostname.sh green — the only
+/// `*.ts.net` value allowed anywhere in this repository is your-host.your-vpn.ts.net.
 enum Fixtures {
     static let loopbackOllama = "http://127.0.0.1:11434"
     static let loopbackOpenAI = "http://127.0.0.1:8080"
-    static let tailnet = "https://your-host.your-tailnet.ts.net"
+    static let vpnName = "https://your-host.your-vpn.ts.net"
     static let cloud = "https://api.example.com"
 
     static func ollama(base: String = loopbackOllama, token: Bool = false) -> ServerProfile {

@@ -32,7 +32,8 @@ lossless `.json` (full tree) export/import.
 
 **Engines.** On-device (Foundation Models on iOS 26+; llama.cpp / mlx-swift evaluated for
 models Apple's API cannot serve), LAN servers (Ollama including pull/delete/`/api/ps`,
-OpenAI-compatible including LM Studio), tailnet endpoints, and an optional Ollama Cloud
+OpenAI-compatible including LM Studio), private endpoints reached through a VPN, and an
+optional Ollama Cloud
 profile that is off by default.
 
 **Hybrid engine.** On-Device Only · Remote Only · Hybrid Parallel (both live, side by
@@ -54,7 +55,7 @@ entitlement tricks, and App Store distribution before the on-device milestones a
 - Keychain for every token; `.afterFirstUnlockThisDeviceOnly`.
 - CI fails on `print(` / `NSLog(` / `os_log(`: prompts, responses, attachments, and
   secrets are never logged. Metadata only — ids, enums, counts, byte sizes, durations.
-- Every request carries a network class: `.onDevice`, `.privateLan`, `.tailnet`,
+- Every request carries a network class: `.onDevice`, `.privateLan`, `.privateVPN`,
   `.publicInternet`. The badge in the header reflects it, and `.publicInternet` requires
   opt-in.
 - Release builds carry exactly one ATS key, `NSAllowsLocalNetworking`, and never a blanket or

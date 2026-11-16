@@ -6,16 +6,20 @@ public enum NetworkClass: String, Sendable, Equatable, Codable, CaseIterable {
     case onDevice
     /// RFC 1918, `.local`, or an unqualified host on the user's own LAN.
     case privateLan
-    /// A private VPN / mesh peer: Tailscale's 100.64.0.0/10, a `*.ts.net` MagicDNS
-    /// name, or a subnet routed through a WireGuard gateway. Private, but not the
-    /// local link, so it is modelled separately from `.privateLan`.
-    case tailnet
+    /// A private peer reached **through a VPN** rather than over the local link: an
+    /// address in the 100.64.0.0/10 block a mesh VPN allocates, a mesh-VPN DNS name, or a
+    /// host inside a subnet a VPN gateway routes. Private, but not the LAN itself, so it
+    /// is modelled separately from `.privateLan`. Cairn's own away-from-home route is not
+    /// this class — the phone dials the server's LAN address through the router's
+    /// WireGuard tunnel, which `.privateLan` already covers — so the class exists to keep
+    /// VPN addresses honestly labelled, not to require any particular VPN product.
+    case privateVPN
     case publicInternet
 
     public var leavesTheDevice: Bool {
         switch self {
         case .onDevice: return false
-        case .privateLan, .tailnet, .publicInternet: return true
+        case .privateLan, .privateVPN, .publicInternet: return true
         }
     }
 

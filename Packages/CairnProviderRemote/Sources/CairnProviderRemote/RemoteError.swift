@@ -3,8 +3,9 @@ import Foundation
 /// Typed, user-presentable transport failures.
 ///
 /// These never carry a URL, a hostname, a token, or a response body: an error string
-/// can end up in an alert, a crash report, or a CI log, and the real MagicDNS hostname
-/// must not travel any of those paths. Only status codes and server-supplied
+/// can end up in an alert, a crash report, or a CI log, and the hostname of a server on the
+/// user's own network must never travel any of those paths. Only status codes and
+/// server-supplied
 /// operational messages (which the user's own server writes) are carried.
 public enum RemoteError: Error, Equatable, Sendable, LocalizedError {
     case invalidURL

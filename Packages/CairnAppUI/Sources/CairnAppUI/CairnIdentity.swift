@@ -70,7 +70,7 @@ public struct NetworkBadge: View {
         switch networkClass {
         case .onDevice: return "lock.shield.fill"
         case .privateLan: return "localNetwork"
-        case .tailnet: return "point.3.connected.trianglepath.dotted"
+        case .privateVPN: return "point.3.connected.trianglepath.dotted"
         case .publicInternet: return "globe"
         }
     }
@@ -79,7 +79,7 @@ public struct NetworkBadge: View {
         switch networkClass {
         case .onDevice: return "On device"
         case .privateLan: return "LAN"
-        case .tailnet: return "VPN"
+        case .privateVPN: return "VPN"
         case .publicInternet: return "Internet"
         }
     }
@@ -88,7 +88,7 @@ public struct NetworkBadge: View {
         switch networkClass {
         case .onDevice: return CairnTheme.moss
         case .privateLan: return CairnTheme.amber
-        case .tailnet: return CairnTheme.stoneLight
+        case .privateVPN: return CairnTheme.stoneLight
         case .publicInternet: return CairnTheme.rust
         }
     }

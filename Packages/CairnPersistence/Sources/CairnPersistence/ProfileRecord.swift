@@ -15,7 +15,7 @@ public final class ServerProfileRecord {
     public var kindRaw: String
     public var baseURLString: String
     public var enabled: Bool
-    /// Explicit "this may leave the tailnet" agreement. Off by default, so a profile
+    /// Explicit "this may leave your private network" agreement. Off by default, so a profile
     /// pointing at the public internet is inert until the user turns it on.
     public var publicInternetOptIn: Bool
     /// Display state only: whether a Keychain item exists for this profile. The secret

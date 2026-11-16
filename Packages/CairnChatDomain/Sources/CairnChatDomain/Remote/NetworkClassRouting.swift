@@ -16,15 +16,15 @@ public enum NetworkClassRouting: Sendable {
         var host = rawHost.lowercased()
         if host.hasSuffix(".") { host = String(host.dropLast()) }
 
-        // MagicDNS names: <device>.<tailnet>.ts.net (or bare ts.net, which is
-        // even broader — also tailnet territory).
-        if host == "ts.net" || host.hasSuffix(".ts.net") { return .tailnet }
+        // A mesh-VPN DNS name (`*.ts.net` is the form in wide use). Treated as private,
+        // and optional — Cairn's own route dials a private address, not a VPN name.
+        if host == "ts.net" || host.hasSuffix(".ts.net") { return .privateVPN }
 
-        // Tailscale CGNAT range 100.64.0.0/10 — a tailnet peer address. Private like
-        // any other VPN address. A WireGuard gateway that routes a LAN subnet is not
-        // matched here: the phone dials the LAN address itself (e.g. 192.168.x.x), so
-        // the RFC 1918 rule below classifies it, whichever side of the tunnel it is on.
-        if isIPv4(host, inCGNATRange: true) { return .tailnet }
+        // The 100.64.0.0/10 CGNAT block a mesh VPN allocates to its peers — private like
+        // any other VPN address. A VPN gateway that routes a LAN subnet is not matched
+        // here: the phone dials the LAN address itself (e.g. 192.168.x.x), so the
+        // RFC 1918 rule below classifies it, whichever side of the tunnel it is on.
+        if isIPv4(host, inCGNATRange: true) { return .privateVPN }
 
         if loopback(host) { return .privateLan }
         if isIPv4(host, inRFC1918: true) { return .privateLan }
@@ -42,7 +42,7 @@ public enum NetworkClassRouting: Sendable {
 
     /// - Parameters
     ///   - inRFC1918: 10/8, 172.16/12, 192.168/16
-    ///   - inCGNATRange: 100.64/10 (Tailscale)
+    ///   - inCGNATRange: 100.64/10, the block a mesh VPN allocates to peers
     private static func isIPv4(_ host: String, inRFC1918: Bool = false, inCGNATRange: Bool = false) -> Bool {
         let parts = host.split(separator: ".")
         guard parts.count == 4,

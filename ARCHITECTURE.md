@@ -66,7 +66,7 @@ enum StreamChunk { thinking(String) | content(String) | toolCall(ToolCallRequest
                                       | metrics(GenerationMetrics) }
 
 protocol InferenceProvider: Sendable, Identifiable {
-  var networkClass: NetworkClass { get }        // .onDevice .privateLan .tailnet .publicInternet
+  var networkClass: NetworkClass { get }        // .onDevice .privateLan .privateVPN .publicInternet
   var capabilities: ProviderCapabilities { get } // streaming/thinking/tools/vision/pull/delete/ps
   func models() async throws -> [ModelInfo]
   func stream(_ request: GenerationRequest) -> AsyncThrowingStream<StreamChunk, any Error>
@@ -120,7 +120,7 @@ never copied between stores, so an ephemeral conversation has no code path to di
   `os_log(`, `fatalError(` in production sources. Log typed metadata only: UUIDs, enums,
   counts, byte sizes, durations.
 - **Network class is a first-class value.** Every request is tagged `.onDevice`,
-  `.privateLan`, `.tailnet`, or `.publicInternet`, and the header shows a `NetworkBadge`
+  `.privateLan`, `.privateVPN`, or `.publicInternet`, and the header shows a `NetworkBadge`
   for the active provider. `.publicInternet` requires explicit opt-in before the first
   request and keeps a persistent badge afterwards (web search, Ollama Cloud).
 
@@ -147,9 +147,12 @@ The shipped `App/Info.plist` therefore carries **exactly one** ATS key,
 `NSAllowsLocalNetworking = true`, and `Scripts/check-ats.sh` fails if it is missing, not true, or
 accompanied by any other ATS key. Separately, iOS gates every connection to a LAN address behind
 the **Local Network** permission, so `NSLocalNetworkUsageDescription` stays: the first request to
-a private server prompts, and a denial surfaces as the connection-refused hint. No hostname for
-the user's own network — MagicDNS or dynamic-DNS — ever enters the repository: docs and tests use
-placeholders or generic RFC 1918 addresses, and `Scripts/check-hostname.sh` enforces that in CI.
+a private server prompts, and a denial surfaces as the connection-refused hint. No hostname and
+no address of the user's own network ever enters the repository — no VPN DNS name, no
+dynamic-DNS name, no real LAN address. Docs and tests use documented placeholders and example
+addresses only, and `Scripts/check-hostname.sh` enforces that in CI: it rejects a real private
+hostname, and since 2026-11-15 also a private IP literal that is not one of the documented
+examples.
 
 ## 8. Memory guardrails (Milestone 3)
 
@@ -201,8 +204,11 @@ when only a device model is available — never a second resident device model.
 - ~~Per-configuration ATS plist split~~ — superseded 2026-11-14 by a zero-ATS-exception rule,
   which was itself superseded on 2026-11-15 (ROADMAP **Decisions**): exactly one key ships,
   `NSAllowsLocalNetworking`, and a private server is reached over plain http.
-- ~~Tailscale MagicDNS + `tailscale serve` HTTPS as the only remote route~~ — superseded
-  2026-11-15 by the user's own router WireGuard server plus the server's LAN address.
+- ~~A mesh-VPN-only remote route with HTTPS and managed certificates~~ — dropped on
+  2026-11-15 (ROADMAP **Decisions**). The remote route is the server's own LAN address: reached
+  directly at home, and the same address through the router's WireGuard server when away. No
+  third-party VPN product is part of the design and none is required; a mesh-VPN address is still
+  classified `.privateVPN` for the case where a user happens to use one.
 - Paid Apple Developer Program: revisit only after M3's on-device checklist; the
   free-Apple-ID sideload path is documented in `docs/INSTALL.md`.
 - Bundle id `app.cairn.cairn` — change it if your team prefix differs.
