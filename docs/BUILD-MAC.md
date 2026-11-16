@@ -92,6 +92,16 @@ derived as `$(CAIRN_BUNDLE_ID).tests`, so a personal override moves the app and 
 and they cannot collide. **CI has no `Local.xcconfig`**, and its commands pass
 `CODE_SIGNING_ALLOWED=NO`, so CI keeps building unsigned exactly as it did before.
 
+One rule learned the hard way: **an xcconfig include is resolved relative to the file doing the
+including, and a `$(SRCROOT)` path inside an include does not resolve at all.** A separate
+`Config/Signing.Tests.xcconfig` that did `#include "$(SRCROOT)/Config/Signing.xcconfig"` failed the
+test target before a single test ran — CI run
+[43794042407](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/43794042407), `could not find
+included file '$(SRCROOT)/Config/Signing.xcconfig' in search paths (in target 'CairnTests')`. The fix
+is the arrangement above: both targets point at the one xcconfig directly. Do not add a second
+xcconfig that includes the first, and do not write includes with `$(SRCROOT)` — with a plain
+`#include` Xcode stops the build, and with `#include?` it would silently ignore your Team ID.
+
 Two guards keep the arrangement honest:
 
 - `Config/Local.xcconfig` is git-ignored, and `Scripts/check-signing.sh` fails CI if a real

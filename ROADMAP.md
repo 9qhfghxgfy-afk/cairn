@@ -13,7 +13,7 @@ Gate for every milestone (from `.clinerules`):
 |---|---|---|---|
 | 0 | Repo + CI lane | **done** | [43684016580](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/43684016580) — first lane run |
 | 1 | Shell + mock streaming loop | **done** — all gates green on `1e7e250` | [43685125186](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/43685125186) |
-| 2 | Remote providers | **done** — all gates green on `a5466dd`; re-verified on `b58a916` after the networking reversal | [43764696840](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/43764696840), [43771679253](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/43771679253) |
+| 2 | Remote providers | **CI-verified only** — all gates green on `a5466dd`; re-verified on `b58a916` after the networking reversal and on `450f602` after the Mac build-loop change. The 10-line device checklist under M2 is what closes it | [43764696840](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/43764696840), [43771679253](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/43771679253), [43795195812](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/43795195812) |
 | 3 | On-device inference + memory guardrails | todo | |
 | 4 | Hybrid Parallel & Synthesized engine | todo | |
 | 5 | Advanced controls, interruption recovery, export/import | todo | |
@@ -53,6 +53,11 @@ Recorded 2026-11-14. These supersede anything older in the repo.
     `Scripts/check-signing.sh` fails CI if a Team ID, an Apple-ID-stamped identity, or a pinned
     profile appears in a tracked file. Set a device build destination in Xcode by hand or with
     `xcodebuild -destination`; do not put a destination in `project.yml`.
+  - **One xcconfig, always relative.** Both targets point at `Config/Signing.xcconfig`; no xcconfig
+    includes another one to share settings, and no include ever uses a `$(SRCROOT)` path — Xcode does
+    not resolve it while reading an include, and CI proved that the hard way (run 43794042407, see the
+    CI record under M2). A `$(SRCROOT)` path inside the *optional* include would not even fail: it
+    would silently drop the Team ID.
 - **Distribution / signing.** Free Apple ID (Personal Team). The primary install path is now **Xcode
   on the Mac** — run on the connected device, or Archive → Distribute → *Direct Distribution* to
   the device. The fallback, for when the Mac is not at hand, is an **unsigned device IPA** built by
@@ -448,6 +453,54 @@ a real hostname.
 What this run still does not prove is the device side: the Local Network prompt, the route to
 a private address over Wi-Fi and over the WireGuard tunnel, and streaming over that tunnel.
 **1–10 above** remain the gate for those.
+
+### CI record for the Mac build loop and the signing config (2026-11-15)
+
+**First, the failure this batch caused, because it is the useful part.** Run
+[43794042407](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/43794042407) on `ca853ed` went red
+in the simulator job, step 9, **before a single test ran**:
+
+```
+could not find included file '$(SRCROOT)/Config/Signing.xcconfig' in search paths
+(in target 'CairnTests' from project 'Cairn')
+```
+
+The cause was the new signing config itself. `Config/Signing.Tests.xcconfig` chained into
+`Config/Signing.xcconfig` with `#include "$(SRCROOT)/Config/Signing.xcconfig"`, and Xcode does not
+resolve a `$(SRCROOT)` path while it is reading an include — so the test target never got
+`CAIRN_BUNDLE_ID` and the test action refused to start. The app build step passed, which is why the
+failure looked like a test problem rather than a config problem. Fixed in `69b7f4f`: that file is
+deleted and **both targets point at `Config/Signing.xcconfig` directly**, leaving exactly one include
+in the project — the relative `#include? "Local.xcconfig"` — and nothing else for Xcode to miss. The
+rule is written into `docs/BUILD-MAC.md` and `project.yml`: never put a `$(SRCROOT)` path in an
+xcconfig include, and never let one xcconfig include another to share settings. With a plain
+`#include` Xcode stops the build (that is the lucky case); inside `#include?` the same mistake would
+silently ignore your Team ID.
+
+**The green record — run
+[43795195812](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/43795195812) on `450f602`, all
+three jobs green on the branch push:**
+
+- `Privacy guards` (`ubuntu-latest`) — logging, ATS, hostname/address, the new signing-identity
+  guard, and `Scripts/test-guards.sh` at **34 planted cases, 0 failures**. The planted set gained a
+  second RFC1918 case: an address inside `172.16/12` that is **not** one of the documented examples —
+  written in the test as two fragments so neither the test source nor any doc carries the whole
+  literal — must be rejected without the guard echoing it, in a tree that also holds the documented
+  `172.16.0.1` boundary example, which must still pass. That pair is what proves the allow-list is an
+  allow-list rather than a "looks private-ish" test.
+- `Host unit tests (macOS)` — domain and remote suites green.
+- `Build + test on simulator` (`iPhone 17 / iOS 26.5`, Xcode 26.6) — generated project builds, suite
+  runs, and the ATS guard re-checks the generated `Info.plist`. This is the lane that catches what
+  neither machine's local checks can: Xcode's own reading of the xcconfig chain, which is precisely
+  what broke.
+
+**What is explicitly *not* claimed.** `xcodegen generate`, `xcodebuild build`, `xcodebuild test`, and
+`Scripts/ci.sh probe` have never been run on the Mac from this workspace, so: the local Xcode/macOS
+version against the CI pin (26.6) is still an **unrecorded divergence**; the local signing path —
+`Config/Local.xcconfig` → a signed build on the iPhone — has never been exercised; and the Increased
+Memory Limit capability question is untouched. The Mac is the primary loop in the docs now, but it has
+not yet been demonstrated as one. M2 stays **CI-verified only**: the 10-line device checklist remains
+the gate, and nothing in this batch is on-device-verified or real-network-verified.
 
 ## Plan change (2026-11-15) — LAN plus the router's own WireGuard; the mesh-VPN route is out
 
