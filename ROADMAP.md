@@ -189,10 +189,12 @@ zero-ATS-exception and defer-Bonjour decisions and has been rewritten, not silen
   Ollama only; disabled with a reason on OpenAI-compatible), persistent `NetworkBadge`.
 - Optional **Ollama Cloud** profile: created only on explicit opt-in, `.publicInternet`,
   labelled as internet, off by default.
-- ~~`docs/SERVERS.md`: install Tailscale on server + iPhone, same tailnet, MagicDNS + HTTPS,
-  `tailscale serve --bg --https=443 <port>`, placeholders only.~~ Superseded 2026-11-15: the
-  server-access guide lives in `docs/INSTALL.md` and describes the LAN address plus the router's
-  WireGuard tunnel, with no certificate setup at all.
+- `docs/SERVERS.md` — the server-access guide, written 2026-11-15: binding the server so the LAN
+  can reach it, an optional API key, firewall rules scoped to the LAN subnet with **no port
+  forwarding**, and the WireGuard client config whose `AllowedIPs` must include the LAN subnet.
+  Placeholders only, and only the addresses `Scripts/check-hostname.sh` sanctions. The original
+  plan for this file — a mesh-VPN + HTTPS install guide — was superseded on 2026-11-15 by the
+  networking decision, and the guide was written against the new one instead.
 - **Dropped from M2** (superseded by Decisions): Bonjour discovery and `NSBonjourServices`
   → M7; Debug-only scoped `NSExceptionDomains` and the per-config plist split → never;
   the Tailscale-serve-HTTPS requirement → superseded on 2026-11-15 by private plaintext

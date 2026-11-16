@@ -51,6 +51,9 @@ for them in these docs.
 Cairn talks to an inference server you run yourself. Two routes are supported and neither
 needs HTTPS, a certificate, or a VPN product beyond your own router:
 
+The server side — binding the port, an optional API key, firewall rules limited to your LAN
+subnet, and the WireGuard client config — is in [docs/SERVERS.md](SERVERS.md).
+
 **A. On your own network — the common case.** Add the server's LAN address over `http://`:
 
 ```

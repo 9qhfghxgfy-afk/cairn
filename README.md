@@ -28,6 +28,7 @@ Packages/CairnAppUI             SwiftUI views + Cairn identity
 Tests/CairnTests                simulator tests: SwiftData persistence, workspace wiring
 Entitlements/                   release-clean reference + paid-path memory-limit experiment
 docs/INSTALL.md                 sideloading a CI IPA onto a physical iPhone (Windows)
+docs/SERVERS.md                 exposing your own server on the LAN, and reaching it over WireGuard
 Scripts/ci.sh                   the exact sequence CI runs
 Scripts/check-logging.sh        fails on prompt/response/secret logging
 Scripts/check-ats.sh            fails on ANY ATS exception in any configuration
