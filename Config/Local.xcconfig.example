@@ -1,0 +1,20 @@
+// Cairn — copy this file to Config/Local.xcconfig and fill in your own values.
+//
+//   cp Config/Local.xcconfig.example Config/Local.xcconfig
+//
+// Config/Local.xcconfig is git-ignored: it is the only place personal signing values may live.
+// Scripts/check-signing.sh fails CI if a real DEVELOPMENT_TEAM value appears in a tracked file,
+// and the placeholder below is what this example file is allowed to carry.
+//
+// Team ID: Xcode > Settings (,) > Accounts > select your Apple ID > Show Details > Team ID.
+// With a free Apple ID that value is your Personal Team. It is not a password, but it is yours,
+// and it does not belong in a public repository.
+DEVELOPMENT_TEAM = XXXXXXXXXX
+
+// Optional: your own bundle-id prefix, so your build cannot collide with anyone else's copy of
+// this app. The test bundle follows automatically and becomes <this>.tests, because project.yml
+// derives it as $(CAIRN_BUNDLE_ID).tests. Uncomment to use.
+// CAIRN_BUNDLE_ID = com.example.you.cairn
+
+// Leave CODE_SIGNING_ALLOWED alone in this file. CI passes CODE_SIGNING_ALLOWED=NO on the
+// command line and must keep building unsigned without this file present.

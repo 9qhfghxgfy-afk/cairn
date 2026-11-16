@@ -16,3 +16,8 @@ ResultBundles/
 .env
 *.tokens
 Secrets/
+
+# Personal signing values — Team ID, and optionally a personal bundle id — live here and must
+# never be tracked. Config/Local.xcconfig.example is the tracked template; project.yml pulls this
+# file in with an optional #include?, so CI, which has no such file, builds unsigned.
+Config/Local.xcconfig

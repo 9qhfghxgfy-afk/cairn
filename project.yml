@@ -73,9 +73,17 @@ targets:
         NSBonjourServices:
           - _http._tcp
         LSApplicationCategoryType: public.app-category.productivity
+    configFiles:
+      # Signing chain. Config/Signing.xcconfig optionally #includes the git-ignored
+      # Config/Local.xcconfig, so a local Team ID is picked up when the file exists and CI,
+      # which never has it, still builds unsigned exactly as before.
+      Debug: Config/Signing.xcconfig
+      Release: Config/Signing.xcconfig
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: app.cairn.cairn
+        # CAIRN_BUNDLE_ID is set in Config/Signing.xcconfig (default app.cairn.cairn). A personal
+        # bundle id belongs in the git-ignored Config/Local.xcconfig, never here.
+        PRODUCT_BUNDLE_IDENTIFIER: $(CAIRN_BUNDLE_ID)
         PRODUCT_NAME: Cairn
         GENERATE_INFOPLIST_FILE: "NO"
         TARGETED_DEVICE_FAMILY: "1,2"
@@ -98,9 +106,16 @@ targets:
       # factory to prove that saved profiles really become engines.
       - package: CairnAppUI
       - package: CairnProviderRemote
+    configFiles:
+      # Same chain as the app target, so one Local.xcconfig sets the Team ID for both; the bundle
+      # ids stay distinct because the test bundle is derived as $(CAIRN_BUNDLE_ID).tests.
+      Debug: Config/Signing.Tests.xcconfig
+      Release: Config/Signing.Tests.xcconfig
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: app.cairn.cairn.tests
+        # Derived from CAIRN_BUNDLE_ID so a personal override in the git-ignored
+        # Config/Local.xcconfig moves the app and its test bundle together and cannot collide.
+        PRODUCT_BUNDLE_IDENTIFIER: $(CAIRN_BUNDLE_ID).tests
         GENERATE_INFOPLIST_FILE: "YES"
 
 schemes:

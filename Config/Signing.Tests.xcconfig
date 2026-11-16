@@ -1,0 +1,4 @@
+// Cairn — the unit-test bundle's signing chain. It shares Config/Signing.xcconfig so one
+// Local.xcconfig sets the Team ID for the app and the tests together; the bundle ids stay
+// distinct because project.yml derives the test bundle as $(CAIRN_BUNDLE_ID).tests.
+#include "$(SRCROOT)/Config/Signing.xcconfig"

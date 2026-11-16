@@ -1,0 +1,18 @@
+// Cairn — signing and identity defaults, included by project.yml for both targets.
+//
+// Nothing personal lives in a tracked file. Copy Config/Local.xcconfig.example to
+// Config/Local.xcconfig (git-ignored) and put your Team ID — and, if you want one, your own
+// bundle-id prefix — in there. `#include?` is Apple's *optional* include: the settings are
+// picked up when the file exists and silently skipped when it does not, so CI, which never has
+// that file, builds unsigned exactly as it did before.
+//
+// The default bundle id keeps the historical value. A local CAIRN_BUNDLE_ID override moves the
+// app to that id and, because project.yml derives the test bundle as $(CAIRN_BUNDLE_ID).tests,
+// moves the test bundle with it — the two can never collide.
+//
+// Scripts/check-signing.sh fails CI if a real DEVELOPMENT_TEAM value appears in a tracked file.
+CAIRN_BUNDLE_ID = app.cairn.cairn
+// Relative include: Xcode resolves it next to this file, which is where Local.xcconfig lives.
+// A $(SRCROOT)-based path can fail to resolve while the include is being read, and `#include?`
+// fails silently — the personal settings would simply be ignored with no error to find.
+#include? "Local.xcconfig"
