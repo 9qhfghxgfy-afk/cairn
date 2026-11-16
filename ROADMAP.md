@@ -414,6 +414,40 @@ What this run still does not prove is the device side: the Local Network prompt,
 a private address over Wi-Fi and over the WireGuard tunnel, and streaming over that tunnel.
 **1–10 above** remain the gate for those.
 
+## Plan change (2026-11-15) — LAN plus the router's own WireGuard; the mesh-VPN route is out
+
+Recorded with its date, because this is what Milestone 2 was originally scoped around and the
+repository must stop reading as though a mesh VPN were the plan.
+
+- **The decision.** At home the app dials the server's LAN address over plain `http://`. Away
+  from home the phone joins the same network with the **WireGuard app** and dials **the same
+  private address**. Nothing else belongs to the design: no third-party VPN product, no mesh
+  network, no hosted DNS name, no served HTTPS, no certificates to manage.
+- **`docs/SERVERS.md`** (`0c0455b`) is the server-side guide for that: binding so the LAN can
+  reach the port, an optional API key that belongs in the Keychain-backed token field, firewall
+  rules scoped to the LAN subnet with **no port forwarding**, and the WireGuard client config
+  whose `AllowedIPs` must cover the LAN subnet. Addresses are placeholders only.
+- **Vocabulary** (`8cbedcf`): `NetworkClass.tailnet` became `.privateVPN`; the allowed
+  `*.ts.net` placeholder is now `your-host.your-vpn.ts.net`; the mesh-VPN install text is gone
+  from `docs/INSTALL.md`, `README.md`, `ARCHITECTURE.md`, `PRD.md`, and `.clinerules`. The
+  classification of VPN DNS names and `100.64.0.0/10` is kept on purpose — still private, still
+  badged `VPN`, still unit-tested — it is simply no longer the expected route.
+- **Hostname and address guard extended** (this commit). `Scripts/check-hostname.sh` now rejects
+  three classes: a real mesh-VPN DNS name, a router's dynamic-DNS hostname, and — new — any
+  **private IP literal** that is not one of the documented example addresses in its
+  `ALLOWED_IPS` (a LAN host and subnet, tunnel addresses, loopback, and the classifier's
+  `100.64/10` and `172.16/12` boundary values). Failures print `file:line` only, never the
+  matched value, so a CI log cannot leak what it caught. Allow-listed addresses are blanked out
+  before the private-range test, so a line holding both an example address and a real one still
+  fails — the single-line loophole the old script documented is closed for the IP class.
+  Verified locally in Git Bash: prose forms (`192.168.x.x`, `10.x`), every documented example,
+  and public or RFC 5737 documentation addresses pass; a real LAN address, a real tunnel
+  address, a real `100.64/10` address, a link-local address, a real VPN DNS name, and an
+  example-plus-real pair on one line each fail with `file:line` only; the tree passes clean.
+- **What this still does not claim.** None of it is device proof. The M2 device checklist above
+  is unchanged and remains the gate for the Local Network prompt, the tunnel route into the LAN
+  subnet, and streaming over that tunnel.
+
 ## Milestone 3 — On-device inference + memory guardrails
 
 Foundation Models behind `#available(iOS 26.0, *)` with
