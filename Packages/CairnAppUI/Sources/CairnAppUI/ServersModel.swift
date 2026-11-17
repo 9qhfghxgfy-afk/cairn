@@ -16,6 +16,32 @@ public final class ServersModel {
     public private(set) var busyIDs: Set<UUID> = []
     public var notice: String?
 
+    /// What the local-network scan has found in this session, and how far it got. Results are
+    /// drafts: nothing here is a saved server until the user saves it.
+    /// Module-internal rather than `public private(set)` because `ServersModel+Discovery.swift`
+    /// extends this type from another file and owns the scan lifecycle. Nothing outside this
+    /// module reads or writes them; views only read.
+    var discovered: [DiscoveredServer] = []
+    var scanProgress: LANDiscoveryProgress?
+    var isScanning = false
+    /// What an empty scan means, in prose — including the Local Network permission, which fails
+    /// every probe in a way that is indistinguishable from a closed port.
+    var scanHint: String?
+    /// The in-flight scan, so the screen can offer a stop. A sweep of a /24 is bounded, but a user
+    /// who changed their mind should not have to wait for it.
+    var scanTask: Task<Void, Never>?
+
+    /// Shared with the chat session: which server is in use, and what each server was last used
+    /// with. Optional so the existing wiring and tests keep working with no selection store.
+    /// Module-internal rather than private: `ServersModel+Selection.swift` extends this type from
+    /// another file and owns the choosing rules.
+    let selection: ServerSelectionModel?
+    /// The scan, behind a boundary so this module imports no networking.
+    let discovering: (any ServerDiscovering)?
+    /// Set by the App to hand the chosen server to the chat workspace. The model deliberately does
+    /// not reach for the workspace: it reports the choice, the App applies it.
+    public var onActiveServerChange: (@MainActor (ServerProfile) -> Void)?
+
     private let storing: any ServerProfileStoring
     private let testing: any RemoteTesting
     private let managing: any RemoteModelManaging
@@ -35,6 +61,8 @@ public final class ServersModel {
         secrets: any SecretStoring,
         registry: ProviderRegistry? = nil,
         baseEngines: [any InferenceProvider] = [],
+        selection: ServerSelectionModel? = nil,
+        discovering: (any ServerDiscovering)? = nil,
         engineBuilder: @escaping @MainActor ([ServerProfile]) -> [any InferenceProvider] = { _ in [] }
     ) {
         self.storing = storing
@@ -43,6 +71,8 @@ public final class ServersModel {
         self.secrets = secrets
         self.registry = registry
         self.baseEngines = baseEngines
+        self.selection = selection
+        self.discovering = discovering
         self.engineBuilder = engineBuilder
         reload()
     }
@@ -51,6 +81,7 @@ public final class ServersModel {
         do {
             profiles = try storing.profiles()
             publishEngines()
+            reconcileSelection()
         } catch {
             notice = "Could not read saved servers: \(error.localizedDescription)"
         }
@@ -70,6 +101,7 @@ public final class ServersModel {
         do {
             try ServerProfile.validate(
                 name: stored.name,
+                kind: stored.kind,
                 urlString: profile.baseURLString,
                 headers: profile.customHeaders
             )
@@ -103,7 +135,13 @@ public final class ServersModel {
             try secrets.removeSecret(for: profile.id)
             outcomes[profile.id] = nil
             modelCounts[profile.id] = nil
+            discovered.removeAll { $0.baseURLString == profile.baseURLString }
+            // A deleted server leaves no trace in the shared choice either: neither the active
+            // pointer nor a remembered model, so a recycled UUID cannot inherit an old choice.
+            selection?.forget(profile.id)
             reload()
+            // The chat must not stay pointed at a server that no longer exists.
+            if let next = activeProfile() { onActiveServerChange?(next) }
         } catch {
             notice = "Could not delete \(profile.name): \(error.localizedDescription)"
         }

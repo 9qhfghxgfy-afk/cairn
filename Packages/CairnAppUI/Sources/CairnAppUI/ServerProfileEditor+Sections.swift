@@ -3,7 +3,7 @@ import CairnChatDomain
 
 extension ServerProfileEditor {
     @ViewBuilder var serverSection: some View {
-        Section("Server") {
+        Section {
             TextField("Name", text: $name)
                 .textInputAutocapitalization(.never)
             Picker("Type", selection: $kind) {
@@ -11,6 +11,12 @@ extension ServerProfileEditor {
                     Text(option.displayName).tag(option)
                 }
             }
+            .onChange(of: kind) { _, chosen in
+                applyKindChange(chosen)
+            }
+            Text(kindEndpointsSummary)
+                .font(.caption.monospaced())
+                .foregroundStyle(CairnTheme.stoneLight)
             TextField("Base URL", text: $urlString)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
@@ -29,6 +35,15 @@ extension ServerProfileEditor {
             if draft.isPlaintext {
                 PlaintextBadge()
             }
+            if kind == .ollamaCloud && draft.networkClass == .publicInternet && !optIn {
+                Text("Inert until you allow requests to leave this device.")
+                    .font(.caption)
+                    .foregroundStyle(CairnTheme.rust)
+            }
+        } header: {
+            Text("Server")
+        } footer: {
+            Text(kindFooter)
         }
     }
 

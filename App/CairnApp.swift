@@ -44,16 +44,34 @@ struct CairnLaunchView: View {
                 // what the next turn can use, without rebuilding conversations. The mock stays
                 // registered so the offline demo path keeps working on a fresh install.
                 let registry = ProviderRegistry(providers: [MockStreamingProvider()])
-                workspace = ChatWorkspace(persistentStore: persistent, registry: registry)
-                servers = ServersModel(
+                // Which server is in use, and what each server was last used with, is one shared
+                // object. The Servers screen and every chat read and write it, so a tap in either
+                // place is true in the other — and it is written through to disk, so it survives a
+                // relaunch rather than being an instant switch that evaporates.
+                let selection = ServerSelectionModel(storing: persistent)
+                let builtWorkspace = ChatWorkspace(
+                    persistentStore: persistent,
+                    registry: registry,
+                    selection: selection
+                )
+                let builtServers = ServersModel(
                     storing: persistent,
                     testing: factory.tester(),
                     managing: factory.modelService(),
                     secrets: secrets,
                     registry: registry,
                     baseEngines: [MockStreamingProvider()],
+                    selection: selection,
+                    discovering: LANDiscoveryService(),
                     engineBuilder: { profiles in factory.providers(from: profiles) }
                 )
+                // The Servers screen never reaches into the chat: it reports the chosen server, and
+                // the workspace points the live session at it.
+                builtServers.onActiveServerChange = { profile in
+                    builtWorkspace.apply(activeProfile: profile)
+                }
+                workspace = builtWorkspace
+                servers = builtServers
             } catch {
                 // Typed metadata only: never log prompt content, URLs, or paths.
                 startupFailure = error.localizedDescription

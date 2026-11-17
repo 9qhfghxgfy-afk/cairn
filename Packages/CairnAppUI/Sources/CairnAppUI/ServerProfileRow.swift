@@ -37,6 +37,7 @@ struct ServerProfileRow: View {
             }
 
             HStack(spacing: 10) {
+                ServerStatusDot(status: model.status(for: profile))
                 Text(profile.kind.displayName)
                     .font(.caption)
                     .foregroundStyle(CairnTheme.stoneLight)
@@ -49,6 +50,14 @@ struct ServerProfileRow: View {
                     Text("\(count) models")
                         .font(.caption)
                         .foregroundStyle(CairnTheme.stoneLight)
+                }
+                // Named per server: two machines with a model of the same name each remember their
+                // own, and this line says which one this row will use next.
+                if let lastModel = model.lastModel(for: profile) {
+                    Text("last: \(lastModel)")
+                        .font(.caption)
+                        .foregroundStyle(CairnTheme.stoneLight)
+                        .lineLimit(1)
                 }
             }
 
@@ -74,6 +83,13 @@ struct ServerProfileRow: View {
             }
 
             HStack(spacing: 8) {
+                // One tap, and the next turn is answered here. Inert rows still show the button so
+                // the reason is visible when it is pressed, rather than the row being silently
+                // unselectable with no explanation.
+                Button(model.isInUse(profile) ? "In use" : "Use") {
+                    model.use(profile)
+                }
+                .disabled(model.isInUse(profile))
                 Button {
                     Task { await model.test(profile) }
                 } label: {
@@ -83,8 +99,12 @@ struct ServerProfileRow: View {
                         Text("Test")
                     }
                 }
-                Button("Models") {
-                    Task { await model.refreshModels(profile) }
+                // Only kinds that declare a model list get the button, so the screen cannot offer
+                // an endpoint this build has not declared.
+                if profile.kind.backend.capabilities.modelListing {
+                    Button("Models") {
+                        Task { await model.refreshModels(profile) }
+                    }
                 }
                 NavigationLink("Edit") {
                     ServerProfileEditor(model: model, profile: profile)

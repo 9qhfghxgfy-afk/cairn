@@ -106,7 +106,12 @@ struct ServerProfileEditor: View {
     var validationIssue: String? {
         guard !trimmedURL.isEmpty else { return "Enter the server URL." }
         do {
-            try ServerProfile.validate(name: name, urlString: trimmedURL, headers: headers)
+            try ServerProfile.validate(
+                name: name,
+                kind: kind,
+                urlString: trimmedURL,
+                headers: headers
+            )
             return nil
         } catch let issue as ServerProfileValidationError {
             return issue.errorDescription
