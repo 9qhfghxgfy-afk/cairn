@@ -10,7 +10,9 @@
 #   Scripts/ci.sh guards     privacy guards only (runs anywhere with bash, including Windows)
 #   Scripts/ci.sh domain     swift test for the pure domain package (fast, macOS host)
 #   Scripts/ci.sh remote     swift test for CairnProviderRemote (stub + loopback, no internet)
-#   Scripts/ci.sh hosts      both host suites, which is what the CI host job runs
+#   Scripts/ci.sh local      swift test for CairnInferenceLocal (memory fit, catalog, downloads)
+#   Scripts/ci.sh native     swift test for CairnInferenceNative (MLX excluded unless CAIRN_MLX=1)
+#   Scripts/ci.sh hosts      all four host suites, which is what the CI host job runs
 #   Scripts/ci.sh gen        xcodegen generate only
 #   Scripts/ci.sh build      xcodegen + xcodebuild build for a simulator
 #   Scripts/ci.sh test       xcodegen + xcodebuild test on a simulator
@@ -202,6 +204,23 @@ remote_tests() {
   swift test --package-path Packages/CairnProviderRemote
 }
 
+# Memory fit, single-resident eviction, the curated catalog, repo-ID rules, checksum
+# verification and the Foundation Models availability mapping. Host-only by design.
+local_tests() {
+  swift test --package-path Packages/CairnInferenceLocal
+}
+
+# The Swift 5 isolation island. Run with MLX excluded by default: linking mlx-swift-lm compiles
+# swift-syntax macros and a vendored C++ engine from source, which is a long build on an 8 GB Mac.
+# `CAIRN_MLX=1 Scripts/ci.sh native` is the device-build shape that really links 3.32.3.
+native_tests() {
+  if [[ "${CAIRN_MLX:-}" == "1" ]]; then
+    swift test --package-path Packages/CairnInferenceNative
+  else
+    CAIRN_SKIP_MLX=1 swift test --package-path Packages/CairnInferenceNative
+  fi
+}
+
 generate() {
   ensure_xcodegen
   xcodegen generate
@@ -283,12 +302,14 @@ case "${1:-all}" in
   guards)  guards ;;
   domain)  select_xcode; domain_tests ;;
   remote)  select_xcode; remote_tests ;;
-  hosts)   select_xcode; domain_tests; remote_tests ;;
+  local)   select_xcode; local_tests ;;
+  native)  select_xcode; native_tests ;;
+  hosts)   select_xcode; domain_tests; remote_tests; local_tests; native_tests ;;
   gen)     select_xcode; generate ;;
   build)   select_xcode; generate; run_build ;;
   device)  select_xcode; generate; run_device ;;
   test)    select_xcode; generate; run_tests ;;
   probe)   select_xcode; probe ;;
-  all)     guards; select_xcode; probe; domain_tests; remote_tests; generate; run_build; run_tests ;;
+  all)     guards; select_xcode; probe; domain_tests; remote_tests; local_tests; native_tests; generate; run_build; run_tests ;;
   *) echo "unknown target: ${1:-all}" >&2; exit 2 ;;
 esac

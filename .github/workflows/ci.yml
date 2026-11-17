@@ -76,6 +76,14 @@ jobs:
       # files, no network, no device.
       - name: On-device inference, memory, and catalog tests
         run: swift test --package-path Packages/CairnInferenceLocal
+      # The Swift 5 isolation island: template marker parsing (thinking regions and tool fences),
+      # the actor boundary's typed failures, and the no-Metal fallback. Run with the runtime
+      # excluded on purpose — linking mlx-swift-lm compiles swift-syntax macros and a vendored C++
+      # engine from source, which is not a CI-time-box cost. The gap is recorded in ROADMAP.md.
+      - name: Native runtime isolation and template-marker parsing tests
+        env:
+          CAIRN_SKIP_MLX: "1"
+        run: swift test --package-path Packages/CairnInferenceNative
 
   app:
     name: Build + test on simulator
