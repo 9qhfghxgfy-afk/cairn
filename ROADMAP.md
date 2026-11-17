@@ -19,6 +19,8 @@ Gate for every milestone (from `.clinerules`):
 | 5 | Advanced controls, interruption recovery, export/import | todo | |
 | 6 | Local RAG, vision, web search, voice | todo | |
 | 7 | Parity backlog | todo (per-item approval) | |
+| P0 | Zero-paywall guard + parity ledger | **local green, pushed** — CI number under *Parity program* | |
+| P1–P5 | Parity milestones, ledger in `docs/PARITY.md` | todo (plan approved 2026-11-16) | |
 
 ## Decisions (durable — update here, not in chat)
 
@@ -121,6 +123,37 @@ Recorded 2026-11-14. These supersede anything older in the repo.
   iOS 26.0, repo stays **public** (that is what keeps macOS minutes free),
   `actions/checkout@v7` + `actions/upload-artifact@v7` (clears the Node 20 deprecation
   warnings).
+- **Parity program (2026-11-16).** Feature parity with the Reins-class client set is scheduled as
+  `P0`–`P5` folded into the existing `M3`–`M7` spine. The ledger of every owed feature, its milestone
+  and its verification label is **`docs/PARITY.md`**; it is updated in the same commit as the work.
+  Approved sequencing decision: P0 (guards/tooling) and P1 (servers) proceed **while the M2 device
+  checklist stays open** — the user runs that 10-item checklist in one batched pass later, so M2 and
+  anything touching the network path stays `CI-verified only` until then. No `.reins` import exists
+  or is planned; no sample file has been provided. The Reins repository is never read: §3 of the
+  parity brief is the only specification, which keeps Cairn out of GPL territory.
+- **External API facts verified 2026-11-16, not assumed.** Three assumptions in the brief were wrong,
+  and the code must follow the API rather than the brief:
+  - **LM Studio is not OpenAI-only.** 0.4.0 ships a native v1 REST API — `GET /api/v1/models`,
+    `POST /api/v1/models/load`, `POST /api/v1/models/unload`, `POST /api/v1/models/download`,
+    `GET /api/v1/models/download/status`, `POST /api/v1/chat` — alongside OpenAI-compatible `/v1/*`.
+    Model lifecycle for LM Studio is therefore real, and a third `ServerProfileKind` is the honest
+    model of it. The legacy `/api/v0/*` shape is not to be coded against.
+  - **Ollama web search is not automatic.** It is a separate endpoint, `POST https://ollama.com/api/web_search`
+    (`query`, optional `max_results`), and it **requires an API key and a free Ollama account**. So
+    "cloud models search with no key and no account" cannot be built. The keyless provider serves
+    local and standard servers; the cloud route is a key-gated provider that only exists once the
+    user supplies a key. Ollama cloud base URLs: `https://ollama.com/api` and `https://ollama.com/v1`.
+  - **MLX Swift LM moved repositories.** `MLXLLM`, `MLXLMCommon`, `MLXVLM`, `MLXEmbedders` now live in
+    `ml-explore/mlx-swift-lm`, not `mlx-swift-examples`. Its Hugging Face downloader is not a
+    background `URLSession`, so Cairn owns download/resume/SHA-256 and hands MLX a local directory.
+- **Local toolchain, corrected 2026-11-16 (supersedes the Mac environment record below).** The Xcode
+  license **is** accepted, `xcodebuild -showsdks` and `simctl` work, and iOS **27.2** simulator
+  runtimes are installed. There is no iOS 26.5 runtime, so the local test destination resolves to a
+  name only — CI stays pinned at Xcode 26.6 / iPhone 17 / iOS 26.5 and the divergence is recorded,
+  not fixed. Two consequences: anything newer than the 26.5 SDK must be gated behind
+  `#available` / `canImport` rather than assumed (local green proves nothing about the pinned SDK),
+  and the host test suites **now run on this Mac** — `CairnChatDomain` 63 tests and
+  `CairnProviderRemote` 35 tests, 0 failures — which the record below listed as impossible.
 
 ### Housekeeping verification (2026-11-15)
 
@@ -702,4 +735,66 @@ The four verification lanes, moved by this session or not:
   made from this Mac.
 
 M2 therefore stays **CI-verified only**.
+
+## Parity program — P0–P5 (plan approved 2026-11-16)
+
+Ledger: **`docs/PARITY.md`** (every owed feature, its spec section, milestone, status, and
+verification label). Order is dependency-forced: guards → servers → on-device → the engine that
+needs both.
+
+| # | Scope | Spec | Status |
+|---|---|---|---|
+| P0 | Zero-paywall guard + self-test + CI wiring + this ledger + environment correction | brief §0 | local green, pushed |
+| P1 | Multi-server management, instant switching with per-server last model, `lmStudio` + `ollamaCloud` kinds, setup guide, user-initiated LAN scan | brief §3.4 | todo |
+| M3 | On-device inference (`mlx-swift-lm` + Foundation Models) + model manager with progress, cancel, unload, `/api/show` | §3.5 | todo |
+| P2 | Per-chat + default configuration with `configured` vs `unset`, capability-filtered payloads, injected context, themes | §3.2, §3.3, §3.10 | todo |
+| M4 | Hybrid Parallel + Synthesized engine | preserved core | todo |
+| P3 | Tool runtime + built-ins + search routing (keyless default, SearXNG optional, cloud key-gated) | §3.7 | todo |
+| M5 | Chat list, Markdown + code copy, Continue Generation, duplicate chat, temp banner, background processing, `.cairn`/`.md` | §3.1, §3.9 | todo |
+| M6 | File + image attachments, chunked retrieval with citations, vision gating | §3.8 | todo |
+| P4 | On-device model sharing server over LAN (`NWListener`, both dialects) | §3.6 | todo |
+| P5 | Accessibility, AppIcon, licenses/privacy/issues, doc refresh | §3.10 | todo |
+
+### P0 record — zero-paywall guard (2026-11-16)
+
+Files: `Scripts/check-no-paywall.sh` (new), `Scripts/test-guards.sh` (+12 cases, 41 → **53**),
+`Scripts/ci.sh` (`guards`), `.github/workflows/ci.yml` (guards job step),
+`Packages/CairnProviderRemote/.../RemoteBodyDelegate.swift` (rename), `docs/PARITY.md` (new),
+`ROADMAP.md`, `.clinerules`.
+
+What the guard rejects in shipped sources and `project.yml`: a purchase framework or purchase API,
+tier/upsell vocabulary, an artificial cap identifier, and a tracking hook. It prints `file:line`
+only, never the matched text.
+
+**Three bugs the self-test caught while P0 was being written** — this is why the self-test is worth
+its keep, and each is a trap the next guard will fall into again:
+
+1. `git ls-files | xargs -0 grep` — without `-z` the whole list becomes one bogus filename, so the
+   guard **scanned nothing and reported success**. Command substitution also drops NUL bytes, so the
+   `-z`/`-0` form fails the same way through a variable. Fixed with a plain file loop (`xargs -r` and
+   `xargs -d` do not exist on macOS anyway), plus `-H` so a single matching file still reports
+   `file:line`.
+2. The guard **printed the word it bans** — in its banner, a rule label, and its remediation hint —
+   which the self-test's "did not print the value" half rejected. All printed strings are now free of
+   every forbidden term.
+3. The guard caught **its own CI invocation line**, because the required filename contains the
+   forbidden word and `.github/workflows/*.yml` was in scope. Workflows are now out of scope: a
+   workflow cannot add monetization to the binary, and self-reference is not a rule worth keeping.
+   `project.yml` stays in scope because that is where an app-facing build setting would land.
+
+Also caught by running it: `RemoteBodyDelegate.swift` held a private `messageLimit = 240`, a
+truncation bound on an error body, not a cap on the user. Renamed to `errorSnippetChars` rather than
+exempted, per the rule that an ambiguous name is renamed and the guard is never widened. A CI comment
+saying "subscription-free" was reworded for the same reason.
+
+Verification: `Scripts/ci.sh guards` **exit 0** — all four privacy guards, the new guard, and the
+self-test at **53 ok / 0 failed**. `Scripts/ci.sh build` → **BUILD SUCCEEDED**. Host suites
+`swift test` → `CairnChatDomain` **63 tests, 0 failures**; `CairnProviderRemote` **35 tests,
+0 failures**. Labels: **local-Mac-verified**. Nothing in P0 is on-device-verified or
+real-network-verified, and the CI number for the pushed commit is recorded in the follow-up commit
+that cites it.
+
+Known gaps after P0: `check-no-paywall.sh` matches names and strings, not behaviour — a cap spelled
+in some novel way still needs review, which is why the self-test exists. P1 has not started. The M2
+device checklist and the real-network route remain open and unverified.
 

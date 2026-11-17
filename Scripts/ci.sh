@@ -142,6 +142,7 @@ guards() {
   bash Scripts/check-ats.sh
   bash Scripts/check-hostname.sh
   bash Scripts/check-signing.sh
+  bash Scripts/check-no-paywall.sh
   bash Scripts/test-guards.sh
 }
 

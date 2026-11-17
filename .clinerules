@@ -129,6 +129,16 @@ compatibility, not copied expression.
   fails CI, which is what keeps a real LAN or tunnel address from slipping in by accident.
 - Plaintext is a warning condition, never a silent one: the UI shows a `Plaintext` badge on any
   profile whose traffic leaves unencrypted.
+- **Zero paywall, zero limits (CI-enforced).** `Scripts/check-no-paywall.sh` fails the build on a
+  purchase framework, tier or upsell vocabulary, an artificial cap identifier (`maxChat`,
+  `chatLimit`, `dailyQuota`, …), or a tracking hook. Scope is what compiles into the binary
+  (`Packages/*/Sources`, `Packages/*/Package.swift`, `App`, `project.yml`). Docs, `ROADMAP.md`,
+  `.clinerules`, `Scripts/`, test targets and workflow files are out of scope: they must be able to
+  name the thing they forbid, and the CI step that invokes the guard spells the forbidden word in
+  its own path. Inside scope, **no comment may spell a forbidden word either** — rename the
+  identifier, never add an exception here. `maxTokens` / `num_predict` are sampling parameters the
+  user sets, not caps on the user, so they are deliberately not matched.
+  `Scripts/test-guards.sh` proves the guard still rejects planted values and never prints one.
 
 ## Working style
 - One milestone at a time. Before a milestone, list the exact files to create/modify and its

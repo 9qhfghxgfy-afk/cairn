@@ -9,7 +9,7 @@ final class RemoteBodyDelegate: NSObject, URLSessionDataDelegate, @unchecked Sen
     /// Enough of an error body to report the server's own message, capped so a stray
     /// HTML error page cannot grow without bound.
     private static let errorBodyLimit = 16_384
-    private static let messageLimit = 240
+    private static let errorSnippetChars = 240
 
     private let lock = NSLock()
     private var continuation: AsyncThrowingStream<Data, any Error>.Continuation?
@@ -85,6 +85,6 @@ final class RemoteBodyDelegate: NSObject, URLSessionDataDelegate, @unchecked Sen
             (object["message"] as? String),
         ]
         guard let message = candidates.compactMap({ $0 }).first, !message.isEmpty else { return nil }
-        return String(message.prefix(messageLimit))
+        return String(message.prefix(errorSnippetChars))
     }
 }

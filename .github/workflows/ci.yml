@@ -1,6 +1,6 @@
 # Cairn CI. macOS runners are the build box because there is no Xcode on the
-# authoring machine. Standard GitHub-hosted macOS runners are free for public
-# repositories, which keeps this repo subscription-free.
+# authoring machine. Standard GitHub-hosted macOS runners cost nothing on a public
+# repository, which is what keeps this project free to build.
 #
 # Pinned: macos-26 + Xcode_26.6 (SDK ceiling iOS 26.5). The xcode-27 image is
 # public preview and is only exercised by nightly.yml — never a milestone gate.
@@ -37,6 +37,13 @@ jobs:
         run: bash Scripts/check-hostname.sh
       - name: No Team ID or signing identity in tracked files
         run: bash Scripts/check-signing.sh
+      # Cairn is free and unlimited by design: no in-app billing, no tier, no upsell string, no
+      # artificial cap on chats/messages/servers/models, no tracking hook. Scoped to what compiles
+      # into the binary, so the rules and docs can still name what they forbid. This step's own
+      # comment deliberately avoids spelling any forbidden word, and the script name it invokes is
+      # why workflow files are not part of the scanned scope.
+      - name: No monetization, usage cap, or tracking hook in shipped sources
+        run: bash Scripts/check-no-paywall.sh
       # The guards above are only worth what their patterns are worth. This re-runs them against
       # planted values in a throwaway tree and fails if any guard stops rejecting them, or if a
       # guard prints the value it caught.

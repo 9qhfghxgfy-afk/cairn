@@ -23,7 +23,8 @@ TREE=''; pass=0; fails=0
 tree() {
   local d="$WORK/t"; rm -rf "$d"; mkdir -p "$d/Scripts"
   cp "$ROOT/Scripts/check-hostname.sh" "$ROOT/Scripts/check-ats.sh" \
-     "$ROOT/Scripts/check-signing.sh" "$ROOT/Scripts/check-logging.sh" "$d/Scripts/"
+     "$ROOT/Scripts/check-signing.sh" "$ROOT/Scripts/check-logging.sh" \
+     "$ROOT/Scripts/check-no-paywall.sh" "$d/Scripts/"
   # The logging guard greps `Packages App` for *.swift, so the scratch tree needs those directories
   # to exist — otherwise an accept case would pass only because there was nowhere to scan.
   mkdir -p "$d/Packages/CairnChatDomain/Sources/CairnChatDomain" "$d/App"
@@ -178,6 +179,46 @@ expect_accept "$LOGS" 'generated build output, which is not hand-written source'
 wipe "$SRC"
 expect_accept "$LOGS" 'the unplanted copy still passes'
 expect_accept "$LOGS" 'the committed tree' "$ROOT"
+
+PW=check-no-paywall.sh
+# The zero-paywall guard is scoped to shipped sources and build config, so two things must both
+# hold: it rejects monetization the moment it appears in a source file, and it does not trip on the
+# prose that forbids it, on a test that asserts absence, or on a sampling parameter that only looks
+# like a cap. Fragments again, so no line of this file holds a whole banned term.
+wall='pay'"wall"
+store='import Store'"Kit"
+pro='Get '"Pro"
+upsell='Upgrade '"to pro"
+cap='max'"Chat"
+track='ana'"lyticsEnabled"
+echo '--- zero-paywall guard: must reject, and must not print ---'
+TREE="$(tree)"
+plant "$SRC" "// the ${wall} ships nothing" 'let gate = true'
+expect_reject "$PW" 'a tier term in a shipped source file' "$wall"
+plant "$SRC" "${store}"
+expect_reject "$PW" 'a StoreKit import in a shipped source file' "${store}"
+plant "$SRC" "let headline = \"${pro}\" \"${upsell}\""
+expect_reject "$PW" 'an upsell string in a shipped source file' "$pro"
+plant "$SRC" "let ${cap} = 5"
+expect_reject "$PW" 'an artificial cap on the number of chats' "$cap"
+plant "$SRC" "let ${track} = true"
+expect_reject "$PW" 'an analytics hook in a shipped source file' "$track"
+append project.yml "    ${wall}: YES"
+expect_reject "$PW" 'a tier term in project.yml' "$wall"
+restore project.yml
+
+echo '--- zero-paywall guard: must accept ---'
+plant "$SRC" 'let maxTokens = 1024' 'let wireKey = "num_predict"' 'let contextWindow = 8192' 'let repeatPenalty = 1.1'
+expect_accept "$PW" 'sampling parameters, which are limits the user sets, not caps on the user'
+plant docs/PARITY.md "no ${wall}, no ${pro}, no ${upsell}, no ${store}, no analytics or telemetry"
+expect_accept "$PW" 'the prose that forbids those things, which is out of scope'
+plant Packages/CairnChatDomain/Tests/CairnChatDomainTests/AbsenceTests.swift "// asserts there is no ${wall} and no ${store}"
+expect_accept "$PW" 'a test target that has to name the forbidden term'
+plant .github/workflows/ci.yml "      - name: run the ${wall} check" "        run: bash Scripts/check-no-${wall}.sh"
+expect_accept "$PW" 'a workflow, which cannot add it to the binary and names this guard in its own path'
+wipe "$SRC"; wipe docs/PARITY.md; wipe Packages/CairnChatDomain/Tests/CairnChatDomainTests/AbsenceTests.swift; wipe .github/workflows/ci.yml
+expect_accept "$PW" 'the unplanted copy still passes'
+expect_accept "$PW" 'the committed tree' "$ROOT"
 
 echo "guard self-test: ${pass} ok, ${fails} failed"
 [[ $fails -eq 0 ]] || exit 1
