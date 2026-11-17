@@ -21,13 +21,24 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-# On CI these are pinned (macos-26, Xcode 26.6, iPhone 17 / iOS 26.5). Locally they are whatever
-# Xcode you installed: override with `XCODE_VERSION=`, `SIMULATOR_NAME=`, `SIMULATOR_OS=` or leave
-# SIMULATOR_OS empty to take the newest runtime you have.
-XCODE_VERSION="${XCODE_VERSION:-26.6}"
-SIMULATOR_NAME="${SIMULATOR_NAME:-iPhone 17}"
-SIMULATOR_OS="${SIMULATOR_OS:-26.5}"
-TEST_DESTINATION="platform=iOS Simulator,name=${SIMULATOR_NAME},OS=${SIMULATOR_OS}"
+# On CI the destination is pinned by the workflow (macos-26, Xcode 26.6, iPhone 17 / iOS 26.5) and is
+# never invented here. Locally it is the device the app is actually built for: iPhone 15 Pro, on the
+# newest runtime this Mac has, created below if the machine has never had one. A local run and a CI run
+# therefore mean the same thing on the same hardware shape. Override with `SIMULATOR_NAME=` /
+# `SIMULATOR_OS=`; set SIMULATOR_OS to pin a runtime version explicitly.
+if [[ -n "${CI:-}" ]]; then
+  XCODE_VERSION="${XCODE_VERSION:-26.6}"
+  SIMULATOR_NAME="${SIMULATOR_NAME:-iPhone 17}"
+  SIMULATOR_OS="${SIMULATOR_OS:-26.5}"
+else
+  XCODE_VERSION="${XCODE_VERSION:-26.6}"
+  SIMULATOR_NAME="${SIMULATOR_NAME:-iPhone 15 Pro}"
+  SIMULATOR_OS="${SIMULATOR_OS:-}"
+fi
+TEST_DESTINATION="platform=iOS Simulator,name=${SIMULATOR_NAME}"
+if [[ -n "$SIMULATOR_OS" ]]; then
+  TEST_DESTINATION="${TEST_DESTINATION},OS=${SIMULATOR_OS}"
+fi
 DERIVED="${DERIVED_DATA_PATH:-DerivedData}"
 
 select_xcode() {
@@ -81,6 +92,33 @@ check_license() {
   return 0
 }
 
+# Creates the named simulator on a local Mac against the newest iOS runtime installed. `simctl create`
+# with no runtime picks the newest compatible one, which is what a fresh Mac needs; the explicit-runtime
+# retry covers an Xcode that refuses a device type it cannot match. This never runs on CI, where the
+# pinned runtime and device are preinstalled and inventing a simulator would hide a real pin failure.
+create_local_simulator() {
+  local type_id runtime_id out
+  type_id="com.apple.CoreSimulator.SimDeviceType.$(
+    printf '%s' "$SIMULATOR_NAME" | tr '[:upper:]' '[:lower:]' \
+      | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//'
+  )"
+  if ! xcrun simctl list devicetypes 2>/dev/null | grep -q "$type_id"; then
+    echo "this Xcode has no '${SIMULATOR_NAME}' device type (looked for ${type_id})." >&2
+    echo "  pick one that exists: SIMULATOR_NAME='iPhone 17e' Scripts/ci.sh test" >&2
+    return 1
+  fi
+  if ! out="$(xcrun simctl create "$SIMULATOR_NAME" "$type_id" 2>&1)"; then
+    runtime_id="$(xcrun simctl list runtimes 2>/dev/null \
+      | grep -E '^iOS ' | tail -1 | sed -E 's/.* - //')"
+    if [[ -z "$runtime_id" ]] || ! out="$(xcrun simctl create "$SIMULATOR_NAME" "$type_id" "$runtime_id" 2>&1)"; then
+      # Device type and runtime identifiers are not personal; the user needs them to fix this.
+      echo "could not create a '${SIMULATOR_NAME}' simulator: ${out%%$'\n'*}" >&2
+      return 1
+    fi
+  fi
+  echo "created a ${SIMULATOR_NAME} simulator for this machine."
+}
+
 # A local Mac will not have the exact runtime CI pins. Falling back to the device name alone lets
 # xcodebuild pick the newest runtime that exists instead of failing on a version nobody installed.
 resolve_destination() {
@@ -99,6 +137,14 @@ resolve_destination() {
     exit 1
   fi
   devices="$(xcrun simctl list devices available 2>/dev/null || true)"
+  if ! printf '%s' "$devices" | grep -q "  ${SIMULATOR_NAME} ("; then
+    if [[ -z "${CI:-}" ]]; then
+      # The target device for this project is a physical iPhone 15 Pro, so a Mac that has never had
+      # that simulator gets one rather than a lane that quietly runs on a different screen size.
+      create_local_simulator || exit 1
+      devices="$(xcrun simctl list devices available 2>/dev/null || true)"
+    fi
+  fi
   if ! printf '%s' "$devices" | grep -q "  ${SIMULATOR_NAME} ("; then
     echo "no '${SIMULATOR_NAME}' simulator on this machine. Available iOS simulators:" >&2
     printf '%s\n' "$devices" | grep -E '^    (iPhone|iPad)' | sed 's/ (.*//' | sort -u | head -8 >&2
@@ -162,10 +208,25 @@ generate() {
 }
 
 run_build() {
+  # CI builds against a generic simulator destination, exactly as the workflow does, so this lane can
+  # never depend on a device that happens to exist. Locally it builds for the target device by name,
+  # which is what catches a layout that only breaks on iPhone 15 Pro's screen.
+  if [[ -n "${CI:-}" ]]; then
+    xcodebuild \
+      -project Cairn.xcodeproj \
+      -scheme Cairn \
+      -destination 'generic/platform=iOS Simulator' \
+      -configuration Debug \
+      -derivedDataPath "$DERIVED" \
+      CODE_SIGNING_ALLOWED=NO \
+      build
+    return
+  fi
+  resolve_destination
   xcodebuild \
     -project Cairn.xcodeproj \
     -scheme Cairn \
-    -destination 'generic/platform=iOS Simulator' \
+    -destination "$TEST_DESTINATION" \
     -configuration Debug \
     -derivedDataPath "$DERIVED" \
     CODE_SIGNING_ALLOWED=NO \
@@ -189,6 +250,22 @@ run_tests() {
   resolve_destination
   rm -rf ResultBundles
   mkdir -p ResultBundles
+  # A booted simulator keeps running after the run and eats RAM the next build needs, which on an
+  # 8 GB Mac is the difference between a fast test lane and a swap storm. Shut it down even when the
+  # tests fail, so a red run does not leave the machine loaded.
+  if [[ -n "${CI:-}" ]]; then
+    xcodebuild \
+      -project Cairn.xcodeproj \
+      -scheme Cairn \
+      -destination "$TEST_DESTINATION" \
+      -configuration Debug \
+      -derivedDataPath "$DERIVED" \
+      -resultBundlePath ResultBundles/Cairn.xcresult \
+      CODE_SIGNING_ALLOWED=NO \
+      test
+    return
+  fi
+  local status=0
   xcodebuild \
     -project Cairn.xcodeproj \
     -scheme Cairn \
@@ -197,7 +274,9 @@ run_tests() {
     -derivedDataPath "$DERIVED" \
     -resultBundlePath ResultBundles/Cairn.xcresult \
     CODE_SIGNING_ALLOWED=NO \
-    test
+    test || status=$?
+  xcrun simctl shutdown all >/dev/null 2>&1 || true
+  return "$status"
 }
 
 case "${1:-all}" in
