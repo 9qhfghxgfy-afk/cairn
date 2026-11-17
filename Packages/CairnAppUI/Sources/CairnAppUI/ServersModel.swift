@@ -16,6 +16,14 @@ public final class ServersModel {
     public private(set) var busyIDs: Set<UUID> = []
     public var notice: String?
 
+    /// What this phone can run by itself, as reported by the App layer. A plain value, so this
+    /// module imports neither on-device runtime and a view here can never call a provider. The
+    /// default says "not checked yet" rather than looking ready.
+    public var onDeviceReport: OnDeviceEngineReport = .unavailable
+    /// The Model Manager's view model, injected by the App after init. nil means no Model Manager
+    /// entry point is offered at all — a disabled button is worse than no button.
+    public var modelManager: ModelManagerModel?
+
     /// What the local-network scan has found in this session, and how far it got. Results are
     /// drafts: nothing here is a saved server until the user saves it.
     /// Module-internal rather than `public private(set)` because `ServersModel+Discovery.swift`

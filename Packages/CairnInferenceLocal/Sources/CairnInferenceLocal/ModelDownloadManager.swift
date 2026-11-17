@@ -131,7 +131,7 @@ public actor ModelDownloadManager {
             // than treated as a pass, so the Installed tab can say so.
             let published = (file.sha256?.isEmpty == false) ? file.sha256 : nil
             let verified = published.map { SHA256Digest.matches(expected: $0, fileAt: destination) } ?? false
-            if let published, !verified {
+            if published != nil, !verified {
                 resumeStore.clear(repoID: repoID, file: file.name)
                 onEvent(.failed(message: ModelDownloadFailure.verificationFailed.message))
                 return .failed(.verificationFailed)

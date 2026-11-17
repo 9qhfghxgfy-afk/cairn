@@ -3,6 +3,7 @@ import CairnAppUI
 import CairnChatDomain
 import CairnPersistence
 import CairnProviderRemote
+import CairnInferenceLocal
 
 @main
 struct CairnApp: App {
@@ -20,6 +21,8 @@ struct CairnLaunchView: View {
     @State private var servers: ServersModel?
     @State private var theme: ThemeModel?
     @State private var startupFailure: String?
+    /// The memory-pressure watch, kept alive for the life of the app process.
+    @State private var onDeviceWatch: Task<Void, Never>?
 
     var body: some View {
         Group {
@@ -44,7 +47,10 @@ struct CairnLaunchView: View {
                 // The registry is the live engine list: saving or disabling a profile changes
                 // what the next turn can use, without rebuilding conversations. The mock stays
                 // registered so the offline demo path keeps working on a fresh install.
-                let registry = ProviderRegistry(providers: [MockStreamingProvider()])
+                // The two on-device engines join the mock: the Apple model and MLX. Both are
+                // `.onDevice`, so a turn that runs here sends nothing anywhere and shows no badge.
+                let onDeviceEngines = OnDeviceWiring.engines()
+                let registry = ProviderRegistry(providers: [MockStreamingProvider()] + onDeviceEngines)
                 // Which server is in use, and what each server was last used with, is one shared
                 // object. The Servers screen and every chat read and write it, so a tap in either
                 // place is true in the other — and it is written through to disk, so it survives a
@@ -68,7 +74,7 @@ struct CairnLaunchView: View {
                     managing: factory.modelService(),
                     secrets: secrets,
                     registry: registry,
-                    baseEngines: [MockStreamingProvider()],
+                    baseEngines: [MockStreamingProvider()] + onDeviceEngines,
                     selection: selection,
                     discovering: LANDiscoveryService(),
                     engineBuilder: { profiles in factory.providers(from: profiles) }
@@ -78,6 +84,23 @@ struct CairnLaunchView: View {
                 builtServers.onActiveServerChange = { profile in
                     builtWorkspace.apply(activeProfile: profile)
                 }
+                // What this phone can run by itself, read from the build and the hardware rather
+                // than assumed, plus the Model Manager for every server's loaded and installed
+                // models. Both are handed to the Servers screen as values and a view model, so
+                // CairnAppUI never imports a runtime.
+                let onDeviceRegistry = OnDeviceModelRegistry()
+                builtServers.onDeviceReport = OnDeviceWiring.report()
+                builtServers.modelManager = ModelManagerModel(
+                    managing: factory.modelService(),
+                    lifecycle: RemoteModelLifecycleService(
+                        transport: URLSessionTransport(),
+                        secrets: secrets
+                    )
+                )
+                // A memory warning releases the resident on-device model. Held in state so the
+                // watch is not deallocated the moment this closure returns.
+                onDeviceWatch = OnDeviceWiring.startMemoryWatch(onDeviceRegistry)
+
                 workspace = builtWorkspace
                 servers = builtServers
                 theme = builtTheme

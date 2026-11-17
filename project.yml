@@ -29,6 +29,15 @@ packages:
     path: Packages/CairnPersistence
   CairnProviderRemote:
     path: Packages/CairnProviderRemote
+  # M3 on-device engines. CairnInferenceLocal is pure Swift 6 (memory fit, single-resident policy,
+  # catalog, verified downloads, Apple Foundation Models). CairnInferenceNative is the Swift 5
+  # island that may import mlx-swift-lm; it links that runtime only when CAIRN_MLX=1 is set, so an
+  # ordinary Xcode or CI build resolves it without downloading MLX and the provider reports honestly
+  # that the runtime is not in this build.
+  CairnInferenceLocal:
+    path: Packages/CairnInferenceLocal
+  CairnInferenceNative:
+    path: Packages/CairnInferenceNative
   CairnAppUI:
     path: Packages/CairnAppUI
 
@@ -44,6 +53,9 @@ targets:
       - package: CairnPersistence
       - package: CairnProviderRemote
       - package: CairnAppUI
+      # The two on-device engines, so the app can run a model with no server at all.
+      - package: CairnInferenceLocal
+      - package: CairnInferenceNative
     info:
       path: App/Info.plist
       # ATS (decision 2026-11-15, supersedes 2026-11-14): exactly one key, and it is the

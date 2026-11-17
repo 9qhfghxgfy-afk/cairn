@@ -18,7 +18,8 @@ import PackageDescription
 let package = Package(
     name: "CairnInferenceLocal",
     platforms: [
-        .iOS(.v17),
+        // Matches CairnChatDomain's floor, which Xcode enforces across the dependency graph.
+        .iOS(.v18),
         .macOS(.v14),
     ],
     products: [

@@ -20,6 +20,10 @@ public struct ServersView: View {
 
     public var body: some View {
         List {
+            // Pinned first: the one engine that needs no server, and the Model Manager that covers
+            // every server's loaded and installed models.
+            OnDeviceEngineSection(model: model)
+
             if let notice = model.notice {
                 ServersNoticeBanner(text: notice)
             }
@@ -88,7 +92,7 @@ struct ServersEmptyState: View {
             ContentUnavailableView {
                 Label("No servers yet", systemImage: "point.3.connected.trianglepath.dotted")
             } description: {
-                Text("Cairn does not run a model on this phone. Add a server you run — Ollama, LM Studio, or anything OpenAI-compatible — and this app talks to it over your own network.")
+                Text("A model can run on this phone if the row above says it is ready, with no server involved. Otherwise add a server you run — Ollama, LM Studio, or anything OpenAI-compatible — and this app talks to it over your own network.")
             }
 
             Button {

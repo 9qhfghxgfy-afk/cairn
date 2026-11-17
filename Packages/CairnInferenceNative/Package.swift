@@ -55,7 +55,9 @@ private var mlxProducts: [Target.Dependency] {
 let package = Package(
     name: "CairnInferenceNative",
     platforms: [
-        .iOS(.v17),
+        // Matches CairnChatDomain's floor. A lower floor here makes Xcode reject the dependency
+        // ("requires minimum platform version 18.0 ... but this target supports 17.0").
+        .iOS(.v18),
         .macOS(.v14),
     ],
     products: [
