@@ -20,13 +20,13 @@ public final class SwiftDataStore: ChatStore {
             if inMemory {
                 container = try ModelContainer(
                     for: ConversationRecord.self, ChatRecord.self, ServerProfileRecord.self,
-                    ServerSelectionRecord.self,
+                    ServerSelectionRecord.self, SettingsRecord.self,
                     configurations: ModelConfiguration(isStoredInMemoryOnly: true)
                 )
             } else {
                 container = try ModelContainer(
                     for: ConversationRecord.self, ChatRecord.self, ServerProfileRecord.self,
-                    ServerSelectionRecord.self
+                    ServerSelectionRecord.self, SettingsRecord.self
                 )
             }
         } catch {
@@ -49,14 +49,14 @@ public final class SwiftDataStore: ChatStore {
     public func createConversation(
         title: String,
         mode: InferenceMode,
-        params: SamplingParams,
+        config: ChatConfig,
         isTemporary: Bool
     ) throws -> Conversation {
         // Defence in depth: temporary chat must be handled by EphemeralStore.
         guard !isTemporary else {
             throw StoreError.writeFailed("Temporary chats are never written to disk.")
         }
-        let conversation = Conversation(title: title, mode: mode, params: params, isTemporary: false)
+        let conversation = Conversation(title: title, mode: mode, config: config, isTemporary: false)
         try saveConversation(conversation)
         return conversation
     }
@@ -82,7 +82,7 @@ public final class SwiftDataStore: ChatStore {
             existing.activeLeafID = conversation.activeLeafID
             existing.updatedAt = conversation.updatedAt
             existing.modeRaw = conversation.mode.rawValue
-            existing.paramsJSON = JSONCodec.encode(conversation.params) ?? Data()
+            existing.configJSON = JSONCodec.encode(conversation.config)
         } else {
             context.insert(ConversationRecord(conversation))
         }

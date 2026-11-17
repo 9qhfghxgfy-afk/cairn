@@ -14,7 +14,7 @@ enum SessionHarness {
         let conversation = try store.createConversation(
             title: "New chat",
             mode: .onDeviceOnly,
-            params: SamplingParams(thinkingEnabled: thinkingEnabled),
+            config: ChatConfig(thinkingEnabled: thinkingEnabled),
             isTemporary: temporary
         )
         let model = ChatSessionModel(conversation: conversation, store: store, providers: [provider])

@@ -57,10 +57,10 @@ final class ChatTreeQueryTests: XCTestCase {
         let answer = tree.append(conversationID: cid, parentID: userA.id, role: .assistant, text: "answer")
         let userB = tree.append(conversationID: cid, parentID: answer.id, role: .user, text: "next")
 
-        var params = SamplingParams.default
-        params.systemPrompt = "You are Cairn."
-
-        let payload = ChatTree.messages(for: tree.visiblePath(activeLeafID: userB.id), params: params)
+        let payload = ChatTree.messages(
+            for: tree.visiblePath(activeLeafID: userB.id),
+            systemPrompt: "You are Cairn."
+        )
         XCTAssertEqual(payload.map(\.role), [.system, .user, .assistant, .user])
         XCTAssertEqual(payload.first?.text, "You are Cairn.")
         XCTAssertEqual(payload.count, 4)
@@ -70,7 +70,7 @@ final class ChatTreeQueryTests: XCTestCase {
         )
         let withEmpty = ChatTree.messages(
             for: ChatTree.visiblePath(nodes: tree.nodes + [streaming], activeLeafID: streaming.id),
-            params: params
+            systemPrompt: "You are Cairn."
         )
         XCTAssertEqual(withEmpty.count, 4, "an empty streaming node must not be sent to the backend")
     }

@@ -14,8 +14,9 @@ struct OllamaWire: RemoteWire {
     func chatBody(_ request: GenerationRequest) throws -> Data {
         try OllamaCodec.chatRequestBody(
             request,
+            support: kind.samplingSupport,
             modelSupportsVision: true,
-            thinking: request.params.thinkingEnabled
+            thinking: request.config.thinkingEnabled
         )
     }
 

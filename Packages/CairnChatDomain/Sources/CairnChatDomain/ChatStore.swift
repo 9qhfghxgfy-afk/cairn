@@ -28,7 +28,7 @@ public protocol ChatStore: AnyObject {
     func createConversation(
         title: String,
         mode: InferenceMode,
-        params: SamplingParams,
+        config: ChatConfig,
         isTemporary: Bool
     ) throws -> Conversation
     func conversation(id: UUID) throws -> Conversation?

@@ -58,7 +58,7 @@ enum Fixtures {
         GenerationRequest(
             modelID: model,
             messages: [ChatMessagePayload(role: .user, text: "hi")],
-            params: SamplingParams(thinkingEnabled: thinking)
+            config: ChatConfig(thinkingEnabled: thinking)
         )
     }
 }

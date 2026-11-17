@@ -16,6 +16,7 @@ struct OpenAIWire: RemoteWire {
     func chatBody(_ request: GenerationRequest) throws -> Data {
         try OpenAICodec.chatRequestBody(
             request,
+            support: kind.samplingSupport,
             modelSupportsVision: capabilities.vision,
             includeUsage: true
         )

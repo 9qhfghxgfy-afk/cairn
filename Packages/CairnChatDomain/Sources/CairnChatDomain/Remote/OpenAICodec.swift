@@ -59,9 +59,8 @@ public enum OpenAICodec: Sendable {
         let messages: [WireMessage]
         let stream: Bool
         let streamOptions: StreamOptions?
-        let temperature: Double
-        let topP: Double
-        let maxTokens: Int
+        /// Sampling at the top level of the request, already filtered to what this server documents.
+        let sampling: SamplingFieldList
 
         struct StreamOptions: Encodable {
             let includeUsage: Bool
@@ -74,11 +73,20 @@ public enum OpenAICodec: Sendable {
             }
         }
 
-        enum CodingKeys: String, CodingKey {
-            case model, messages, stream, temperature
-            case streamOptions = "stream_options"
-            case topP = "top_p"
-            case maxTokens = "max_tokens"
+        /// Hand-written rather than synthesised, because the sampling keys are decided at run time by
+        /// the capability table and a synthesised container can only write keys known at compile time.
+        /// The keys land at the top level, where the OpenAI schema says they belong.
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: DynamicCodingKey.self)
+            try container.encode(model, forKey: DynamicCodingKey(stringValue: "model"))
+            try container.encode(messages, forKey: DynamicCodingKey(stringValue: "messages"))
+            try container.encode(stream, forKey: DynamicCodingKey(stringValue: "stream"))
+            if let streamOptions {
+                try container.encode(
+                    streamOptions, forKey: DynamicCodingKey(stringValue: "stream_options")
+                )
+            }
+            try sampling.encode(into: &container)
         }
     }
 
@@ -86,16 +94,19 @@ public enum OpenAICodec: Sendable {
     /// `includeUsage` asks the server for real token counts in a final SSE
     /// chunk (`stream_options.include_usage`); servers that reject the field
     /// get retried by the provider without it — metrics then stay nil.
+    ///
+    /// `support` is the declared sampling surface of the server kind. A configured knob outside that
+    /// schema is never written: LM Studio and any OpenAI-compatible server accept an unknown key and
+    /// then ignore it, so sending `min_p` there would leave the user believing a knob is live.
+    ///
+    /// **The system prompt is not added here.** It arrives as the first entry of `request.messages`.
     public static func chatRequestBody(
         _ request: GenerationRequest,
+        support: SamplingSupport,
         modelSupportsVision: Bool = false,
         includeUsage: Bool = true
     ) throws -> Data {
         var messages: [WireMessage] = []
-        let system = request.params.systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !system.isEmpty {
-            messages.append(WireMessage(role: "system", text: system, parts: nil, images: nil))
-        }
         for payload in request.messages {
             if modelSupportsVision && !payload.imageData.isEmpty {
                 var parts: [WireContentPart] = []
@@ -121,9 +132,11 @@ public enum OpenAICodec: Sendable {
             messages: messages,
             stream: true,
             streamOptions: includeUsage ? .init(includeUsage: true) : nil,
-            temperature: request.params.temperature,
-            topP: request.params.topP,
-            maxTokens: request.params.maxTokens
+            sampling: SamplingFieldList(
+                sampling: request.config.sampling,
+                support: support,
+                dialect: .openAI
+            )
         )
         return try JSONEncoder().encode(wire)
     }

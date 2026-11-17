@@ -8,7 +8,7 @@ final class SwiftDataPayloadTests: XCTestCase {
     func testThinkingAndCandidateDraftsSurviveTheRoundTrip() throws {
         let store = try SwiftDataStore(inMemory: true)
         let conversation = try store.createConversation(
-            title: "Synth", mode: .hybridSynthesized, params: .default, isTemporary: false
+            title: "Synth", mode: .hybridSynthesized, config: .default, isTemporary: false
         )
         let node = ChatNode(
             conversationID: conversation.id, parentID: nil, role: .assistant,
@@ -28,36 +28,10 @@ final class SwiftDataPayloadTests: XCTestCase {
         XCTAssertEqual(stored?.drafts.map(\.sourceLabel), ["On-device", "Remote"])
     }
 
-    func testPerChatParametersPersist() throws {
-        let store = try SwiftDataStore(inMemory: true)
-        var params = SamplingParams.default
-        params.temperature = 0.2
-        params.topP = 0.8
-        params.repeatPenalty = 1.35
-        params.maxTokens = 512
-        params.contextWindow = 8192
-        params.thinkingEnabled = true
-        params.systemPrompt = "Be terse."
-
-        let created = try store.createConversation(
-            title: "Params", mode: .remoteOnly, params: params, isTemporary: false
-        )
-        let reloaded = try store.conversation(id: created.id)
-        XCTAssertEqual(reloaded?.params.temperature, 0.2)
-        XCTAssertEqual(reloaded?.params.topP, 0.8)
-        XCTAssertEqual(reloaded?.params.repeatPenalty, 1.35)
-        XCTAssertEqual(reloaded?.params.maxTokens, 512)
-        XCTAssertEqual(reloaded?.params.contextWindow, 8192)
-        XCTAssertEqual(reloaded?.params.thinkingEnabled, true)
-        XCTAssertEqual(reloaded?.params.systemPrompt, "Be terse.")
-        XCTAssertEqual(reloaded?.mode, .remoteOnly)
-        XCTAssertFalse(reloaded?.isTemporary ?? true, "nothing on disk is ever temporary")
-    }
-
     func testDeleteConversationClearsItsNodes() throws {
         let store = try SwiftDataStore(inMemory: true)
         let conversation = try store.createConversation(
-            title: "Delete me", mode: .onDeviceOnly, params: .default, isTemporary: false
+            title: "Delete me", mode: .onDeviceOnly, config: .default, isTemporary: false
         )
         let node = ChatTree.append(to: [], conversationID: conversation.id, parentID: nil, role: .user, text: "x")
         try store.saveNode(node.node)

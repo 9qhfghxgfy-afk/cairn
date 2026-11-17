@@ -42,39 +42,33 @@ public enum OllamaCodec: Sendable {
         let images: [String]?
     }
 
-    private struct WireOptions: Encodable {
-        let temperature: Double
-        let topP: Double
-        let numPredict: Int
-        let numCtx: Int
-        enum CodingKeys: String, CodingKey {
-            case temperature
-            case topP = "top_p"
-            case numPredict = "num_predict"
-            case numCtx = "num_ctx"
-        }
-    }
-
     private struct WireRequest: Encodable {
         let model: String
         let messages: [WireMessage]
         let stream: Bool
         let think: Bool?
-        let options: WireOptions
+        /// nil when the user configured no knob this server accepts: an empty `options` object would
+        /// be a claim that something was asked for.
+        let options: SamplingFieldList?
     }
 
-    /// Body for `POST /api/chat`. `think` is only sent for models whose
-    /// metadata said they support it; images only for vision-capable models.
+    /// Body for `POST /api/chat`. `think` is only sent for models whose metadata said they support
+    /// it, and images only for vision-capable models.
+    ///
+    /// **The system prompt is not added here.** It arrives as the first entry of `request.messages`,
+    /// assembled once by `ChatConfig.systemPrompt(in:turn:)`. An encoder that prepends one as well is
+    /// what used to put two system messages on the wire.
+    ///
+    /// `support` is the active kind's sampling surface: a configured knob the server does not document
+    /// is dropped rather than sent, because a key the server silently ignores is worse than one it
+    /// rejects.
     public static func chatRequestBody(
         _ request: GenerationRequest,
+        support: SamplingSupport,
         modelSupportsVision: Bool = false,
         thinking: Bool = false
     ) throws -> Data {
         var messages: [WireMessage] = []
-        let system = request.params.systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !system.isEmpty {
-            messages.append(WireMessage(role: "system", content: system, images: nil))
-        }
         for payload in request.messages {
             var images: [String]? = nil
             if modelSupportsVision && !payload.imageData.isEmpty {
@@ -84,17 +78,17 @@ public enum OllamaCodec: Sendable {
                 WireMessage(role: payload.role.rawValue, content: payload.text, images: images)
             )
         }
+        let options = SamplingFieldList(
+            sampling: request.config.sampling,
+            support: support,
+            dialect: .ollama
+        )
         let wire = WireRequest(
             model: request.modelID,
             messages: messages,
             stream: true,
             think: thinking ? true : nil,
-            options: WireOptions(
-                temperature: request.params.temperature,
-                topP: request.params.topP,
-                numPredict: request.params.maxTokens,
-                numCtx: request.params.contextWindow
-            )
+            options: options.isEmpty ? nil : options
         )
         return try JSONEncoder().encode(wire)
     }

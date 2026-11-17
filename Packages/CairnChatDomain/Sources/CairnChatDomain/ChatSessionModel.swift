@@ -25,6 +25,11 @@ public final class ChatSessionModel {
     /// working exactly as before and simply remembers nothing.
     public var selection: ServerSelectionModel?
 
+    /// The clock and device facts the injected context is built from. Held on the session rather
+    /// than read at the moment of assembly so the sheet's live preview and the turn that preview
+    /// describes cannot drift apart; a test pins it, the app sets it once at startup.
+    public var contextEnvironment: ContextEnvironment = .current()
+
     // Module-internal by design (not `private`, which is file-scoped in Swift):
     // the tree entry points in this file and the streaming core in
     // ChatSessionModel+Streaming.swift are two files of the same type.

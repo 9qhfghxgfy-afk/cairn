@@ -17,13 +17,13 @@ public final class EphemeralStore: ChatStore {
     public func createConversation(
         title: String,
         mode: InferenceMode,
-        params: SamplingParams,
+        config: ChatConfig,
         isTemporary: Bool
     ) throws -> Conversation {
         let conversation = Conversation(
             title: title,
             mode: mode,
-            params: params,
+            config: config,
             isTemporary: isTemporary
         )
         conversations[conversation.id] = conversation

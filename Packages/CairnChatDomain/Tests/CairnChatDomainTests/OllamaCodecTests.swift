@@ -7,12 +7,17 @@ final class OllamaCodecTests: XCTestCase {
         GenerationRequest(
             modelID: "qwen3:8b",
             messages: [
+                ChatMessagePayload(role: .system, text: "be brief"),
                 ChatMessagePayload(role: .user, text: "hi"),
                 ChatMessagePayload(role: .assistant, text: "hello"),
                 ChatMessagePayload(role: .user, text: "again"),
             ],
-            params: SamplingParams(temperature: 0.5, topP: 0.9, maxTokens: 256,
-                                   contextWindow: 8192, systemPrompt: "be brief")
+            config: ChatConfig(
+                persona: "be brief",
+                sampling: SamplingConfig(
+                    temperature: 0.5, topP: 0.9, maxTokens: 256, contextWindow: 8192
+                )
+            )
         )
     }
 
@@ -21,22 +26,50 @@ final class OllamaCodecTests: XCTestCase {
     }
 
     func testRequestBodyShape() throws {
-        let body = try jsonObject(OllamaCodec.chatRequestBody(request()))
+        let body = try jsonObject(OllamaCodec.chatRequestBody(request(), support: .all))
         XCTAssertEqual(body["model"] as? String, "qwen3:8b")
         XCTAssertEqual(body["stream"] as? Bool, true)
         XCTAssertNil(body["think"], "think must be absent unless the model supports thinking")
         let options = body["options"] as? [String: Any]
         XCTAssertEqual(options?["top_p"] as? Double, 0.9)
+        XCTAssertEqual(options?["temperature"] as? Double, 0.5)
         XCTAssertEqual(options?["num_predict"] as? Int, 256)
         XCTAssertEqual(options?["num_ctx"] as? Int, 8192)
         let messages = body["messages"] as? [[String: Any]]
-        XCTAssertEqual(messages?.count, 4, "system prompt must be prepended")
+        XCTAssertEqual(messages?.count, 4, "the assembled system message is carried through")
         XCTAssertEqual(messages?.first?["role"] as? String, "system")
         XCTAssertEqual(messages?.first?["content"] as? String, "be brief")
     }
 
+    /// The duplicate-system-message bug: the tree flattened a system prompt into the messages **and**
+    /// the encoder prepended another, so a chat with a persona sent two system messages every turn.
+    /// The encoder no longer has a system prompt to add, so a request without one stays without one.
+    func testEncoderInventsNoSystemMessage() throws {
+        var withoutSystem = request()
+        withoutSystem.messages.removeFirst()
+        let body = try jsonObject(OllamaCodec.chatRequestBody(withoutSystem, support: .all))
+        let messages = body["messages"] as? [[String: Any]]
+        XCTAssertEqual(messages?.count, 3)
+        XCTAssertNotEqual(messages?.first?["role"] as? String, "system")
+        XCTAssertEqual(messages?.filter { ($0["role"] as? String) == "system" }.count, 0)
+    }
+
+    /// Nothing configured means no `options` object at all, not an empty one: an empty object claims
+    /// the user asked for something, and a server may read it as a request to reset its own defaults.
+    func testNoOptionsWhenNothingIsConfigured() throws {
+        let bare = GenerationRequest(
+            modelID: "qwen3:8b",
+            messages: [ChatMessagePayload(role: .user, text: "hi")],
+            config: .bare
+        )
+        let body = try jsonObject(OllamaCodec.chatRequestBody(bare, support: .all))
+        XCTAssertNil(body["options"], "an unset knob must not be sent as a zero or an empty object")
+    }
+
     func testThinkingFlagOnlyWhenSupported() throws {
-        let on = try jsonObject(OllamaCodec.chatRequestBody(request(), thinking: true))
+        let on = try jsonObject(
+            OllamaCodec.chatRequestBody(request(), support: .all, thinking: true)
+        )
         XCTAssertEqual(on["think"] as? Bool, true)
     }
 
@@ -45,14 +78,18 @@ final class OllamaCodecTests: XCTestCase {
             modelID: "llava",
             messages: [ChatMessagePayload(role: .user, text: "what?",
                                           imageData: [Data([1, 2, 3])])],
-            params: .default
+            config: .bare
         )
-        let off = try jsonObject(OllamaCodec.chatRequestBody(withImage))
+        let off = try jsonObject(
+            OllamaCodec.chatRequestBody(withImage, support: .all)
+        )
         let offMessages = off["messages"] as? [[String: Any]]
         XCTAssertNil(offMessages?.last?["images"] as? [String],
                      "images must be omitted for non-vision models")
 
-        let on = try jsonObject(OllamaCodec.chatRequestBody(withImage, modelSupportsVision: true))
+        let on = try jsonObject(
+            OllamaCodec.chatRequestBody(withImage, support: .all, modelSupportsVision: true)
+        )
         let onMessages = on["messages"] as? [[String: Any]]
         let images = onMessages?.last?["images"] as? [String]
         XCTAssertEqual(images, [Data([1, 2, 3]).base64EncodedString()])

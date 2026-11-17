@@ -70,10 +70,16 @@ public enum ChatTree {
     }
 
     /// Flattens the active path into provider messages, oldest first.
-    public static func messages(for path: [ChatNode], params: SamplingParams) -> [ChatMessagePayload] {
+    /// Flattens the active path into provider messages, oldest first.
+    ///
+    /// `systemPrompt` is the block the session already assembled — pass `""` for none. It arrives
+    /// already built rather than being built here, and encoders never add one, because a prompt
+    /// assembled in two places is the duplicate-system-message bug this signature closes.
+    public static func messages(for path: [ChatNode], systemPrompt: String) -> [ChatMessagePayload] {
         var out: [ChatMessagePayload] = []
-        if !params.systemPrompt.isEmpty {
-            out.append(ChatMessagePayload(role: .system, text: params.systemPrompt))
+        let system = systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !system.isEmpty {
+            out.append(ChatMessagePayload(role: .system, text: system))
         }
         for node in path where node.state != .failed {
             guard !node.text.isEmpty else { continue }

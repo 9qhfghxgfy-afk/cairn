@@ -64,7 +64,7 @@ public struct MockStreamingProvider: InferenceProvider {
 
     public func stream(_ request: GenerationRequest) -> AsyncThrowingStream<StreamChunk, any Error> {
         let delay = tokenDelayNanoseconds
-        let emitThinking = thinkingCapable && request.params.thinkingEnabled
+        let emitThinking = thinkingCapable && request.config.thinkingEnabled
         let failureAt = failAfterTokens
         let promptChars = request.promptCharacterCount
 

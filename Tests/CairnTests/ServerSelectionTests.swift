@@ -118,7 +118,7 @@ final class ServerSelectionTests: XCTestCase {
     func testTheAppSchemaCarriesTheSelectionNextToTheChat() throws {
         let store = try makeStore()
         try store.createConversation(
-            title: "Choice", mode: .onDeviceOnly, params: .default, isTemporary: false
+            title: "Choice", mode: .onDeviceOnly, config: .default, isTemporary: false
         )
         let box = server("Box", port: 11434)
         try store.save(box)

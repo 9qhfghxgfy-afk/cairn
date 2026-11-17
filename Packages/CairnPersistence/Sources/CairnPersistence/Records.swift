@@ -14,6 +14,16 @@ public final class ConversationRecord {
     public var updatedAt: Date
     public var modeRaw: String
     public var paramsJSON: Data
+    /// The whole per-chat configuration, as a `ChatConfig` JSON blob.
+    ///
+    /// One blob rather than a column per knob: the knobs are read and written as a single value, and a
+    /// column per knob makes every later knob a migration. `ChatConfig` holds no URL, hostname, or
+    /// credential, so this column cannot become a place a private address gets stored by accident.
+    ///
+    /// `paramsJSON` above is the pre-P2 column and is no longer written. It is kept because dropping a
+    /// column from a store the user already has on disk is the one schema change that is not free, and
+    /// because a row written before P2 still has to be read.
+    public var configJSON: Data?
 
     public init(
         id: UUID,
@@ -22,7 +32,8 @@ public final class ConversationRecord {
         createdAt: Date,
         updatedAt: Date,
         modeRaw: String,
-        paramsJSON: Data
+        paramsJSON: Data,
+        configJSON: Data? = nil
     ) {
         self.id = id
         self.title = title
@@ -31,6 +42,7 @@ public final class ConversationRecord {
         self.updatedAt = updatedAt
         self.modeRaw = modeRaw
         self.paramsJSON = paramsJSON
+        self.configJSON = configJSON
     }
 }
 

@@ -6,21 +6,34 @@ final class OpenAICodecTests: XCTestCase {
     private func request() -> GenerationRequest {
         GenerationRequest(
             modelID: "some-model",
-            messages: [ChatMessagePayload(role: .user, text: "hi")],
-            params: SamplingParams(temperature: 0.5, topP: 0.9, maxTokens: 256,
-                                   systemPrompt: "sys")
+            messages: [
+                ChatMessagePayload(role: .system, text: "sys"),
+                ChatMessagePayload(role: .user, text: "hi"),
+            ],
+            config: ChatConfig(
+                persona: "sys",
+                sampling: SamplingConfig(temperature: 0.5, topP: 0.9, maxTokens: 256)
+            )
         )
     }
+
+    /// The OpenAI schema's own surface, read from the kind rather than hardcoded here: this is the
+    /// table the wire uses, so the test proves the filter rather than restating it.
+    private var openAISupport: SamplingSupport { ServerProfileKind.openAICompatible.samplingSupport }
 
     private func jsonObject(_ data: Data) throws -> [String: Any] {
         try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
     }
 
     func testRequestBodyShape() throws {
-        let body = try jsonObject(OpenAICodec.chatRequestBody(request()))
+        let body = try jsonObject(
+            OpenAICodec.chatRequestBody(request(), support: openAISupport)
+        )
         XCTAssertEqual(body["model"] as? String, "some-model")
         XCTAssertEqual(body["stream"] as? Bool, true)
         XCTAssertEqual(body["max_tokens"] as? Int, 256)
+        XCTAssertEqual(body["temperature"] as? Double, 0.5)
+        XCTAssertEqual(body["top_p"] as? Double, 0.9)
         let streamOptions = body["stream_options"] as? [String: Any]
         XCTAssertEqual(streamOptions?["include_usage"] as? Bool, true)
         let messages = body["messages"] as? [[String: Any]]
@@ -31,9 +44,51 @@ final class OpenAICodecTests: XCTestCase {
                        "text-only turns must use the plain string content form")
     }
 
+    /// The other half of the duplicate-system-message bug: this encoder used to prepend its own
+    /// system message on top of the one already in `messages`.
+    func testEncoderInventsNoSystemMessage() throws {
+        var withoutSystem = request()
+        withoutSystem.messages.removeFirst()
+        let body = try jsonObject(
+            OpenAICodec.chatRequestBody(withoutSystem, support: openAISupport)
+        )
+        let messages = body["messages"] as? [[String: Any]]
+        XCTAssertEqual(messages?.count, 1)
+        XCTAssertEqual(messages?.first?["role"] as? String, "user")
+    }
+
+    /// A knob the user configured that the OpenAI schema does not document is **not sent**. These
+    /// servers accept an unknown key and then ignore it, which would leave the user believing a knob
+    /// is live. Ollama documents the same knobs, so the same configuration must send them there.
+    func testUnsupportedKnobsAreNeverSentToAnOpenAIServer() throws {
+        let configured = GenerationRequest(
+            modelID: "some-model",
+            messages: [ChatMessagePayload(role: .user, text: "hi")],
+            config: ChatConfig(sampling: SamplingConfig(
+                temperature: 0.4, minP: 0.05, topK: 20, repeatPenalty: 1.3, contextWindow: 16384
+            ))
+        )
+        let openAI = try jsonObject(
+            OpenAICodec.chatRequestBody(configured, support: openAISupport)
+        )
+        XCTAssertEqual(openAI["temperature"] as? Double, 0.4)
+        for key in ["min_p", "top_k", "repeat_penalty", "num_ctx", "num_predict", "context_window"] {
+            XCTAssertNil(openAI[key], "\(key) is not part of the OpenAI schema and must not be sent")
+        }
+
+        let ollama = try jsonObject(
+            OllamaCodec.chatRequestBody(configured, support: ServerProfileKind.ollama.samplingSupport)
+        )
+        let options = ollama["options"] as? [String: Any]
+        XCTAssertEqual(options?["min_p"] as? Double, 0.05)
+        XCTAssertEqual(options?["top_k"] as? Int, 20)
+        XCTAssertEqual(options?["repeat_penalty"] as? Double, 1.3)
+        XCTAssertEqual(options?["num_ctx"] as? Int, 16384)
+    }
+
     func testUsageCanBeTurnedOff() throws {
         let body = try jsonObject(
-            OpenAICodec.chatRequestBody(request(), includeUsage: false)
+            OpenAICodec.chatRequestBody(request(), support: openAISupport, includeUsage: false)
         )
         XCTAssertNil(body["stream_options"],
                      "retries after a rejection must omit stream_options entirely")
@@ -44,10 +99,12 @@ final class OpenAICodecTests: XCTestCase {
             modelID: "vision-model",
             messages: [ChatMessagePayload(role: .user, text: "look",
                                           imageData: [Data([7, 8])])],
-            params: .default
+            config: .bare
         )
         let body = try jsonObject(
-            OpenAICodec.chatRequestBody(withImage, modelSupportsVision: true)
+            OpenAICodec.chatRequestBody(
+                withImage, support: openAISupport, modelSupportsVision: true
+            )
         )
         let messages = body["messages"] as? [[String: Any]]
         let content = messages?.last?["content"] as? [[String: Any]]

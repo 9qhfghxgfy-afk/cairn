@@ -48,37 +48,6 @@ public enum InferenceMode: String, Sendable, Equatable, Codable, CaseIterable, I
     public var leavesDevice: Bool { needsRemote }
 }
 
-/// Per-chat sampling knobs (Milestone 3 wires these to real backends).
-public struct SamplingParams: Sendable, Equatable, Codable {
-    public var temperature: Double
-    public var topP: Double
-    public var repeatPenalty: Double
-    public var maxTokens: Int
-    public var contextWindow: Int
-    public var thinkingEnabled: Bool
-    public var systemPrompt: String
-
-    public init(
-        temperature: Double = 0.7,
-        topP: Double = 0.95,
-        repeatPenalty: Double = 1.1,
-        maxTokens: Int = 1024,
-        contextWindow: Int = 4096,
-        thinkingEnabled: Bool = false,
-        systemPrompt: String = ""
-    ) {
-        self.temperature = temperature
-        self.topP = topP
-        self.repeatPenalty = repeatPenalty
-        self.maxTokens = maxTokens
-        self.contextWindow = contextWindow
-        self.thinkingEnabled = thinkingEnabled
-        self.systemPrompt = systemPrompt
-    }
-
-    public static let `default` = SamplingParams()
-}
-
 /// One candidate answer inside a synthesized node.
 public struct CandidateDraft: Sendable, Equatable, Identifiable, Codable {
     public var id: UUID
@@ -166,35 +135,7 @@ public struct ChatNode: Sendable, Equatable, Identifiable {
     }
 }
 
-public struct Conversation: Sendable, Equatable, Identifiable {
-    public var id: UUID
-    public var title: String
-    /// The only pointer that decides what the user sees.
-    public var activeLeafID: UUID?
-    public var createdAt: Date
-    public var updatedAt: Date
-    public var mode: InferenceMode
-    public var params: SamplingParams
-    /// In-memory only when true: never written to disk by any store.
-    public var isTemporary: Bool
+// `Conversation` lives in Conversation.swift and `ChatConfig` in ChatConfig.swift: P2 moved the
+// sampling knobs out of a flat `params` struct and gave each chat a configuration that can say
+// "unset" as well as "set".
 
-    public init(
-        id: UUID = UUID(),
-        title: String = "New chat",
-        activeLeafID: UUID? = nil,
-        createdAt: Date = Date(),
-        updatedAt: Date = Date(),
-        mode: InferenceMode = .onDeviceOnly,
-        params: SamplingParams = .default,
-        isTemporary: Bool = false
-    ) {
-        self.id = id
-        self.title = title
-        self.activeLeafID = activeLeafID
-        self.createdAt = createdAt
-        self.updatedAt = updatedAt
-        self.mode = mode
-        self.params = params
-        self.isTemporary = isTemporary
-    }
-}

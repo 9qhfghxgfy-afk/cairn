@@ -89,7 +89,7 @@ final class ServerProfileStoreTests: XCTestCase {
     func testChatWritesAndProfileWritesShareOneContainer() throws {
         let store = try makeStore()
         let conversation = try store.createConversation(
-            title: "Trail notes", mode: .remoteOnly, params: .default, isTemporary: false
+            title: "Trail notes", mode: .remoteOnly, config: .default, isTemporary: false
         )
         try store.save(ServerProfile(name: "Box", kind: .ollama, baseURLString: "https://your-host.your-vpn.ts.net"))
 

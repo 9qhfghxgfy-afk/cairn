@@ -161,14 +161,18 @@ public struct ChatMessagePayload: Sendable, Equatable {
 
 public struct GenerationRequest: Sendable, Equatable {
     public var modelID: String
-    /// Already flattened from the active root-to-leaf path of the tree.
+    /// Flattened from the active root-to-leaf path of the tree. When there is a system message it is
+    /// the **first element and the only one**: the block is assembled once by
+    /// `ChatConfig.systemPrompt(in:turn:)` in the session, and an encoder must never add a second
+    /// one. Two places each prepending a system prompt is the duplicate-system-message bug P2 closes.
     public var messages: [ChatMessagePayload]
-    public var params: SamplingParams
+    /// The chat's own configuration, so an encoder can apply the server's capability filter itself.
+    public var config: ChatConfig
 
-    public init(modelID: String, messages: [ChatMessagePayload], params: SamplingParams) {
+    public init(modelID: String, messages: [ChatMessagePayload], config: ChatConfig) {
         self.modelID = modelID
         self.messages = messages
-        self.params = params
+        self.config = config
     }
 
     public var promptCharacterCount: Int {

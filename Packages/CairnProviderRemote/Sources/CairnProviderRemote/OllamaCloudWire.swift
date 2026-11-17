@@ -28,6 +28,7 @@ struct OllamaCloudWire: RemoteWire {
         // it has not been seen to produce.
         try OllamaCodec.chatRequestBody(
             request,
+            support: kind.samplingSupport,
             modelSupportsVision: false,
             thinking: false
         )

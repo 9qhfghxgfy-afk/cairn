@@ -27,7 +27,9 @@ extension ConversationRecord {
             createdAt: conversation.createdAt,
             updatedAt: conversation.updatedAt,
             modeRaw: conversation.mode.rawValue,
-            paramsJSON: JSONCodec.encode(conversation.params) ?? Data()
+            // The pre-P2 column is left empty for new rows; the configuration is one blob now.
+            paramsJSON: Data(),
+            configJSON: JSONCodec.encode(conversation.config)
         )
     }
 
@@ -39,10 +41,23 @@ extension ConversationRecord {
             createdAt: createdAt,
             updatedAt: updatedAt,
             mode: InferenceMode(rawValue: modeRaw) ?? .onDeviceOnly,
-            params: JSONCodec.decode(SamplingParams.self, from: paramsJSON) ?? .default,
+            config: readConfig(),
             // Nothing on disk is ever temporary.
             isTemporary: false
         )
+    }
+
+    /// The chat's configuration, or the configuration reconstructed from the pre-P2 knob blob.
+    ///
+    /// A row written before P2 has `paramsJSON` and no `configJSON`. Those knobs were all mandatory,
+    /// so every one of them was asserted on every turn — reading them back as *configured* overrides
+    /// is what keeps an existing chat answering the same way after the upgrade, instead of quietly
+    /// falling back to server defaults.
+    private func readConfig() -> ChatConfig {
+        if let stored = JSONCodec.decode(ChatConfig.self, from: configJSON) {
+            return stored
+        }
+        return LegacyChatConfig.upgrade(from: paramsJSON)
     }
 }
 

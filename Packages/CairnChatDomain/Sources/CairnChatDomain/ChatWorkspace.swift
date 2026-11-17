@@ -16,6 +16,21 @@ public final class ChatWorkspace {
     /// layer hands this in as a domain type.
     public let selection: ServerSelectionModel?
 
+    /// The baseline every new chat is seeded from. The App layer hands in the Default Configuration
+    /// from Settings; a workspace wired without one uses `ChatConfig.default`, which asserts no
+    /// sampling knob and injects the default context.
+    ///
+    /// Seeding copies the baseline into the new conversation and never reads it again: re-resolving
+    /// an existing chat against settings the user changed afterwards would rewrite history's
+    /// behaviour behind their back.
+    public var defaultConfig: ChatConfig = .default
+
+    /// Points the baseline at a new Default Configuration. Existing chats keep what they were seeded
+    /// with — only chats created from here on take it.
+    public func apply(defaults: ChatConfig) {
+        defaultConfig = defaults
+    }
+
     public var temporaryChat: Bool {
         didSet {
             guard oldValue != temporaryChat else { return }
@@ -187,7 +202,7 @@ public final class ChatWorkspace {
             let conversation = try activeStore.createConversation(
                 title: "New chat",
                 mode: mode,
-                params: .default,
+                config: defaultConfig,
                 isTemporary: temporaryChat
             )
             session = makeSession(conversation: conversation, store: activeStore)
