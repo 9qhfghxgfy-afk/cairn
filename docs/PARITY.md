@@ -115,6 +115,24 @@ verification label. `CI-verified` is not `on-device-verified`.
 | Zero paywall, zero limits, guard-enforced | §0 | P0 | **Done** — `Scripts/check-no-paywall.sh`, wired into `ci.sh guards` and the CI guards job | **CI-verified** (`44001146864`) |
 | No in-app billing, no tracking hook anywhere | §0 | P0 | **Done** — none present, and now machine-enforced | **CI-verified** (`44001146864`) |
 
+## 0e. Ledger — on-device inference and the Model Manager (M3)
+
+| Item | Status | Notes |
+|---|---|---|
+| `CairnInferenceLocal` package (Swift 6 strict) | `Done` | Host-testable, no MLX import. 52 tests in 12 suites. |
+| Memory-footprint estimator on the **active** context | `Done` | `2 × layers × kv_heads × head_dim × bytes_per_element × context_length`; saturating, never a trap. `os_proc_available_memory()` behind an injectable seam; a missing reading is reported as unknown, never treated as unlimited. |
+| "May exceed available device memory" notice | `Done` | Emitted for `tight` and `exceeds`. When only weights could be counted the UI also says "Estimate covers model weights only" rather than implying a full measurement. |
+| Single-resident eviction policy | `Done` | Pure `ResidentModelPolicy`: never two resident models unless a fresh reading shows both fit inside 80% of headroom; otherwise evict-then-admit; a model that cannot fit alone is refused. `OnDeviceModelRegistry` executes it and releases everything on a memory warning. |
+| Apple Foundation Models wrapper | `Done` (host) | `canImport(FoundationModels)` + `#available(iOS 26, *)`. Availability is read at use time and mapped to the framework's exact reason — device ineligible, Apple Intelligence off, model preparing — plus an `other(String)` case so a future reason is carried rather than mislabelled. Emits `.content`/`.metrics` only: no reasoning panel, because the framework emits no thinking field. |
+| Curated `mlx-community` catalog | `Done` | 8 entries, each copied from what the repository publishes; sizes are published totals and are re-measured from the bytes that land. Capability badges only where stated — no badge is inferred from a name or a size. |
+| Search, sort, capability chips | `Done` | Newest / Smallest download / Largest / Name; chips narrow rather than widen. "Newest" sorts by when Cairn curated the entry, which is the only date an offline catalog can know. |
+| Free-text repo ID + validation | `Done` | `owner/name` rule: no scheme, no host, no `..`, no whitespace, no separator but `/`, bounded length. A well-formed name that is not in the library stays installable. |
+| Download with SHA-256 verify, pause/resume, storage cleanup | `Done` (host) | Ephemeral `URLSession` with real resume blocks kept next to the model; a published digest must match or the install stops; the manifest is written last; uninstall removes weights and resume blocks. |
+| `CairnInferenceNative` (`mlx-swift-lm`) | `Not started` | Swift 5 mode, actor-wrapped, pinned to `mlx-swift-lm` 3.32.3 = `mlx-swift` 0.32.3. |
+| Model Manager UI (Running / Installed / Download) | `Not started` | |
+| Ollama + LM Studio lifecycle endpoints | `Not started` | `/api/ps`, `/api/show`, LM Studio load/unload — tolerant decoding, pending real-server verification. |
+| App wiring (`project.yml` packages, on-device provider row) | `Not started` | Nothing in the app links the new package yet, so the shipped build is unchanged. |
+
 ## 1. Findings that change the spec (verified 2026-11-16)
 
 - **F1 — the local lane cannot run the pinned destination.** `Scripts/ci.sh probe` on this Mac:

@@ -937,3 +937,47 @@ Known gaps carried forward, stated plainly:
 5. Numeric knobs are slider/stepper controls with a readout; only the seed is a typed field, so the
    ledger row that asked for typed numeric entry per knob stays `Partial` for that reason.
 
+## M3 — On-Device Inference + Model Manager (in progress, started 2026-11-17)
+
+Approved decisions for this milestone: link `mlx-swift-lm` for real in an isolated Swift 5 module
+(pinned 3.32.3 = `mlx-swift` 0.32.3, since that release moved to a separate MLX release train);
+curated static `mlx-community` catalog plus a validated free-text repo ID behind the
+public-internet opt-in; LM Studio load/unload/download wired with tolerant decoding and marked
+pending real-server verification.
+
+**M3a landed — `Packages/CairnInferenceLocal` (27 sources, 52 host tests, guards 53/53).**
+
+What is in it, and why it is shaped this way:
+
+* `MemoryFitEstimator` sizes weights **plus** the attention cache for the *active* context
+  (`2 × layers × kv_heads × head_dim × bytes_per_element × context_length`), saturating on overflow.
+  Missing metadata yields a weights-only estimate that says so out loud
+  (`precisionNotice`) instead of inventing an architecture. `May exceed available device memory` is
+  the required notice for `tight` and `exceeds`.
+* `os_proc_available_memory()` sits behind `MemoryReading`. It is an iOS-family call, so a macOS
+  host returns `nil` = *unknown*; nothing may treat unknown as unlimited. A free Apple ID build has
+  no increased-memory entitlement, so this reading is the real ceiling for the shipped app.
+* `ResidentModelPolicy` is the single-resident rule as a pure function; `OnDeviceModelRegistry`
+  executes it and releases everything on a memory-pressure signal
+  (`SystemMemoryPressureSource`, spelled as a notification name so it is testable off-device).
+* `FoundationModelsProvider` implements `InferenceProvider` with
+  `canImport(FoundationModels)` + `#available(iOS 26.0, *)`, reading
+  `SystemLanguageModel.default.availability` at the moment of use and surfacing the exact reason.
+  It emits `.content` and `.metrics` only — the framework offers no thinking field, so no reasoning
+  panel can appear for it. `streamResponse(to:)` returns a `ResponseStream<String>` of cumulative
+  snapshots, so the provider emits deltas.
+* `OnDeviceCatalog` is static (browsing must work offline); 8 curated `mlx-community` builds, sizes
+  are published totals, badges only where published. `HuggingFaceRepoID` is the gate between a typed
+  string and both a URL and a filesystem path; `ModelStoreLayout.slug` drops dots so no directory
+  name can ever contain `..`.
+* `ModelDownloadManager` checks the outbound opt-in **before** any request, streams progress, keeps
+  resume blocks next to the model, requires a published SHA-256 to match, writes
+  `cairn-install.json` last, and removes everything on uninstall.
+
+Still open for M3, in order: `CairnInferenceNative` (Swift 5, `mlx-swift-lm`, actor boundary,
+Metal gated off the simulator), the Model Manager UI (Running / Installed / Download),
+Ollama `/api/ps` + `/api/show` and LM Studio load/unload lifecycle, and `project.yml` + app wiring
+so the shipped target links the new package. Until that wiring lands, the app binary is unchanged.
+Verification so far for M3a is **local green only** — no CI run number, no device, no real network.
+
+
