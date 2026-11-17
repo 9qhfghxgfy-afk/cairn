@@ -19,14 +19,14 @@ verification label. `CI-verified` is not `on-device-verified`.
 | Stop mid-stream keeps partial text, marks `.cancelled` | 3.1 | M1 | Done | CI-verified |
 | Temporary chat is memory-only; disk store refuses it | 3.1 | M1 | Done | CI-verified |
 | Reasoning panel gated on real thinking only | 3.1 | M1 | Done | CI-verified |
-| Generation stats (tok, tok/s) on a reply | 3.1 | P2 | Partial — always shown, no toggle, no elapsed | CI-verified |
+| Generation stats (tok, tok/s) on a reply | 3.1 | P2 | Partial — always shown, no toggle, no elapsed; the Statistics toggle itself is deferred to P3 | CI-verified |
 | Remote streaming with real usage metrics | 3.1 | M2 | Done | CI-verified (`43764696840`); device list open |
 | Chat-history sidebar / drawer with chat list | 3.1 | M5 | Missing | unverified |
 | Editable chat title in the top bar | 3.1 | M5 | Missing | unverified |
 | Quick server/model switcher in the top bar | 3.1 | P1 | Done — server section (with "public internet" spelled out) + model section, one tap each | CI-verified (`44015633614`) — the switching rule itself is `ChatSessionServerSwitchTests` |
 | Empty state that routes to "configure a server" | 3.1 | P1 | Done — picks a kind, opens the guide, or scans the LAN | CI-verified build (`44015633614`); the kind draft is covered by `ServersModelSelectionTests` |
 | Composer `+` menu (Photos, Camera, Files) | 3.1, 3.8 | M6 | Missing | unverified |
-| `Thinking` / `Tools` composer chips | 3.1, 3.2 | P2 · P3 | Missing | unverified |
+| `Thinking` / `Tools` composer chips | 3.1, 3.2 | P3 (deferred out of P2) | Missing | unverified |
 | Markdown + syntax-highlighted code + copy button | 3.1 | M5 | Missing (plain `Text`) | unverified |
 | Continue Generation after a cut-off reply | 3.1 | M5 | Missing (`interrupted` reserved) | unverified |
 | Duplicate chat up to the current branch | 3.1 | M5 | Missing | unverified |
@@ -37,21 +37,21 @@ verification label. `CI-verified` is not `on-device-verified`.
 
 | Feature | Spec | Milestone | Status | Verification |
 |---|---|---|---|---|
-| Persona / system-prompt editor | 3.2 | P2 | Partial — field exists, no editor | CI-verified (field) |
-| Context size 2K→256K snap (default 8K) | 3.2 | P2 | Partial — default 4096, no control | unverified |
-| Temperature 0.00–2.00 (default 0.80) + numeric | 3.2 | P2 | Partial — default 0.7, no control | unverified |
-| Seed random/fixed + randomize | 3.2 | P2 | Missing | unverified |
-| Top P 0.90 · Min P 0.00 · Top K 40 | 3.2 | P2 | Partial — `topP` 0.95 only | unverified |
-| Max Tokens unlimited vs limited | 3.2 | P2 | Partial — fixed 1024 | unverified |
-| Repeat Penalty 1.10 · Repeat Last N 64 | 3.2 | P2 | Partial — penalty only | unverified |
-| `configured` vs `use default` (muted + omitted from payload) | 3.2 | P2 | Missing — knobs always send | unverified |
-| Reset to Defaults + per-parameter `(i)` | 3.2 | P2 | Missing | unverified |
-| Backend capability filter for sampling keys | 3.2 | P2 | Missing | unverified |
-| Default Configuration + "N options configured" badge | 3.2 | P2 | Missing — no Settings screen | unverified |
-| Live monospace assembled-context preview | 3.3 | P2 | Missing | unverified |
-| Always-injected toggles (date / time+tz / platform / language) | 3.3 | P2 | Missing | unverified |
-| 3 added injections (region, capability summary, format pref) | 3.3 | P2 | Missing — see §2 | unverified |
-| Conditional injections (tools / force fetch / file / image) | 3.3 | P2 → P3, M6 | Missing | unverified |
+| Persona / system-prompt editor | 3.2 | P2 | Done — editor in the per-chat sheet and in the Settings Default Configuration screen | CI-verified (`44144881214`) — `ChatConfigSheetTests` |
+| Context size 2K→256K snap (default 8K) | 3.2 | P2 | Done — `LadderSlider` on the 2048…262_144 ladder, snapping off-ladder values; reference default 8192 is shown but asserted only when the knob is set | CI-verified (`44144881214`) — `SamplingReferenceTests` |
+| Temperature 0.00–2.00 (default 0.80) + numeric | 3.2 | P2 | Partial — 0.0…2.0 slider at 0.01 steps with a 2-dp readout and the reference shown; typed numeric entry exists for the seed only, other knobs are read not typed | CI-verified (`44144881214`) |
+| Seed random/fixed + randomize | 3.2 | P2 | Done — `.random(from:)` keeps Cairn's ownership, typing makes it `.fixed`, randomize keeps the mode, cleared sends no key | CI-verified (`44144881214`) — `SamplingReferenceTests`, `ChatConfigSheetTests` |
+| Top P 0.90 · Min P 0.00 · Top K 40 | 3.2 | P2 | Done — all three, each with its own set/unset switch and reference value | CI-verified (`44144881214`) |
+| Max Tokens unlimited vs limited | 3.2 | P2 | Done — two-state choice with a 256…32_768 ladder behind the `Limited` half; unset sends no key | CI-verified (`44144881214`) — `SamplingReferenceTests` |
+| Repeat Penalty 1.10 · Repeat Last N 64 | 3.2 | P2 | Done — penalty 0.0–3.0, last-N on the 0…512 ladder | CI-verified (`44144881214`) |
+| `configured` vs `use default` (muted + omitted from payload) | 3.2 | P2 | Done — every knob is a switch; unset means the key is absent from the request, not defaulted by Cairn | CI-verified (`44144881214`) — `ChatConfigSheetTests` plus the existing payload-omission suites |
+| Reset to Defaults + per-parameter `(i)` | 3.2 | P2 | Done — "Server Defaults" takes the baseline wholesale, "Clear every knob" unsets sampling, and each row carries an `(i)` explainer | CI-verified (`44144881214`) — `ChatConfigSheetTests` (reset vs clear are distinct) |
+| Backend capability filter for sampling keys | 3.2 | P2 | Done in code — the sheet renders from `InferenceProvider.samplingSupport` and names the keys this server would drop; which key a real engine reads is finding #21, still unprobed | CI-verified (`44144881214`) for the filter; the real-server answer is pending `Scripts/probe-remote-config.sh` |
+| Default Configuration + "N options configured" badge | 3.2 | P2 | Done — Settings screen, default editor, and the badge counts knobs (persona is not a knob); a saved default seeds new chats and never rewrites an existing one | CI-verified (`44144881214`) — `ThemeAndAppearanceTests` |
+| Live monospace assembled-context preview | 3.3 | P2 | Done — same call the stream uses, so preview and wire are byte-identical, with the byte count beside it | CI-verified (`44144881214`) — `ChatConfigSheetTests.testPreviewIsTheWireByteForByte` |
+| Always-injected toggles (date / time+tz / platform / language) | 3.3 | P2 | Done | CI-verified (`44144881214`) — `ContextAssemblyTests` |
+| 3 added injections (region, capability summary, format pref) | 3.3 | P2 | Done — `localeRegion`, `capabilitySummary`, `responseFormat` are toggles in the same set | CI-verified (`44144881214`) — `ContextAssemblyTests` |
+| Conditional injections (tools / force fetch / file / image) | 3.3 | P2 → P3, M6 | Partial — `toolGuidance` and `imageContext` are written only when the turn really has tools or images; `fileContext` waits for M6, `forceWebFetch` for P3 | CI-verified (`44144881214`) — `ChatConfigSheetTests.testConditionalBlocksAppearOnlyWhenTheFeatureIsLive` |
 
 ## 0c. Ledger — servers (3.4) and model management (3.5)
 
@@ -104,9 +104,9 @@ verification label. `CI-verified` is not `on-device-verified`.
 | Vision badge + warn on a non-vision model | 3.8 | M6 | Partial — flag derived, no warning | CI-verified (flag) |
 | Export one chat / all chats: `.cairn` JSON or Markdown | 3.9 | M5 | Missing | unverified |
 | Import `.cairn` with version check + duplicate-ID handling | 3.9 | M5 | Missing | unverified |
-| Themes: original palettes, swatches, live bubble preview | 3.10 | P2 | Missing — one hard-coded theme | unverified |
+| Themes: original palettes, swatches, live bubble preview | 3.10 | P2 | Done — 4 original palettes, each with a light and a dark half resolved against the device appearance, 3-role swatches, and a preview card showing both bubble roles | CI-verified (`44144881214`) — `ThemeAndAppearanceTests` |
 | Background Processing toggle (`BGContinuedProcessingTask`) | 3.10 | M5 | Missing | unverified |
-| Generation Statistics toggle | 3.10 | P2 | Missing | unverified |
+| Generation Statistics toggle | 3.10 | P3 (deferred out of P2) | Missing — stats render, but there is no toggle to hide them | unverified |
 | Privacy statement, issues link, licenses view | 3.10 | P5 | Missing | unverified |
 | Dynamic Type, VoiceOver, Reduce Motion | 3.10 | P5 | Partial — a few labels | unverified |
 | AppIcon asset pipeline | 3.10 | P5 | Missing — mark drawn in code | unverified |
@@ -166,7 +166,7 @@ that needs both. `P*` rows are parity work folded into the existing `M3`–`M7` 
 | **P0** | `Scripts/check-no-paywall.sh` + `ci.sh` guards + `ci.yml` guards job + negative self-test in `test-guards.sh`; local runtime resolution in `ci.sh` recorded as divergence; `docs/PARITY.md` + this ledger committed | §0, F1 | `Scripts/check-no-paywall.sh` (new), `Scripts/ci.sh`, `Scripts/test-guards.sh`, `.github/workflows/ci.yml`, `ROADMAP.md` | guards green locally **and** on CI; self-test proves the guard rejects a planted `import StoreKit` and a planted upsell string without echoing it |
 | **P1** | Multi-server management: active-server selection, instant switching with per-server last model, status dot, `lmStudio` + `ollamaCloud` kinds with capability maps, setup-guide sheet, empty-state route, user-initiated LAN scan | 3.4 | `Remote/ServerProfileKind.swift`, `Remote/ServerProfileValidation.swift`, new `Remote/BackendCapabilities.swift`, new `Remote/LANDiscovery.swift` (in `CairnProviderRemote`), `ServersModel.swift`, `ServersView.swift`, `ServerProfileRow.swift`, `ServerProfileEditor+.swift`, new `ServersGuide.swift`, `Persistence/ProfileRecord.swift` | unit tests for kind→capabilities and discovery address classification using only allow-listed example addresses; CI green; **no new ATS key** — **met on `de0ec5a`, CI `44015633614`** |
 | **M3** | On-device inference: `CairnInferenceNative` (Swift 5, `mlx-swift-lm`) + `CairnInferenceLocal` (Foundation Models, memory budget, downloads), model manager tabs with progress + cancel + unload, `/api/show` details, LM Studio lifecycle, On-Device row | 3.5, 3.4 (row) | `project.yml`, `Packages/CairnInferenceNative` (new), `Packages/CairnInferenceLocal` (new), `RemoteModelService.swift`, `RemoteModelManaging.swift`, new `ModelManagerView+.swift`, `ChatModels.swift` | host unit tests for codec + budget math; CI green; then the iPhone checklist (Metal, memory, resume, SHA-256) |
-| **P2** | Per-chat + default configuration with `configured` vs `unset` semantics, capability-filtered payloads, injected-context builder with live preview, themes, statistics + thinking chips | 3.2, 3.3, 3.10 (themes) | `ChatModels.swift` (params → optional overrides), `Persistence/Mapping.swift`, new `ChatDomain/SamplingPayload.swift`, new `ChatDomain/ContextAssembly.swift`, new `CairnAppUI/ChatConfigSheet.swift`, new `CairnAppUI/SettingsView.swift`, `CairnIdentity.swift` (themes) | pure-function tests: unset keys are omitted per backend; defaults propagate to new chats; assembly order is deterministic |
+| **P2** | Per-chat + default configuration with `configured` vs `unset` semantics, capability-filtered payloads, injected-context builder with live preview, themes, statistics + thinking chips | 3.2, 3.3, 3.10 (themes) | `ChatModels.swift` (params → optional overrides), `Persistence/Mapping.swift`, new `ChatDomain/SamplingPayload.swift`, new `ChatDomain/ContextAssembly.swift`, new `CairnAppUI/ChatConfigSheet.swift`, new `CairnAppUI/SettingsView.swift`, `CairnIdentity.swift` (themes) | pure-function tests: unset keys are omitted per backend; defaults propagate to new chats; assembly order is deterministic — **met on `823bd86`, CI `44144881214`**; the statistics toggle and the `Thinking`/`Tools` chips moved to P3, and finding #21 (which keys a real engine reads) still needs a real-server probe |
 | **M4** | Hybrid Parallel + Synthesized engine, both live, synthesizer as one node carrying drafts | 3.11 | `ChatSessionModel+.swift`, new `HybridEngine.swift`, `StreamAccumulator.swift` | task-group tests with two mocks; synthesized node round-trips export |
 | **P3** | Tool runtime + built-ins + search routing (keyless default, SearXNG optional, Ollama Cloud key-gated) | 3.7 | new `CairnChatDomain/ToolRegistry.swift`, `ToolProtocol.swift`, new `CairnProviderRemote/Tools/*.swift`, `ChatSessionModel+Tools.swift`, `MessageRow+ToolCard.swift` | calculator rejects malformed/hostile input with no `NSExpression`; loop honours step limit + cancel; only the query leaves the device (asserted in tests) |
 | **M5** | Chat list + sidebar, rename/duplicate/delete/search, Markdown + code copy, Continue Generation, temp-chat banner, background processing, `.cairn` + `.md` export/import | 3.1, 3.9, 3.10 (background) | new `ChatListView.swift`, `ChatDomain/ExportBundle.swift`, `ChatDomain/ImportBundle.swift`, `ChatSessionModel+Continue.swift`, `App/CairnApp.swift` (BG tasks), `MessageRow+Markdown.swift` | export→import round-trip preserves every branch; temp chat writes nothing to disk (store refusal test) |

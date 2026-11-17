@@ -21,7 +21,8 @@ Gate for every milestone (from `.clinerules`):
 | 7 | Parity backlog | todo (per-item approval) | |
 | P0 | Zero-paywall guard + parity ledger | **done** — all gates green on `c4f58aa` | [44001146864](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/44001146864) |
 | P1 | Servers parity: active-server selection, one-tap switching with per-server last model, `lmStudio`/`ollamaCloud` kinds, guide sheet, user-initiated LAN scan | **done** — code + all five required suites green on `de0ec5a` | [44015633614](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/44015633614) |
-| P2–P5 | Parity milestones, ledger in `docs/PARITY.md` | todo (plan approved 2026-11-16) | |
+| P2 | Per-chat + default configuration, `configured` vs `unset`, capability-filtered payloads, injected context, themes | **done** — code + both new simulator suites and the domain suite green on `823bd86` | [44144881214](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/44144881214) |
+| P3–P5 | Parity milestones, ledger in `docs/PARITY.md` | todo (plan approved 2026-11-16) | |
 
 ## Decisions (durable — update here, not in chat)
 
@@ -748,7 +749,7 @@ needs both.
 | P0 | Zero-paywall guard + self-test + CI wiring + this ledger + environment correction | brief §0 | **done** — CI-verified `44001146864` |
 | P1 | Multi-server management, instant switching with per-server last model, `lmStudio` + `ollamaCloud` kinds, setup guide, user-initiated LAN scan | brief §3.4 | **done** — code landed and all five owed suites written (switching through `ChatSessionModel`, `LANDiscoveryService` on a fake transport, LM Studio + Ollama Cloud wire/codec, `ServerSelection` SwiftData round-trip, `ServersModel` selection + discovery); green on CI run `44015633614` (`de0ec5a`) |
 | M3 | On-device inference (`mlx-swift-lm` + Foundation Models) + model manager with progress, cancel, unload, `/api/show` | §3.5 | todo |
-| P2 | Per-chat + default configuration with `configured` vs `unset`, capability-filtered payloads, injected context, themes | §3.2, §3.3, §3.10 | **code landed** — `ChatConfig` replaces `SamplingParams` across domain, persistence and both wire families; context assembly + preview are deterministic and unit-tested; the duplicate system message is gone. UI landed: configuration sheet (persona, capability-filtered knobs, context toggles, live preview, reset), Settings with the Default Configuration editor, theme picker and appearance. `InferenceProvider.samplingSupport` (default `.none`) is what the sheet renders from, so a knob the server would drop is never offered. 106 domain + 59 remote host tests green, guards green 53/53, `xcodebuild build` green on `iPhone 17e`. **Not claimed**: Xcode tests green locally (50 on iPhone 17e). Not yet cited: a CI run number for this slice. Known limit: the palette themes chrome (accent, canvas, appearance) only — per-view colour tokens are still fixed |
+| P2 | Per-chat + default configuration with `configured` vs `unset`, capability-filtered payloads, injected context, themes | §3.2, §3.3, §3.10 | **done** — CI-verified `44144881214` on `823bd86`; local-Mac-verified 121 domain + 59 remote host tests, guards 53/53, 65 `CairnTests` on `iPhone 15 Pro`. Full record below; known gaps stay listed there |
 | M4 | Hybrid Parallel + Synthesized engine | preserved core | todo |
 | P3 | Tool runtime + built-ins + search routing (keyless default, SearXNG optional, cloud key-gated) | §3.7 | todo |
 | M5 | Chat list, Markdown + code copy, Continue Generation, duplicate chat, temp banner, background processing, `.cairn`/`.md` | §3.1, §3.9 | todo |
@@ -863,4 +864,76 @@ never over a real /24. The Local Network permission denial is still a hint only,
 Known gaps carried forward: the M2 server device checklist and the real-network route stay open; the
 guide sheet is build-verified with no automated UI test; and `check-no-paywall.sh` still matches names
 and strings rather than behaviour, which is why its self-test exists.
+
+
+### P2 record — per-chat configuration, injected context, and themes; closed on CI run 44144881214 (2026-11-17)
+
+Implemented: `ChatConfig` is the one per-chat configuration (persona, `SamplingConfig` of optional
+overrides, `ContextToggleSet`, response-format preference), and `configured` vs `unset` is a real
+distinction — an unset knob is **absent from the request**, so the server's own setting stands.
+`SamplingReference` is the single source for each knob's range, ladder and reference value
+(context 2048…262 144 snapping ladder, max-tokens 256…32 768 behind a two-state Unlimited/Limited
+choice, temperature 0.0…2.0 at 0.01 steps, top-P/min-P 0.0…1.0, top-K stepper 1…400, repeat penalty
+0.0…3.0, repeat last-N 0…512). `SeedSetting` separates ownership: `.random(from:)` is Cairn's number
+and randomize keeps the mode, `.fixed` is the user's typed number, cleared sends no key at all.
+`ContextAssembly` writes the system message in a fixed order from the toggles, and the conditional
+blocks (`toolGuidance`, `imageContext`) are written only when the turn really has tools or images —
+a "use your tools" block on a turn with no tools teaches a model to claim an ability it was not given.
+Preview and wire are the **same call** (`ChatSessionModel.injectedContextPreview` →
+`ChatConfig.systemPrompt(in:turn:)`), which is what makes `testPreviewIsTheWireByteForByte` mean
+something. Themes are `CairnThemeTokens` in two halves per palette with `ThemeProvider` resolving
+appearance (a pinned appearance beats the device) and falling back to the shipped default for an id
+this build does not know.
+
+**Test suites landed (2026-11-17, `823bd86`).**
+
+| Suite | Layer | What it pins down |
+| --- | --- | --- |
+| `SamplingReferenceTests` (15 cases) | domain | every knob's range and ladder, off-ladder snapping, `contextLabel`, the per-key explainers the `(i)` buttons render, and seed ownership |
+| `ChatConfigSheetTests` (8 cases) | app UI (simulator) | preview equals wire byte for byte, everything off means **no system turn at all**, persona alone survives every toggle off, conditional blocks only when the feature is live, which keys a given server would drop, clear vs reset are distinct actions, seed control ownership, and the session preview is the config's own call |
+| `ThemeAndAppearanceTests` (7 cases) | app UI (simulator) | 4 palettes each with two **different** halves, unique ids with a resolvable default, pin-vs-device appearance resolution, tokens picking the resolved half, swatch roles, and theme + appearance + default config coming back as one row after a relaunch; a saved default seeds a new chat and never rewrites an existing one |
+
+**Local gate for the pushed commit (`local-Mac-verified`, macOS 27.2.1):** `CairnChatDomain` 121 tests
+0 failures, `CairnProviderRemote` 59 tests 0 failures, `guards` 53 ok 0 failed, and `xcodebuild test`
+**65 `CairnTests` 0 failures on `iPhone 15 Pro` / iOS 27.2** — `ThemeAndAppearanceTests` was run
+isolated first (7/7) to prove the test host launches, then the whole bundle. Simulators shut down with
+`xcrun simctl shutdown all` immediately after.
+
+**A stalled test host, and the rule it taught.** A `test-without-building` run sat for 13 minutes with
+**zero tests executed** and no `xctest` process at all: the app host never launched because the command
+line asked for no build while the sources had moved since the last build. Killed by PID, result bundle
+removed, and the isolated class was run with a real `test` action (which builds) — green in one pass.
+The durable rule: **never `test-without-building` to find out whether the tree works** — build, then
+test. `Scripts/ci.sh` now keeps the CI pin untouched (`iPhone 17` / iOS 26.5 on CI) and gives a local
+Mac a destination it can actually resolve: `iPhone 15 Pro` on the newest installed runtime, created if
+the machine never had one, with the simulator shut down after the run even on a red result — which is
+what keeps an 8 GB Mac usable.
+
+**CI-verified — run [44144881214](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/44144881214) on
+`823bd86`, all three jobs green:** `Privacy guards` (five guards plus the 53-case self-test),
+`Host unit tests (macOS)` (121 `CairnChatDomain` + 59 `CairnProviderRemote`), and
+`Build + test on simulator` (**65 `CairnTests`** on `iPhone 17` / iOS 26.5). P2 is therefore closed as
+**CI-verified**, with the same work also **local-Mac-verified** on `iPhone 15 Pro` / iOS 27.2. Nothing
+in P2 is **on-device-verified** or **real-network-verified**.
+
+Known gaps carried forward, stated plainly:
+
+1. **Finding #21 is still unanswered.** The capability filter is proven in code and tests, but which
+   sampling keys a *real* engine reads has never been observed: `Scripts/probe-remote-config.sh` is
+   committed and has **not been run against a real server** — it needs a box the user runs, and no
+   address for one may enter this repo. Finding #19 (defaults nested under
+   `default_generation_config`, and Ollama's in `/api/show`) is in the same state.
+2. **The sheet footer does not follow the theme.** `ChatConfigSheet.footer` and the preview card fill
+   `Color(.secondarySystemBackground)` — a UIKit system token, not a `CairnThemeTokens` role — so a
+   picked palette changes the chrome around them but not that surface. Per-view colour tokens beyond
+   accent/canvas/appearance are still fixed.
+3. **No character cap exists on the preview.** The handoff note named a 1200-character preview cap; it
+   is not in this tree — `previewSection`, `ChatSessionModel+Config` and `ContextAssembly` hold no such
+   bound, and the preview renders the whole message with its UTF-8 byte count. The real bound in the
+   sheet is the persona editor's growth limit (`.lineLimit(3...8)`), so a long persona scrolls to eight
+   visible lines. Recorded so the next session does not chase a cap that was never written.
+4. **Deferred to P3:** the Generation Statistics toggle and the `Thinking` / `Tools` composer chips.
+   Stats render; they cannot be turned off, and there is no elapsed time.
+5. Numeric knobs are slider/stepper controls with a readout; only the seed is a typed field, so the
+   ledger row that asked for typed numeric entry per knob stays `Partial` for that reason.
 
