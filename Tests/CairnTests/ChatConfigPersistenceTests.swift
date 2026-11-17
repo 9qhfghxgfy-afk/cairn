@@ -4,6 +4,7 @@ import CairnChatDomain
 
 /// P2 persistence: the per-chat configuration, the app-wide settings, and the row a pre-P2 build
 /// left behind. These live in the Xcode target because SwiftData needs a real runtime.
+@MainActor
 final class ChatConfigPersistenceTests: XCTestCase {
 
     private var configured: ChatConfig {

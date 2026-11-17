@@ -14,7 +14,7 @@ final class SwiftDataStoreTests: XCTestCase {
     func testTreeRoundTripsThroughParentPointers() throws {
         let store = try makeStore()
         let conversation = try store.createConversation(
-            title: "Trail notes", mode: .onDeviceOnly, params: .default, isTemporary: false
+            title: "Trail notes", mode: .onDeviceOnly, config: .default, isTemporary: false
         )
         XCTAssertTrue(try store.nodes(conversationID: conversation.id).isEmpty)
 
@@ -53,7 +53,7 @@ final class SwiftDataStoreTests: XCTestCase {
     func testRegenerateAddsASiblingRowInsteadOfOverwriting() throws {
         let store = try makeStore()
         let conversation = try store.createConversation(
-            title: "Regen", mode: .onDeviceOnly, params: .default, isTemporary: false
+            title: "Regen", mode: .onDeviceOnly, config: .default, isTemporary: false
         )
         let user = ChatTree.append(to: [], conversationID: conversation.id, parentID: nil, role: .user, text: "ask")
         try store.saveNode(user.node)
@@ -77,7 +77,7 @@ final class SwiftDataStoreTests: XCTestCase {
     func testStreamingUpdateTouchesOneRowNotMany() throws {
         let store = try makeStore()
         let conversation = try store.createConversation(
-            title: "Stream", mode: .onDeviceOnly, params: .default, isTemporary: false
+            title: "Stream", mode: .onDeviceOnly, config: .default, isTemporary: false
         )
         let partial = ChatNode(
             conversationID: conversation.id, parentID: nil, role: .assistant,
@@ -102,10 +102,10 @@ final class SwiftDataStoreTests: XCTestCase {
     func testOnDiskStoreRefusesTemporaryConversations() throws {
         let store = try makeStore()
         XCTAssertThrowsError(
-            try store.createConversation(title: "temp", mode: .onDeviceOnly, params: .default, isTemporary: true)
+            try store.createConversation(title: "temp", mode: .onDeviceOnly, config: .default, isTemporary: true)
         )
         let existing = try store.createConversation(
-            title: "saved", mode: .onDeviceOnly, params: .default, isTemporary: false
+            title: "saved", mode: .onDeviceOnly, config: .default, isTemporary: false
         )
         var asTemporary = existing
         asTemporary.isTemporary = true
