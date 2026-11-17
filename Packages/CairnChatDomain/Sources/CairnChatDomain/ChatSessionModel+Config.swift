@@ -17,6 +17,13 @@ extension ChatSessionModel {
         )
     }
 
+    /// The knobs the engine in use will read. The sheet renders from this and the encoder filters
+    /// with it, so a control that the request would drop is never offered. With no engine selected
+    /// nothing is claimed: the sheet offers nothing rather than guessing.
+    public var samplingSupport: SamplingSupport {
+        activeProvider?.samplingSupport ?? .none
+    }
+
     public var currentTurnContext: TurnContext {
         if let provider = activeProvider { return turnContext(for: provider) }
         // No engine selected: state nothing about the backend rather than guessing, so the

@@ -5,10 +5,15 @@ public struct ChatScreen: View {
     // Internal, not `private`: the selector menus live in ChatScreen+Menus.swift,
     // which is a second file of the same type.
     let workspace: ChatWorkspace
+    /// Present once the app wires app-wide settings. A chat's own configuration saves without it — the
+    /// settings object is only needed for "Use for new chats", which writes the baseline.
+    let settings: ThemeModel?
     @State private var composerText = ""
+    @State private var showingConfig = false
 
-    public init(workspace: ChatWorkspace) {
+    public init(workspace: ChatWorkspace, settings: ThemeModel? = nil) {
         self.workspace = workspace
+        self.settings = settings
     }
 
     var session: ChatSessionModel? { workspace.session }
@@ -21,6 +26,25 @@ public struct ChatScreen: View {
             composer
         }
         .background(CairnTheme.slateDeep)
+        .sheet(isPresented: $showingConfig) {
+            if let session {
+                ChatConfigSheet(
+                    session: session,
+                    defaults: workspace.defaultConfig,
+                    makeDefault: makeDefaultConfig
+                )
+            }
+        }
+    }
+
+    /// Present only when a settings store is wired: the chat still saves its own configuration, and a
+    /// default the app cannot persist is a default that would be forgotten at the next launch.
+    private var makeDefaultConfig: ((ChatConfig) -> Void)? {
+        guard let settings else { return nil }
+        return { config in
+            settings.saveDefaultConfig(config)
+            workspace.apply(defaults: config)
+        }
     }
 
     // MARK: - Header
@@ -44,6 +68,28 @@ public struct ChatScreen: View {
                     .foregroundStyle(CairnTheme.stoneLight)
                 }
                 Spacer(minLength: 0)
+                Button {
+                    showingConfig = true
+                } label: {
+                    Image(systemName: "slider.horizontal.3")
+                        .overlay(alignment: .topTrailing) {
+                            if let count = session?.conversation.config.configuredOptionCount,
+                               count > 0 {
+                                Text("\(count)")
+                                    .font(.caption2.weight(.bold))
+                                    .foregroundStyle(CairnTheme.slateDeep)
+                                    .frame(width: 15, height: 15)
+                                    .background(Circle().fill(CairnTheme.amber))
+                                    .offset(x: 9, y: -8)
+                            }
+                        }
+                }
+                .foregroundStyle(CairnTheme.amber)
+                .accessibilityLabel(
+                    "Chat settings, "
+                        + "\(session?.conversation.config.configuredOptionCount ?? 0) options set"
+                )
+
                 Button(action: { workspace.startNewChat() }) {
                     Image(systemName: "square.and.pencil")
                 }

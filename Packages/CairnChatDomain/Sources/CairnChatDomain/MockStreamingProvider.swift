@@ -21,6 +21,10 @@ public struct MockStreamingProvider: InferenceProvider {
         )
     }
 
+    /// The mock reads no options at all, so it declares no knobs. A slider here would move a number
+    /// that changes nothing, which is exactly what the support table exists to stop.
+    public var samplingSupport: SamplingSupport { .none }
+
     public var thinkingCapable: Bool
     public var tokenDelayNanoseconds: UInt64
     public var failAfterTokens: Int?

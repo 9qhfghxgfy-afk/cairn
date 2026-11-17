@@ -186,6 +186,10 @@ public protocol InferenceProvider: Sendable, Identifiable {
     var displayName: String { get }
     var networkClass: NetworkClass { get }
     var capabilities: ProviderCapabilities { get }
+    /// The sampling knobs this engine will actually read. The configuration sheet renders from this
+    /// table and the encoder filters with the same table, so a knob can never appear in the UI that
+    /// the outbound request would then drop — a silently ignored knob is one the user believes works.
+    var samplingSupport: SamplingSupport { get }
     /// The saved server profile this engine was built from, when it was built from one. The
     /// server switcher needs it to map an engine back to the profile whose last model it should
     /// restore; a mock or on-device engine has none and takes the default in `RemoteEngineID`.
@@ -194,4 +198,11 @@ public protocol InferenceProvider: Sendable, Identifiable {
     func models() async throws -> [ModelInfo]
 
     func stream(_ request: GenerationRequest) -> AsyncThrowingStream<StreamChunk, any Error>
+}
+
+/// An engine that says nothing about sampling takes nothing. The default is deliberately the empty
+/// set: offering a slider an engine has not been observed to read is the failure this table exists
+/// to prevent, so support is declared rather than assumed.
+public extension InferenceProvider {
+    var samplingSupport: SamplingSupport { .none }
 }

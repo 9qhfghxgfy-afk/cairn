@@ -32,6 +32,10 @@ public struct RemoteChatProvider: InferenceProvider {
     /// The profile this engine was built from, so switching servers can restore that server's
     /// last model instead of guessing from a model name.
     public var serverProfileID: UUID? { profile.id }
+    /// The dialect's documented fields, which is the same table `chatRequestBody` filters with —
+    /// the sheet shows exactly what the encoder is willing to put on the wire.
+    public var samplingSupport: SamplingSupport { profile.kind.samplingSupport }
+
 
     public func models() async throws -> [ModelInfo] {
         guard profile.usableNow else { throw RemoteError.optInRequired }

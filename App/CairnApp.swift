@@ -18,12 +18,13 @@ struct CairnApp: App {
 struct CairnLaunchView: View {
     @State private var workspace: ChatWorkspace?
     @State private var servers: ServersModel?
+    @State private var theme: ThemeModel?
     @State private var startupFailure: String?
 
     var body: some View {
         Group {
             if let workspace {
-                CairnRootView(workspace: workspace, servers: servers)
+                CairnRootView(workspace: workspace, servers: servers, settings: theme)
             } else if let startupFailure {
                 ContentUnavailableView(
                     "Cairn could not open its local store",
@@ -49,11 +50,18 @@ struct CairnLaunchView: View {
                 // place is true in the other — and it is written through to disk, so it survives a
                 // relaunch rather than being an instant switch that evaporates.
                 let selection = ServerSelectionModel(storing: persistent)
+                // One object for the theme, the appearance and the Default Configuration, because they
+                // are one stored row: a default configuration saved without the theme beside it would
+                // leave the app disagreeing with itself.
+                let builtTheme = ThemeModel(storing: persistent)
                 let builtWorkspace = ChatWorkspace(
                     persistentStore: persistent,
                     registry: registry,
                     selection: selection
                 )
+                // Read once, then copied into each chat as it is created. Changing the default later
+                // cannot rewrite a conversation the user already has.
+                builtWorkspace.apply(defaults: builtTheme.settings.defaultChatConfig)
                 let builtServers = ServersModel(
                     storing: persistent,
                     testing: factory.tester(),
@@ -72,6 +80,7 @@ struct CairnLaunchView: View {
                 }
                 workspace = builtWorkspace
                 servers = builtServers
+                theme = builtTheme
             } catch {
                 // Typed metadata only: never log prompt content, URLs, or paths.
                 startupFailure = error.localizedDescription
