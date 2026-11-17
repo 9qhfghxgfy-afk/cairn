@@ -204,3 +204,22 @@ enum HybridTestSupport {
         throw HybridTestError(message: "the turn ended without an outcome event")
     }
 }
+
+/// A one-way flag a drain raises the moment a side has actually said something. Cancellation tests
+/// wait on this instead of sleeping: there is no wall-clock guarantee on a loaded CI runner, and a
+/// stop issued on a timer is a stop issued on a coin flip.
+actor PartialAnswerFlag {
+    private(set) var isRaised = false
+
+    func raise() { isRaised = true }
+
+    /// Bounded so a broken engine fails the test with a message instead of hanging it.
+    func waitUntilRaised(ticks: Int = 200) async -> Bool {
+        var counted = 0
+        while !isRaised, counted < ticks {
+            counted += 1
+            try? await Task.sleep(nanoseconds: 2_000_000)
+        }
+        return isRaised
+    }
+}

@@ -1120,3 +1120,11 @@ so a new file carrying a forbidden word passes on the Mac and fails on CI. The w
 tracking-hook list's `telemetry`, in a doc comment that meant "this is not tracking" — exactly the
 kind of comment the rule forbids inside shipped scope. Fix: reword the comment (never exempt it).
 Before pushing, run the guard against the **working tree**: `bash Scripts/check-no-paywall.sh`.
+
+CI run `44193788309` then went red on a different axis: `testStoppingTheTurnEndsTheStreamWithoutClaimingSuccess`
+slept 120 ms and then cancelled, so on a loaded runner no fragment had landed yet and the
+"partial answers reached the node" assertion failed. The rule it taught: **never sleep to reach a
+state — wait for the state.** The drain now raises a `PartialAnswerFlag` the moment a side says
+something, the test stops the turn only after that flag is raised, and the drain calls
+`Task.checkCancellation()` between events exactly as the session drain does. Re-ran that suite 5×
+and the session-level hybrid suite 3× locally before pushing.

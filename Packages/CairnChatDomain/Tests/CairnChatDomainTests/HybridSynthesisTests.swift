@@ -156,27 +156,40 @@ final class HybridSynthesisTests: XCTestCase {
         XCTAssertFalse(snapshot.anyRunning)
     }
 
+    /// Cancellation is driven by progress, not by a clock. A fixed sleep before the stop is what
+    /// went red on a loaded CI runner (`44193788309`): no wall-clock guarantee exists there. The
+    /// stop is issued only once the drain has actually watched a side say something, and the drain
+    /// checks its own cancellation between events exactly as the session drain does.
     func testStoppingTheTurnEndsTheStreamWithoutClaimingSuccess() async throws {
-        let slowA = ScriptedProvider(id: "lan", name: "LAN server", networkClass: .onDevice, fragments: ["one ", "two ", "three "], tokenDelay: 40_000_000)
-        let slowB = ScriptedProvider(id: "cloud", name: "Cloud server", networkClass: .onDevice, fragments: ["four ", "five "], tokenDelay: 40_000_000)
+        let slowA = ScriptedProvider(id: "lan", name: "LAN server", networkClass: .privateLan, fragments: ["one ", "two ", "three ", "four "], tokenDelay: 20_000_000)
+        let slowB = ScriptedProvider(id: "cloud", name: "Cloud server", networkClass: .publicInternet, fragments: ["five ", "six ", "seven ", "eight "], tokenDelay: 20_000_000)
         let job = HybridTestSupport.job(
             mode: .hybridParallel,
             pairs: [("lan", "server-a"), ("cloud", "cloud-a")],
             providers: [slowA, slowB],
-            classes: [.onDevice, .onDevice]
+            classes: [.privateLan, .publicInternet]
         )
 
+        let flagged = PartialAnswerFlag()
         let drain = Task {
             var seen: [HybridEvent] = []
             do {
-                for try await event in HybridEngine.stream(job) { seen.append(event) }
+                for try await event in HybridEngine.stream(job) {
+                    seen.append(event)
+                    if case .draftUpdated(let draft) = event, !draft.text.isEmpty {
+                        await flagged.raise()
+                    }
+                    try Task.checkCancellation()
+                }
             } catch {}
             return seen
         }
-        try await Task.sleep(for: .milliseconds(120))
+
+        let raised = await flagged.waitUntilRaised()
         drain.cancel()
         let events = await drain.value
 
+        XCTAssertTrue(raised, "a side must answer before the stop can be issued")
         XCTAssertTrue(
             events.contains { if case .draftUpdated(let draft) = $0 { return !draft.text.isEmpty }; return false },
             "partial answers should reach the node before the stop lands"
