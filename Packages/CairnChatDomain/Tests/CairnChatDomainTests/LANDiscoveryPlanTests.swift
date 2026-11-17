@@ -4,27 +4,32 @@ import XCTest
 /// The scan plan is pure, so the rules that keep a sweep polite and local are testable without a
 /// socket: which addresses may be touched at all, how many probes may be in flight, and what an
 /// empty result is allowed to claim.
+///
+/// Every address written here is one of the documented examples
+/// `Scripts/check-hostname.sh` allow-lists. The broadcast address is named by its last octet
+/// instead of as a literal, so no real address of anyone's network can slip into this file.
 final class LANDiscoveryPlanTests: XCTestCase {
 
     func testOnlyAPrivateIPv4IsScannable() {
         XCTAssertTrue(LANDiscoveryPlan.isScannable(host: "192.168.1.20"))
         XCTAssertTrue(LANDiscoveryPlan.isScannable(host: "10.8.0.1"), "a 10/8 network is a LAN too")
         XCTAssertFalse(LANDiscoveryPlan.isScannable(host: "127.0.0.1"), "nothing useful listens there")
-        XCTAssertFalse(LANDiscoveryPlan.isScannable(host: "100.64.0.1"), "a mesh address is not this link")
+        XCTAssertFalse(LANDiscoveryPlan.isScannable(host: "100.64.1.2"), "a mesh address is not this link")
         XCTAssertFalse(LANDiscoveryPlan.isScannable(host: "your-host.example.com"), "a name is not a sweep")
     }
 
     func testSweepIsOneSubnetAndSkipsTheDeviceItself() {
         let sweep = LANDiscoveryPlan.hostSweep(baseAddress: "192.168.1.20")
         XCTAssertEqual(sweep.count, 253)
-        XCTAssertFalse(sweep.contains("192.168.1.20"))
-        XCTAssertFalse(sweep.contains("192.168.1.0"))
-        XCTAssertFalse(sweep.contains("192.168.1.255"))
+        XCTAssertFalse(sweep.contains("192.168.1.20"), "the phone is not asked for its own models")
+        XCTAssertFalse(sweep.contains("192.168.1.0"), "the network address is not a host")
+        XCTAssertFalse(sweep.contains { $0.hasSuffix(".255") }, "the broadcast address is never probed")
         XCTAssertTrue(sweep.allSatisfy { $0.hasPrefix("192.168.1.") }, "a sweep never leaves the /24")
         // Nothing scannable means nothing to do, rather than a guess at another range.
         XCTAssertTrue(LANDiscoveryPlan.hostSweep(baseAddress: "127.0.0.1").isEmpty)
         XCTAssertTrue(LANDiscoveryPlan.hostSweep(baseAddress: "your-host.example.com").isEmpty)
     }
+
 
     func testProbesStayOnTheDeclaredPortsAndAbsolutePaths() {
         let targets = LANDiscoveryPlan.primaryTargets()
@@ -59,7 +64,7 @@ final class LANDiscoveryPlanTests: XCTestCase {
             needsCredential: true
         )
         let other = ServerProbeHit(
-            probe: ServerProbe(host: "192.168.1.31", port: 1234, path: "/api/v1/models", kind: .lmStudio),
+            probe: ServerProbe(host: "192.168.1.10", port: 1234, path: "/api/v1/models", kind: .lmStudio),
             modelCount: 2
         )
 
@@ -71,10 +76,34 @@ final class LANDiscoveryPlanTests: XCTestCase {
         XCTAssertEqual(found?.modelCount, 6)
         XCTAssertFalse(found?.needsCredential ?? true)
         // Ordered by address, so the list does not shuffle between scans.
-        XCTAssertEqual(servers.map(\.host), ["192.168.1.20", "192.168.1.31"])
+        XCTAssertEqual(servers.map(\.host), ["192.168.1.10", "192.168.1.20"])
         XCTAssertEqual(found?.draftProfile().kind, .ollama)
         XCTAssertEqual(found?.baseURLString, "http://192.168.1.20:11434")
     }
+
+    /// Which end of the server answered is decided by what the probe asked, not by which hit
+    /// happened to arrive first: a key-gated generic listing that lands before Ollama's own
+    /// `/api/tags` must still lose to it, or a found server gets saved as the wrong dialect.
+    func testANativeHitOutranksAGenericHitInEitherArrivalOrder() {
+        let host = "192.168.1.20"
+        let native = ServerProbeHit(
+            probe: ServerProbe(host: host, port: 11434, path: "/api/tags", kind: .ollama),
+            modelCount: 6
+        )
+        let generic = ServerProbeHit(
+            probe: ServerProbe(host: host, port: 11434, path: "/v1/models", kind: .openAICompatible),
+            needsCredential: true
+        )
+
+        let nativeArrivedFirst = LANDiscoveryPlan.servers(from: [native, generic]).first
+        let genericArrivedFirst = LANDiscoveryPlan.servers(from: [generic, native]).first
+
+        XCTAssertEqual(nativeArrivedFirst?.kind, .ollama)
+        XCTAssertEqual(genericArrivedFirst?.kind, .ollama, "the native answer wins whoever arrives second")
+        XCTAssertEqual(genericArrivedFirst?.modelCount, 6)
+        XCTAssertFalse(genericArrivedFirst?.needsCredential ?? true)
+    }
+
 
     func testAnEmptyScanOnlyBlamesThePermissionWhenNothingWasReached() {
         XCTAssertNil(LANDiscoveryPlan.emptyScanHint(serversFound: 1, hostsScanned: 253, failures: 20))
