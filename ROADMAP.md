@@ -20,7 +20,7 @@ Gate for every milestone (from `.clinerules`):
 | 6 | Local RAG, vision, web search, voice | todo | |
 | 7 | Parity backlog | todo (per-item approval) | |
 | P0 | Zero-paywall guard + parity ledger | **done** — all gates green on `c4f58aa` | [44001146864](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/44001146864) |
-| P1 | Servers parity: active-server selection, one-tap switching with per-server last model, `lmStudio`/`ollamaCloud` kinds, guide sheet, user-initiated LAN scan | **in progress** — code and all five required suites landed, locally green (guards, 95 domain + 59 remote host tests, 45 simulator tests), **no CI run number yet** | pending |
+| P1 | Servers parity: active-server selection, one-tap switching with per-server last model, `lmStudio`/`ollamaCloud` kinds, guide sheet, user-initiated LAN scan | **done** — code + all five required suites green on `de0ec5a` | [44015633614](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/44015633614) |
 | P2–P5 | Parity milestones, ledger in `docs/PARITY.md` | todo (plan approved 2026-11-16) | |
 
 ## Decisions (durable — update here, not in chat)
@@ -746,7 +746,7 @@ needs both.
 | # | Scope | Spec | Status |
 |---|---|---|---|
 | P0 | Zero-paywall guard + self-test + CI wiring + this ledger + environment correction | brief §0 | **done** — CI-verified `44001146864` |
-| P1 | Multi-server management, instant switching with per-server last model, `lmStudio` + `ollamaCloud` kinds, setup guide, user-initiated LAN scan | brief §3.4 | **in progress** — code landed and all five owed suites written (switching through `ChatSessionModel`, `LANDiscoveryService` on a fake transport, LM Studio + Ollama Cloud wire/codec, `ServerSelection` SwiftData round-trip, `ServersModel` selection + discovery); locally green at 95 domain + 59 remote host tests and 45 simulator tests; owed: **a green CI run** |
+| P1 | Multi-server management, instant switching with per-server last model, `lmStudio` + `ollamaCloud` kinds, setup guide, user-initiated LAN scan | brief §3.4 | **done** — code landed and all five owed suites written (switching through `ChatSessionModel`, `LANDiscoveryService` on a fake transport, LM Studio + Ollama Cloud wire/codec, `ServerSelection` SwiftData round-trip, `ServersModel` selection + discovery); green on CI run `44015633614` (`de0ec5a`) |
 | M3 | On-device inference (`mlx-swift-lm` + Foundation Models) + model manager with progress, cancel, unload, `/api/show` | §3.5 | todo |
 | P2 | Per-chat + default configuration with `configured` vs `unset`, capability-filtered payloads, injected context, themes | §3.2, §3.3, §3.10 | todo |
 | M4 | Hybrid Parallel + Synthesized engine | preserved core | todo |
@@ -804,7 +804,7 @@ Known gaps after P0: `check-no-paywall.sh` matches names and strings, not behavi
 in some novel way still needs review, which is why the self-test exists. The M2 device checklist and
 the real-network route remain open and unverified.
 
-### P1 record — servers parity, in progress (2026-11-16)
+### P1 record — servers parity, closed on CI run 44015633614 (2026-11-16)
 
 Implemented: `ServerBackend` is the single kind→endpoint/capability table (`ServerEndpoints` paths
 are absolute and no kind declares a `v0` path, which `ServerKindBackendTests` enforces); selection
@@ -815,9 +815,9 @@ one /24, bounded in-flight probes, `emptyScanHint` names the Local Network permi
 nothing at all was reached); the scan is user-initiated, cancellable, and yields drafts that go
 through the ordinary validated save path.
 
-Verification so far is **local only**: 53 guard cases, 87 domain host tests (24 new), 35 remote host
-tests, and `xcodebuild build` for the simulator. Nothing here is CI-verified, on-device-verified, or
-real-network-verified. Ollama Cloud behaviour against the real service, and LM Studio's lifecycle
+Verification during the build-out was **local only**: 53 guard cases, 87 domain host tests (24 new),
+35 remote host tests, and `xcodebuild build` for the simulator — an intermediate state, superseded by
+the closure below. Ollama Cloud behaviour against the real service, and LM Studio's lifecycle
 endpoints, remain unverified by design — the lifecycle calls are not wired (M3) and no network test
 is run from this machine.
 
@@ -843,4 +843,24 @@ the guess: SwiftData does not reject a second `@Attribute(.unique)` row on an in
 that test now asserts the app-visible rule (repeated writes leave one choice, an older write does not
 reappear); and a LAN kind's Add-server draft arrives prefilled with the scheme only (`http://`),
 which is the intended rule — the user's address is never guessed.
+
+**CI-verified — run [44015633614](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/44015633614)
+on `de0ec5a`, all three jobs green:** `Privacy guards` (five guards plus the 53-case self-test),
+`Host unit tests (macOS)` (95 `CairnChatDomain` + 59 `CairnProviderRemote`), and
+`Build + test on simulator` (45 `CairnTests`). P1 is therefore closed as **CI-verified**; the local
+lane adds **local-Mac-verified** for the same work. `@testable import CairnAppUI` in the app test
+target compiled clean on the pinned Xcode 26.6, which is what let the scan lifecycle — deliberately
+module-internal — be tested without widening it.
+
+**Nothing in P1 is on-device-verified or real-network-verified**, and that is the honest edge of what
+was built here rather than an oversight: Ollama Cloud was proven inert (no packet) before the opt-in
+and proven to send exactly one request carrying the Keychain token after it — never against
+`ollama.com` itself. LM Studio's endpoints were proven to be addressed and its lifecycle calls proven
+refused without issuing a request — never against a running LM Studio. The LAN sweep was proven
+bounded, one-question-per-port, monotonic in progress and cancellable mid-sweep on a fake transport —
+never over a real /24. The Local Network permission denial is still a hint only, unproven on a device.
+
+Known gaps carried forward: the M2 server device checklist and the real-network route stay open; the
+guide sheet is build-verified with no automated UI test; and `check-no-paywall.sh` still matches names
+and strings rather than behaviour, which is why its self-test exists.
 
