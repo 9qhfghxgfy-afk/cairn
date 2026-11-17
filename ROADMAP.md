@@ -19,7 +19,7 @@ Gate for every milestone (from `.clinerules`):
 | 5 | Advanced controls, interruption recovery, export/import | todo | |
 | 6 | Local RAG, vision, web search, voice | todo | |
 | 7 | Parity backlog | todo (per-item approval) | |
-| P0 | Zero-paywall guard + parity ledger | **local green, pushed** — CI number under *Parity program* | |
+| P0 | Zero-paywall guard + parity ledger | **done** — all gates green on `c4f58aa` | [44001146864](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/44001146864) |
 | P1–P5 | Parity milestones, ledger in `docs/PARITY.md` | todo (plan approved 2026-11-16) | |
 
 ## Decisions (durable — update here, not in chat)
@@ -744,7 +744,7 @@ needs both.
 
 | # | Scope | Spec | Status |
 |---|---|---|---|
-| P0 | Zero-paywall guard + self-test + CI wiring + this ledger + environment correction | brief §0 | local green, pushed |
+| P0 | Zero-paywall guard + self-test + CI wiring + this ledger + environment correction | brief §0 | **done** — CI-verified `44001146864` |
 | P1 | Multi-server management, instant switching with per-server last model, `lmStudio` + `ollamaCloud` kinds, setup guide, user-initiated LAN scan | brief §3.4 | todo |
 | M3 | On-device inference (`mlx-swift-lm` + Foundation Models) + model manager with progress, cancel, unload, `/api/show` | §3.5 | todo |
 | P2 | Per-chat + default configuration with `configured` vs `unset`, capability-filtered payloads, injected context, themes | §3.2, §3.3, §3.10 | todo |
@@ -790,9 +790,14 @@ saying "subscription-free" was reworded for the same reason.
 Verification: `Scripts/ci.sh guards` **exit 0** — all four privacy guards, the new guard, and the
 self-test at **53 ok / 0 failed**. `Scripts/ci.sh build` → **BUILD SUCCEEDED**. Host suites
 `swift test` → `CairnChatDomain` **63 tests, 0 failures**; `CairnProviderRemote` **35 tests,
-0 failures**. Labels: **local-Mac-verified**. Nothing in P0 is on-device-verified or
-real-network-verified, and the CI number for the pushed commit is recorded in the follow-up commit
-that cites it.
+0 failures**.
+
+**CI-verified — run [44001146864](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/44001146864)
+on `c4f58aa`, all three jobs green:** `Privacy guards` (five guards including the new one, plus the
+53-case self-test), `Host unit tests (macOS)`, `Build + test on simulator`. P0 is therefore closed as
+**CI-verified**; the local lane adds **local-Mac-verified** for the same work. Nothing in P0 is
+on-device-verified or real-network-verified — no P0 change touches a network path, a device, or
+memory.
 
 Known gaps after P0: `check-no-paywall.sh` matches names and strings, not behaviour — a cap spelled
 in some novel way still needs review, which is why the self-test exists. P1 has not started. The M2

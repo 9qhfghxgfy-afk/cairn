@@ -112,8 +112,8 @@ verification label. `CI-verified` is not `on-device-verified`.
 | AppIcon asset pipeline | 3.10 | P5 | Missing — mark drawn in code | unverified |
 | Hybrid engine preserved (schema now, engine in M4) | 3.11 | M4 | Partial — schema + modes stored, engine absent | CI-verified (schema) |
 | Keychain secrets, network class, privacy guards kept | 3.11 | M0–M2 | Done | CI-verified |
-| Zero paywall, zero limits, guard-enforced | §0 | P0 | **Done** — `Scripts/check-no-paywall.sh`, wired into `ci.sh guards` and the CI guards job | local-Mac-verified (self-test 53 ok / 0 failed); CI pending |
-| No in-app billing, no tracking hook anywhere | §0 | P0 | **Done** — none present, and now machine-enforced | local-Mac-verified; CI pending |
+| Zero paywall, zero limits, guard-enforced | §0 | P0 | **Done** — `Scripts/check-no-paywall.sh`, wired into `ci.sh guards` and the CI guards job | **CI-verified** (`44001146864`) |
+| No in-app billing, no tracking hook anywhere | §0 | P0 | **Done** — none present, and now machine-enforced | **CI-verified** (`44001146864`) |
 
 ## 1. Findings that change the spec (verified 2026-11-16)
 
