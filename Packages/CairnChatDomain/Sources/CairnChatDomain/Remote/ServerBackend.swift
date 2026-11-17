@@ -39,13 +39,23 @@ public struct ServerBackend: Sendable, Equatable {
         case .ollama:
             return ServerBackend(
                 capabilities: .ollama,
-                endpoints: ServerEndpoints(chat: "/api/chat", models: "/api/tags"),
+                endpoints: ServerEndpoints(
+                    chat: "/api/chat",
+                    models: "/api/tags",
+                    // M3b: the write side. Unload is `/api/generate` with keep_alive 0 — the
+                    // documented way to release a model without deleting it.
+                    unload: "/api/generate",
+                    download: "/api/pull",
+                    running: "/api/ps",
+                    show: "/api/show"
+                ),
                 defaultPort: 11434
             )
         case .lmStudio:
             // Native REST for the model list and the lifecycle, OpenAI-compatible for the chat
-            // stream. `lifecycleWired: false` is the M3 gate: the paths are declared now so the
-            // calls land against the right endpoint, and no screen offers them before they exist.
+            // stream. `lifecycleWired: true` from M3b: the calls are really issued now. The wire
+            // PAYLOAD shapes remain pending verification against a real LM Studio, which is said
+            // out loud in ROADMAP.md rather than resolved by claiming a flag means a working call.
             return ServerBackend(
                 capabilities: .lmStudio,
                 endpoints: ServerEndpoints(
@@ -54,7 +64,8 @@ public struct ServerBackend: Sendable, Equatable {
                     load: "/api/v1/models/load",
                     unload: "/api/v1/models/unload",
                     download: "/api/v1/models/download",
-                    lifecycleWired: false
+                    running: "/api/v1/models",
+                    lifecycleWired: true
                 ),
                 defaultPort: 1234
             )

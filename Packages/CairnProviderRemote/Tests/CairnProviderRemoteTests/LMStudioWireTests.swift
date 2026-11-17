@@ -23,13 +23,16 @@ final class LMStudioWireTests: XCTestCase {
         XCTAssertEqual(wire.listAccept, "application/json")
     }
 
-    /// A declared endpoint is not a working one. The lifecycle paths are recorded now so M3 can
-    /// address the right route, and nothing may issue them until they are proven against a server.
-    func testLifecycleRoutesAreDeclaredAndRefusedWithoutARequest() async throws {
+    /// M3b closed the gate that this test used to hold shut: LM Studio's native lifecycle routes
+    /// are now really issued, by `RemoteModelLifecycleService`. What still has to hold is that the
+    /// OLD boundary refuses the operations this kind does not have, and refuses without issuing a
+    /// request that would only 404. The route PAYLOADS remain pending verification against a real
+    /// server, which ROADMAP.md says out loud rather than resolving by flipping a flag.
+    func testLifecycleRoutesAreDeclaredAndTheOldBoundaryStillRefusesWhatThisKindLacks() async throws {
         let transport = StubTransport(["/api/v1/models/load": .body("{}"), "/api/v1/models": .body("{}")])
         let service = RemoteModelService(transport: transport, secrets: WireFixtures.secrets())
 
-        XCTAssertFalse(ServerProfileKind.lmStudio.backend.endpoints.lifecycleWired, "still the M3 gate")
+        XCTAssertTrue(ServerProfileKind.lmStudio.backend.endpoints.lifecycleWired, "wired in M3b")
         XCTAssertEqual(ServerProfileKind.lmStudio.backend.endpoints.load, "/api/v1/models/load")
         XCTAssertEqual(ServerProfileKind.lmStudio.backend.endpoints.unload, "/api/v1/models/unload")
 
