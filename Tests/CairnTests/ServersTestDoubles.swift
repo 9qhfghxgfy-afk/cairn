@@ -74,3 +74,30 @@ final class StubModelService: RemoteModelManaging {
 
     func delete(model: String, profile: ServerProfile) async throws {}
 }
+
+/// A local-network scan that reports what it is told to and counts how many times it was asked. No
+/// socket is involved here — the sweep itself is tested in `CairnProviderRemote`, where it lives.
+/// `hangsUntilCancelled` is what makes the stop path testable: the scan runs until the caller says
+/// stop, exactly as a real one does.
+@MainActor
+final class FakeScanner: ServerDiscovering {
+    var report: LANDiscoveryReport = .empty
+    var progressTicks = 0
+    var calls = 0
+    var hangsUntilCancelled = false
+
+    func discover(progress: @escaping @MainActor (LANDiscoveryProgress) -> Void) async -> LANDiscoveryReport {
+        calls += 1
+        if hangsUntilCancelled {
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 5_000_000)
+            }
+            return LANDiscoveryReport(cancelled: true)
+        }
+        for step in 1...max(progressTicks, 1) where step <= progressTicks {
+            progress(LANDiscoveryProgress(hostsDone: step, hostsTotal: progressTicks))
+        }
+        return report
+    }
+}
+
