@@ -68,8 +68,8 @@ verification label. `CI-verified` is not `on-device-verified`.
 | "How do I get started?" guide sheet | 3.4 | P1 | Done | CI-verified build (`44015633614`); no automated UI test for the sheet itself |
 | Scan Local Network, bounded, prefills Add Server | 3.4 | P1 | Done — user-initiated, cancellable, one /24, drafts only, no ATS change | CI-verified (`44015633614`) — `LANDiscoveryPlanTests` (pure) + `LANDiscoveryServiceTests` on a fake transport; the real socket path is CI-verified only |
 | Local Network prompt + denial handling | 3.4 | M2 | Partial — hint only, unproven on device | real-network pending |
-| On-Device row pinned at top with runtime status | 3.4, 3.5 | M3 | Done — `OnDeviceEngineSection` is the first section of the Servers list; availability arrives as an `OnDeviceEngineReport` value built by the App, so `CairnAppUI` still imports only `CairnChatDomain` and no view can call a runtime | Simulator build green locally on `iPhone 15 Pro` (`7882498`), CI run `44181840064` pending; **on-device pending** — whether a given iPhone reports the Apple model ready is only knowable on that phone |
-| Running / Installed / Download model manager | 3.5 | M3 | Done — three tabs in `CairnAppUI` (`ModelManagerView`), each stating its own empty condition | Simulator build green locally (`7882498`), CI run `44181840064` pending; the server reads behind it are CI-verified `84cf613` (`ModelLifecycleReadTests`, `ModelLifecycleWriteTests`); **real-network pending** |
+| On-Device row pinned at top with runtime status | 3.4, 3.5 | M3 | Done — `OnDeviceEngineSection` is the first section of the Servers list; availability arrives as an `OnDeviceEngineReport` value built by the App, so `CairnAppUI` still imports only `CairnChatDomain` and no view can call a runtime | CI-verified (`44182366343`, green on `c03168f`) + 65 `CairnTests` on `iPhone 15 Pro` locally; **on-device pending** — whether a given iPhone reports the Apple model ready is only knowable on that phone |
+| Running / Installed / Download model manager | 3.5 | M3 | Done — three tabs in `CairnAppUI` (`ModelManagerView`), each stating its own empty condition | CI-verified (`44182366343`) for the build; the server reads behind it are CI-verified `84cf613` (`ModelLifecycleReadTests`, `ModelLifecycleWriteTests`); **real-network pending** — no tab has been driven against a live server |
 | Streaming pull progress + cancel | 3.5 | M3 | Done — `ModelLifecycleManaging.pull` streams `ModelPullProgress` (the server's own status text, and a fraction only when it named a total); Stop cancels the task, which abandons the socket | CI-verified `84cf613` — `testPullStreamsProgressWithRealFractions`, `testCancellingAPullAbandonsTheConnection`; **real-network pending** |
 | Model detail via `/api/show` | 3.5 | M3 | Done — `ModelDetail`: parameter size, quantization, context length, and capability badges **only** from published flags | CI-verified `84cf613` — `testDetailReportsOnlyPublishedFieldsAndNoInferredBadges`; **real-network pending** |
 | Unload / evict a loaded model | 3.5 | M3 | Done — Ollama `keep_alive: 0` release, LM Studio native unload; on-device release is the registry's, executed on a memory warning | CI-verified `84cf613` (server side) + `44171820190` (`ResidentModelPolicy` / `OnDeviceModelRegistry`, 52 host tests); **real-network and on-device pending** |
@@ -116,6 +116,10 @@ verification label. `CI-verified` is not `on-device-verified`.
 | No in-app billing, no tracking hook anywhere | §0 | P0 | **Done** — none present, and now machine-enforced | **CI-verified** (`44001146864`) |
 
 ## 0e. Ledger — on-device inference and the Model Manager (M3)
+
+**M3 closed on code + CI: green run `44182366343` (on `c03168f`, which carries `31162c7`, `38d5ed3`,
+`84cf613`, `7882498`).** Nothing in this ledger is on-device-verified or real-network-verified, and the
+MLX runtime has never been linked into a build on this machine. Each row names which category is owed.
 
 | Item | Status | Notes |
 |---|---|---|

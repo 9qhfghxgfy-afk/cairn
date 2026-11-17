@@ -748,7 +748,7 @@ needs both.
 |---|---|---|---|
 | P0 | Zero-paywall guard + self-test + CI wiring + this ledger + environment correction | brief §0 | **done** — CI-verified `44001146864` |
 | P1 | Multi-server management, instant switching with per-server last model, `lmStudio` + `ollamaCloud` kinds, setup guide, user-initiated LAN scan | brief §3.4 | **done** — code landed and all five owed suites written (switching through `ChatSessionModel`, `LANDiscoveryService` on a fake transport, LM Studio + Ollama Cloud wire/codec, `ServerSelection` SwiftData round-trip, `ServersModel` selection + discovery); green on CI run `44015633614` (`de0ec5a`) |
-| M3 | On-device inference (`mlx-swift-lm` + Foundation Models) + model manager with progress, cancel, unload, `/api/show` | §3.5 | **code-complete** — CI-verified `44171820190`, `44177831990`, `44179719494`; the UI/wiring commit `7882498` is green locally (build + 65 `CairnTests` on `iPhone 15 Pro`) with CI run `44181840064` still in flight, so M3 may not be called closed until that run reports. **On-device and real-network verification are both still owed** — the checklist at the end of this milestone is the sign-off |
+| M3 | On-device inference (`mlx-swift-lm` + Foundation Models) + model manager with progress, cancel, unload, `/api/show` | §3.5 | **closed (code + CI)** — green run `44182366343` on `c03168f`, which carries `31162c7` + `38d5ed3` + `84cf613` + `7882498`; earlier runs `44171820190`, `44177831990`, `44179719494` also green; 65 `CairnTests` on `iPhone 15 Pro` locally. **On-device and real-network verification are still owed** — the checklist at the end of this milestone is the sign-off, and the MLX runtime has never been linked or run |
 | P2 | Per-chat + default configuration with `configured` vs `unset`, capability-filtered payloads, injected context, themes | §3.2, §3.3, §3.10 | **done** — CI-verified `44144881214` on `823bd86`; local-Mac-verified 121 domain + 59 remote host tests, guards 53/53, 65 `CairnTests` on `iPhone 15 Pro`. Full record below; known gaps stay listed there |
 | M4 | Hybrid Parallel + Synthesized engine | preserved core | todo |
 | P3 | Tool runtime + built-ins + search routing (keyless default, SearXNG optional, cloud key-gated) | §3.7 | todo |
@@ -987,7 +987,7 @@ Verification so far for M3a is **local green only** — no CI run number, no dev
 | `31162c7` | Fix the host-job compile break M3a introduced: a local `matches` in `CatalogQuery` shadowed the static `CatalogQuery.matches` under Swift 6.2. Renamed to `matchedEntries`, callees qualified | `44171820190` |
 | `38d5ed3` | `Packages/CairnInferenceNative` — the Swift 5 island + `DeviceTemplateChunkParser` (17 host tests) | `44177831990` |
 | `84cf613` | `ModelLifecycleManaging` + Ollama/LM Studio lifecycle + 10 host tests (remote suite 59 → 69) | `44179719494` |
-| `7882498` | Model Manager UI, pinned On-Device row, `project.yml` + `CairnApp` wiring | `44181840064` — see the verification note below |
+| `7882498` | Model Manager UI, pinned On-Device row, `project.yml` + `CairnApp` wiring | `44182366343` (green on `c03168f`, which carries all four commits — see the note) |
 
 **Why the Swift 5 island exists.** `mlx-swift-lm` pulls C++ interop and swift-syntax macro plugins
 that are not strict-concurrency clean, so a Swift 6 `complete`-mode target that imports it cannot
@@ -1038,8 +1038,10 @@ Xcode enforces across the whole dependency graph.
 * **Local, on the UI/wiring commit `7882498`:** `xcodegen generate`, then
   `xcodebuild -scheme Cairn -destination 'platform=iOS Simulator,name=iPhone 15 Pro' build` →
   **BUILD SUCCEEDED**; then `xcodebuild test` on the same destination → **65 test cases, 0 failures**;
-  simulators shut down after. Its CI run, `44181840064`, was still in flight when this section was
-  written; the closure commit below records its result rather than assuming it.
+  simulators shut down after. That commit's own run, `44181840064`, was **cancelled**, not failed:
+  `ci.yml` sets `cancel-in-progress: true` and the documentation push superseded it. The closure run is
+  **`44182366343`, green on `c03168f`** — the same source tree plus the docs — and that is the number
+  M3 is claimed against.
 * **On-device-verified: nothing.** Not one hardware-dependent claim in M3 has been observed on a
   phone — the Apple model's real availability, `os_proc_available_memory()`, a real memory warning, and
   MLX generation all need the device.
@@ -1058,7 +1060,8 @@ Xcode enforces across the whole dependency graph.
    model on hardware.
 6. BG-task continuation and ActivityKit from the brief are untouched; neither was needed to close M3.
 
-**M3 status: code-complete and CI-green.** The on-device checklist below is the sign-off list, and
-until it is run on a phone every hardware-dependent claim in this milestone stays unverified.
+**M3 is closed on the code and CI axes — green run `44182366343`.** It is **not** closed on hardware or
+on a real network: the on-device checklist below is the sign-off list, and until it is run on a phone
+every hardware-dependent claim in this milestone stays unverified.
 
 
