@@ -750,7 +750,7 @@ needs both.
 | P1 | Multi-server management, instant switching with per-server last model, `lmStudio` + `ollamaCloud` kinds, setup guide, user-initiated LAN scan | brief §3.4 | **done** — code landed and all five owed suites written (switching through `ChatSessionModel`, `LANDiscoveryService` on a fake transport, LM Studio + Ollama Cloud wire/codec, `ServerSelection` SwiftData round-trip, `ServersModel` selection + discovery); green on CI run `44015633614` (`de0ec5a`) |
 | M3 | On-device inference (`mlx-swift-lm` + Foundation Models) + model manager with progress, cancel, unload, `/api/show` | §3.5 | **closed (code + CI)** — green run `44182366343` on `c03168f`, which carries `31162c7` + `38d5ed3` + `84cf613` + `7882498`; earlier runs `44171820190`, `44177831990`, `44179719494` also green; 65 `CairnTests` on `iPhone 15 Pro` locally. **On-device and real-network verification are still owed** — the checklist at the end of this milestone is the sign-off, and the MLX runtime has never been linked or run |
 | P2 | Per-chat + default configuration with `configured` vs `unset`, capability-filtered payloads, injected context, themes | §3.2, §3.3, §3.10 | **done** — CI-verified `44144881214` on `823bd86`; local-Mac-verified 121 domain + 59 remote host tests, guards 53/53, 65 `CairnTests` on `iPhone 15 Pro`. Full record below; known gaps stay listed there |
-| M4 | Hybrid Parallel + Synthesized engine | preserved core | **in progress** — engine, session path, and provenance storage landed 2026-11-17 (159 host tests green, guards 53/53, simulator build green); picker, progress panels, draft cards, and the real residency gate owed. Record at the end of this file |
+| M4 | Hybrid Parallel + Synthesized engine | preserved core | **in progress** — engine, session path, and provenance storage landed and **CI-verified `44195224728`** on `4689d42` (159 host tests, guards, simulator build + test); picker, progress panels, draft cards, and the real residency gate owed. Record at the end of this file |
 | P3 | Tool runtime + built-ins + search routing (keyless default, SearXNG optional, cloud key-gated) | §3.7 | todo |
 | M5 | Chat list, Markdown + code copy, Continue Generation, duplicate chat, temp banner, background processing, `.cairn`/`.md` | §3.1, §3.9 | todo |
 | M6 | File + image attachments, chunked retrieval with citations, vision gating | §3.8 | todo |
@@ -1099,7 +1099,9 @@ provenance. The picker, the progress panels, and the app-level residency gate ar
   behaviour, regenerate-as-sibling). `bash Scripts/ci.sh hosts` green across all four suites.
 * **local-Mac-verified**: `bash Scripts/ci.sh guards` — 53/53; `xcodegen generate` +
   `Scripts/ci.sh build` — ** BUILD SUCCEEDED ** on the simulator.
-* **CI-verified**: not yet — this slice is being pushed for a run to cite.
+* **CI-verified**: green run **`44195224728`** on `4689d42` — privacy guards, host unit tests
+  (159 domain tests, four host suites), and build + test on the simulator all passed. The two red
+  runs on this slice are recorded below, because each one taught a rule worth keeping.
 * **on-device-verified / real-network-verified**: owed. The residency rule is only proven against
   a fake gate until the real `os_proc_available_memory()` gate is wired and run on a phone.
 
