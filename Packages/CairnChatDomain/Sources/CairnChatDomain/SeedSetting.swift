@@ -19,6 +19,15 @@ public struct SeedSetting: Sendable, Equatable, Codable {
 
         public var id: String { rawValue }
         public var displayName: String { self == .random ? "Random" : "Fixed" }
+
+        /// Who owns the number, in the words the sheet shows beside the field. The distinction is the
+        /// whole point of the type, so it is stated in the domain rather than improvised per screen.
+        public var note: String {
+            switch self {
+            case .random: return "Cairn chose this number; it is still sent on every request."
+            case .fixed: return "You typed this number; Cairn will not change it."
+            }
+        }
     }
 
     public var mode: Mode
