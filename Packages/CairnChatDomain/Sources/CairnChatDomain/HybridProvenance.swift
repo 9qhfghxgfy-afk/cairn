@@ -2,7 +2,7 @@ import Foundation
 
 /// How one hybrid turn was produced, stored on the single node it wrote.
 ///
-/// This is provenance, not telemetry: nothing here leaves the device, and it exists so a
+/// Provenance lives and dies on this device: nothing in it leaves the phone. It exists so a
 /// synthesized answer can be read back later and said out loud — which engines were asked,
 /// which one wrote the unified answer, and how many of the drafts failed. No address, no
 /// credential, no prompt text.

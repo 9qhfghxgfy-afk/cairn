@@ -1112,3 +1112,11 @@ provenance. The picker, the progress panels, and the app-level residency gate ar
    unload, not just answer no.
 3. `CairnTests` hybrid cases on a simulator, then `docs/PARITY.md` §0d + §3.11.
 4. A green CI run number on the commit that lands this — no milestone is claimed without one.
+
+### Process note — why CI run `44193388503` went red and `25ddcb9`'s guard looked green locally
+`Scripts/ci.sh guards` runs the guard self-test, which plants values in a throwaway tree and then
+checks **the committed tree**. Files that are still untracked are therefore never scanned locally,
+so a new file carrying a forbidden word passes on the Mac and fails on CI. The word here was the
+tracking-hook list's `telemetry`, in a doc comment that meant "this is not tracking" — exactly the
+kind of comment the rule forbids inside shipped scope. Fix: reword the comment (never exempt it).
+Before pushing, run the guard against the **working tree**: `bash Scripts/check-no-paywall.sh`.
