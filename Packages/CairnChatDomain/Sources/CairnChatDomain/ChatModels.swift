@@ -11,6 +11,13 @@ public enum NodeKind: String, Sendable, Equatable, Codable {
     /// A Hybrid Synthesized turn: ONE assistant node that carries the candidate
     /// drafts it was built from, so it replays and exports as a single node.
     case synthesized
+    /// A Hybrid Parallel turn: also ONE assistant node, holding both candidates as
+    /// drafts. Its own text is the primary candidate's answer, so a later turn in this
+    /// branch still gets a real assistant message even when the other side failed.
+    case hybridParallel
+
+    /// True for either Hybrid shape — one node, many drafts.
+    public var isHybrid: Bool { self == .synthesized || self == .hybridParallel }
 }
 
 public enum NodeState: String, Sendable, Equatable, Codable {
@@ -46,9 +53,13 @@ public enum InferenceMode: String, Sendable, Equatable, Codable, CaseIterable, I
 
     /// True when this mode can move data off the device.
     public var leavesDevice: Bool { needsRemote }
+
+    /// True for the two Hybrid modes, which run more than one engine per turn and are
+    /// driven by `HybridEngine` rather than by a single provider stream.
+    public var isHybrid: Bool { self == .hybridParallel || self == .hybridSynthesized }
 }
 
-/// One candidate answer inside a synthesized node.
+/// One candidate answer inside a hybrid node.
 public struct CandidateDraft: Sendable, Equatable, Identifiable, Codable {
     public var id: UUID
     public var order: Int
@@ -58,6 +69,12 @@ public struct CandidateDraft: Sendable, Equatable, Identifiable, Codable {
     public var text: String
     public var thinking: String?
     public var state: NodeState
+    /// Measured from **this** candidate's own `.metrics` chunk. Never copied from another
+    /// side and never estimated, because the Parallel panels show these numbers directly.
+    public var metrics: GenerationMetrics?
+    /// What this candidate's provider said when it failed, and nothing else. A failed draft
+    /// is kept rather than dropped: one surviving answer is still an answer.
+    public var failure: String?
 
     public init(
         id: UUID = UUID(),
@@ -67,7 +84,9 @@ public struct CandidateDraft: Sendable, Equatable, Identifiable, Codable {
         modelID: String,
         text: String = "",
         thinking: String? = nil,
-        state: NodeState = .streaming
+        state: NodeState = .streaming,
+        metrics: GenerationMetrics? = nil,
+        failure: String? = nil
     ) {
         self.id = id
         self.order = order
@@ -77,7 +96,12 @@ public struct CandidateDraft: Sendable, Equatable, Identifiable, Codable {
         self.text = text
         self.thinking = thinking
         self.state = state
+        self.metrics = metrics
+        self.failure = failure
     }
+
+    /// A draft that can be shown as an answer: it finished and actually said something.
+    public var answered: Bool { state == .complete && !text.isEmpty }
 }
 
 /// A single node in the chat tree. History is never rewritten: edit, regenerate,
@@ -101,6 +125,10 @@ public struct ChatNode: Sendable, Equatable, Identifiable {
     public var drafts: [CandidateDraft]
     /// Measured only when a provider emitted `.metrics`; never estimated.
     public var metrics: GenerationMetrics?
+    /// How a hybrid turn was produced: which engines were candidates, which one wrote the
+    /// unified answer, and what failed. `nil` for every non-hybrid node and for every
+    /// message written before M4.
+    public var provenance: HybridProvenance?
 
     public init(
         id: UUID = UUID(),
@@ -116,7 +144,8 @@ public struct ChatNode: Sendable, Equatable, Identifiable {
         modelID: String? = nil,
         createdAt: Date = Date(),
         drafts: [CandidateDraft] = [],
-        metrics: GenerationMetrics? = nil
+        metrics: GenerationMetrics? = nil,
+        provenance: HybridProvenance? = nil
     ) {
         self.id = id
         self.conversationID = conversationID
@@ -132,6 +161,7 @@ public struct ChatNode: Sendable, Equatable, Identifiable {
         self.createdAt = createdAt
         self.drafts = drafts
         self.metrics = metrics
+        self.provenance = provenance
     }
 }
 

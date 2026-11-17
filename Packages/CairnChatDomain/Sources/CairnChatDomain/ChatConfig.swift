@@ -17,19 +17,28 @@ public struct ChatConfig: Sendable, Equatable, Codable {
     public var context: ContextToggleSet
     public var responseFormat: ResponseFormatPreference
     public var thinkingEnabled: Bool
+    /// Which engines answer a hybrid turn and which one writes the unified answer.
+    ///
+    /// Optional on purpose: a chat written before M4 has no key for this and decodes to `nil`,
+    /// which means "choose from the engines registered now" rather than a plan invented from
+    /// nothing. It lives here because this is already one configuration blob per chat, so a
+    /// fourth picker never becomes a schema migration.
+    public var hybrid: HybridPlan?
 
     public init(
         persona: String = "",
         sampling: SamplingConfig = .unset,
         context: ContextToggleSet = .default,
         responseFormat: ResponseFormatPreference = .markdown,
-        thinkingEnabled: Bool = false
+        thinkingEnabled: Bool = false,
+        hybrid: HybridPlan? = nil
     ) {
         self.persona = persona
         self.sampling = sampling
         self.context = context
         self.responseFormat = responseFormat
         self.thinkingEnabled = thinkingEnabled
+        self.hybrid = hybrid
     }
 
     /// A new chat: no sampling knobs asserted, the default injections on, answers in Markdown.

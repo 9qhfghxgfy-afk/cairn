@@ -4,19 +4,11 @@ import Foundation
 extension ChatSessionModel {
 
     func beginStreaming(assistantNodeID: UUID, provider: any InferenceProvider) {
-        let config = conversation.config
         let history = ChatTree.visiblePath(nodes: nodes, activeLeafID: assistantNodeID)
         // One assembly, one system message. The same `systemPrompt(in:turn:)` call is what the
-        // configuration sheet previews, so what the user saw is what goes on the wire.
-        let turn = turnContext(for: provider)
-        let request = GenerationRequest(
-            modelID: selectedModelID,
-            messages: ChatTree.messages(
-                for: history,
-                systemPrompt: config.systemPrompt(in: contextEnvironment, turn: turn)
-            ),
-            config: config
-        )
+        // configuration sheet previews, so what the user saw is what goes on the wire, and the
+        // hybrid path assembles a turn the identical way.
+        let request = generationRequest(to: provider, modelID: selectedModelID, history: history)
 
         accumulator = StreamAccumulator()
         accumulator.begin()

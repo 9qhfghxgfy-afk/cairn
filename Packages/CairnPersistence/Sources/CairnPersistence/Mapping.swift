@@ -78,7 +78,8 @@ extension ChatRecord {
             createdAt: node.createdAt,
             draftsJSON: JSONCodec.encodeIfNotEmpty(node.drafts),
             // nil stays nil rather than storing a "null" blob.
-            metricsJSON: node.metrics.flatMap { JSONCodec.encode($0) }
+            metricsJSON: node.metrics.flatMap { JSONCodec.encode($0) },
+            provenanceJSON: node.provenance.flatMap { JSONCodec.encode($0) }
         )
     }
 
@@ -97,7 +98,10 @@ extension ChatRecord {
             modelID: modelID,
             createdAt: createdAt,
             drafts: JSONCodec.decode([CandidateDraft].self, from: draftsJSON) ?? [],
-            metrics: JSONCodec.decode(GenerationMetrics.self, from: metricsJSON)
+            metrics: JSONCodec.decode(GenerationMetrics.self, from: metricsJSON),
+            // A node written before M4 has no provenance column, and a non-hybrid node never
+            // writes one: both read back as nil, which is what they are.
+            provenance: JSONCodec.decode(HybridProvenance.self, from: provenanceJSON)
         )
     }
 }

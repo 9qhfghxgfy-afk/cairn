@@ -63,9 +63,13 @@ public final class ChatRecord {
     public var providerID: String?
     public var modelID: String?
     public var createdAt: Date
-    /// Candidate drafts of a synthesized turn, kept inside the one node.
+    /// Candidate drafts of a hybrid turn, kept inside the one node.
     public var draftsJSON: Data?
     public var metricsJSON: Data?
+    /// How a hybrid turn was produced — `HybridProvenance` as JSON. Its own column because it is
+    /// one value read whole, and because a column per field would make every later field of
+    /// provenance a schema migration. Counts and engine/model ids only: never prompt or answer text.
+    public var provenanceJSON: Data?
 
     public init(
         id: UUID,
@@ -81,7 +85,8 @@ public final class ChatRecord {
         modelID: String?,
         createdAt: Date,
         draftsJSON: Data?,
-        metricsJSON: Data?
+        metricsJSON: Data?,
+        provenanceJSON: Data? = nil
     ) {
         self.id = id
         self.conversationID = conversationID
@@ -97,5 +102,6 @@ public final class ChatRecord {
         self.createdAt = createdAt
         self.draftsJSON = draftsJSON
         self.metricsJSON = metricsJSON
+        self.provenanceJSON = provenanceJSON
     }
 }

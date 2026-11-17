@@ -122,9 +122,14 @@ public final class SwiftDataStore: ChatStore {
             existing.text = node.text
             existing.thinking = node.thinking
             existing.stateRaw = node.state.rawValue
+            // A synthesized turn hands its node's text to the engine that wrote it, so attribution
+            // is updated with the text. Leaving the first candidate's id here would credit the
+            // wrong engine for the answer standing on the node.
+            existing.providerID = node.providerID
             existing.modelID = node.modelID
             existing.draftsJSON = JSONCodec.encodeIfNotEmpty(node.drafts)
             existing.metricsJSON = node.metrics.flatMap { JSONCodec.encode($0) }
+            existing.provenanceJSON = node.provenance.flatMap { JSONCodec.encode($0) }
         } else {
             context.insert(ChatRecord(node))
         }

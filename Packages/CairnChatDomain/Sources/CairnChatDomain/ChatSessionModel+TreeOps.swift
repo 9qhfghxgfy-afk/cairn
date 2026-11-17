@@ -39,7 +39,11 @@ extension ChatSessionModel {
             conversation = updated
             nodes = working
             path = ChatTree.visiblePath(nodes: working, activeLeafID: result.node.id)
-            beginStreaming(assistantNodeID: result.node.id, provider: provider)
+            if conversation.mode.isHybrid {
+                beginHybridTurn(assistantNodeID: result.node.id)
+            } else {
+                beginStreaming(assistantNodeID: result.node.id, provider: provider)
+            }
         } catch {
             lastError = error.localizedDescription
         }

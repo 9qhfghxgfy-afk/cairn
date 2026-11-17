@@ -14,6 +14,10 @@ public final class ChatSessionModel {
     public internal(set) var nodes: [ChatNode] = []
     public internal(set) var path: [ChatNode] = []
     public internal(set) var accumulator = StreamAccumulator()
+    /// Live multi-candidate state while a hybrid turn is in flight. `nil` for every other turn,
+    /// and left standing after a hybrid turn ends so the panels can still be read until the next
+    /// turn starts.
+    public internal(set) var hybrid: HybridSnapshot?
     public internal(set) var availableModels: [ModelInfo] = []
     public internal(set) var isBusy = false
 
@@ -24,6 +28,16 @@ public final class ChatSessionModel {
     /// with). Optional so a session built without it — tests, the offline mock wiring — keeps
     /// working exactly as before and simply remembers nothing.
     public var selection: ServerSelectionModel?
+
+    /// The on-device residency answer a hybrid turn needs. Only the app layer can read the real
+    /// memory ceiling, so it injects the answer here; the default is the strict rule — one
+    /// on-device model resident, released before the next one runs.
+    public var residency: any HybridResidencyGating = NeverTwoOnDeviceResident()
+
+    /// Models read from each engine, keyed by engine id. A hybrid turn asks several engines at
+    /// once, so the picker has to name real models for a server that is not the one currently
+    /// selected — and say so when it read none.
+    public internal(set) var modelsByEngine: [String: [ModelInfo]] = [:]
 
     /// The clock and device facts the injected context is built from. Held on the session rather
     /// than read at the moment of assembly so the sheet's live preview and the turn that preview
@@ -198,6 +212,7 @@ public final class ChatSessionModel {
                 parentID: userTurn.node.id,
                 role: .assistant,
                 text: "",
+                kind: ChatTree.hybridKind(for: conversation.mode) ?? .plain,
                 state: .streaming,
                 providerID: provider.id,
                 modelID: selectedModelID,
@@ -212,7 +227,13 @@ public final class ChatSessionModel {
             conversation = updated
             nodes = working
             path = ChatTree.visiblePath(nodes: working, activeLeafID: assistantTurn.node.id)
-            beginStreaming(assistantNodeID: assistantTurn.node.id, provider: provider)
+            // One turn, one node — but a hybrid turn drives several engines and writes that one
+            // node from the outcome, so it takes a different drain.
+            if conversation.mode.isHybrid {
+                beginHybridTurn(assistantNodeID: assistantTurn.node.id)
+            } else {
+                beginStreaming(assistantNodeID: assistantTurn.node.id, provider: provider)
+            }
         } catch {
             lastError = error.localizedDescription
         }

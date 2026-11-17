@@ -100,11 +100,36 @@ public extension ChatTree {
         modelID: String?,
         now: Date = Date()
     ) -> AppendResult {
+        hybridNode(
+            nodes: nodes,
+            conversationID: conversationID,
+            parentID: parentID,
+            kind: .synthesized,
+            drafts: drafts,
+            providerID: providerID,
+            modelID: modelID,
+            now: now
+        )
+    }
+
+    /// Either hybrid shape is ONE assistant node carrying its candidate drafts, so a hybrid turn
+    /// replays, exports, and branches exactly like any other single answer. The kind says whether
+    /// the node's own text is a unified answer or the primary side of a comparison.
+    static func hybridNode(
+        nodes: [ChatNode],
+        conversationID: UUID,
+        parentID: UUID?,
+        kind: NodeKind,
+        drafts: [CandidateDraft] = [],
+        providerID: String?,
+        modelID: String?,
+        now: Date = Date()
+    ) -> AppendResult {
         let node = ChatNode(
             conversationID: conversationID,
             parentID: parentID,
             role: .assistant,
-            kind: .synthesized,
+            kind: kind,
             text: "",
             state: .streaming,
             branchIndex: nextBranchIndex(in: nodes, parentID: parentID),
@@ -114,6 +139,16 @@ public extension ChatTree {
             drafts: drafts.sorted { $0.order < $1.order }
         )
         return AppendResult(node: node, nodes: nodes + [node])
+    }
+
+    /// The node kind a mode produces, or nil when the mode is not a hybrid one. One place
+    /// decides it, so a turn's kind and the mode that ran it cannot drift.
+    static func hybridKind(for mode: InferenceMode) -> NodeKind? {
+        switch mode {
+        case .hybridParallel: return .hybridParallel
+        case .hybridSynthesized: return .synthesized
+        case .onDeviceOnly, .remoteOnly: return nil
+        }
     }
 
     /// Moves to another sibling of `nodeID` — the `< 1 / N >` stepper.
