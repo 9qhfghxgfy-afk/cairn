@@ -5,9 +5,8 @@ import CairnChatDomain
 /// `stream_options.include_usage` is requested because usage is the only source of measured
 /// metrics, and it is off by default; the trailing usage-only chunk is what closes the stream.
 struct OpenAIWire: RemoteWire {
+    var kind: ServerProfileKind { .openAICompatible }
     var capabilities: ProviderCapabilities { .openAICompatible }
-    var chatPath: String { "/v1/chat/completions" }
-    var modelsPath: String { "/v1/models" }
     var chatAccept: String { "text/event-stream" }
     var listAccept: String { "application/json" }
 

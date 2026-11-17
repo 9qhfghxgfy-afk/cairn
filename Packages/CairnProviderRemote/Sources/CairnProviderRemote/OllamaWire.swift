@@ -1,24 +1,11 @@
 import Foundation
 import CairnChatDomain
 
-extension ServerProfileKind {
-    /// The dialect that speaks to this kind of server. Adding a kind means adding a wire
-    /// here and nowhere else: the provider, pipeline, tester, and model service all ask
-    /// the profile for its wire.
-    var wire: any RemoteWire {
-        switch self {
-        case .ollama: return OllamaWire()
-        case .openAICompatible: return OpenAIWire()
-        }
-    }
-}
-
 /// Ollama's HTTP API (public, documented wire format): NDJSON chat stream, `/api/tags`
 /// catalog, plus pull / delete / loaded-models, which no OpenAI-compatible server has.
 struct OllamaWire: RemoteWire {
+    var kind: ServerProfileKind { .ollama }
     var capabilities: ProviderCapabilities { .ollama }
-    var chatPath: String { "/api/chat" }
-    var modelsPath: String { "/api/tags" }
     var chatAccept: String { "application/x-ndjson" }
     var listAccept: String { "application/json" }
 

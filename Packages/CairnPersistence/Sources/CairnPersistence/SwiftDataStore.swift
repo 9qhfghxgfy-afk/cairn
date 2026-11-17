@@ -20,11 +20,13 @@ public final class SwiftDataStore: ChatStore {
             if inMemory {
                 container = try ModelContainer(
                     for: ConversationRecord.self, ChatRecord.self, ServerProfileRecord.self,
+                    ServerSelectionRecord.self,
                     configurations: ModelConfiguration(isStoredInMemoryOnly: true)
                 )
             } else {
                 container = try ModelContainer(
-                    for: ConversationRecord.self, ChatRecord.self, ServerProfileRecord.self
+                    for: ConversationRecord.self, ChatRecord.self, ServerProfileRecord.self,
+                    ServerSelectionRecord.self
                 )
             }
         } catch {

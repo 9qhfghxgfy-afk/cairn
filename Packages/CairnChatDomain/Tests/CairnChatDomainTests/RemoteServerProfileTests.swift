@@ -53,7 +53,7 @@ final class RemoteServerProfileTests: XCTestCase {
 
     func testValidateRejectsReservedAndEmptyHeaders() {
         XCTAssertThrowsError(
-            try ServerProfile.validate(name: "s", urlString: "https://host",
+            try ServerProfile.validate(name: "s", kind: .openAICompatible, urlString: "https://host",
                                        headers: ["Authorization": "Bearer x"])
         ) { error in
             guard case ServerProfileValidationError.reservedHeader = error else {
@@ -61,42 +61,42 @@ final class RemoteServerProfileTests: XCTestCase {
             }
         }
         XCTAssertThrowsError(
-            try ServerProfile.validate(name: "s", urlString: "https://host",
+            try ServerProfile.validate(name: "s", kind: .openAICompatible, urlString: "https://host",
                                        headers: [" authorization ": "x"])
         )
         XCTAssertThrowsError(
-            try ServerProfile.validate(name: "s", urlString: "https://host",
+            try ServerProfile.validate(name: "s", kind: .openAICompatible, urlString: "https://host",
                                        headers: ["  ": "x"])
         )
     }
 
     func testValidateRejectsBlankNameForeignSchemeAndUserInfo() {
         XCTAssertThrowsError(
-            try ServerProfile.validate(name: "  ", urlString: "https://host", headers: [:])
+            try ServerProfile.validate(name: "  ", kind: .openAICompatible, urlString: "https://host", headers: [:])
         )
         XCTAssertThrowsError(
-            try ServerProfile.validate(name: "s", urlString: "http://api.some-provider.example", headers: [:])
+            try ServerProfile.validate(name: "s", kind: .openAICompatible, urlString: "http://api.some-provider.example", headers: [:])
         ) { error in
             guard case ServerProfileValidationError.plaintextPublicInternet = error else {
                 return XCTFail("expected plaintextPublicInternet, got \(error)")
             }
         }
         XCTAssertThrowsError(
-            try ServerProfile.validate(name: "s", urlString: "ftp://10.0.0.9", headers: [:])
+            try ServerProfile.validate(name: "s", kind: .openAICompatible, urlString: "ftp://10.0.0.9", headers: [:])
         ) { error in
             guard case ServerProfileValidationError.wrongScheme("ftp") = error else {
                 return XCTFail("expected wrongScheme(ftp), got \(error)")
             }
         }
         XCTAssertThrowsError(
-            try ServerProfile.validate(name: "s", urlString: "https://u:p@host", headers: [:])
+            try ServerProfile.validate(name: "s", kind: .openAICompatible, urlString: "https://u:p@host", headers: [:])
         )
     }
 
     /// The user's actual setup: a llama.cpp / Ollama box on the LAN, reached over http.
     func testValidateAcceptsAPlaintextServerOnTheLAN() throws {
-        try ServerProfile.validate(name: "Home box", urlString: "http://192.168.1.20:8181", headers: [:])
-        try ServerProfile.validate(name: "VPN box", urlString: "http://10.8.0.2:11434", headers: [:])
+        try ServerProfile.validate(name: "Home box", kind: .openAICompatible, urlString: "http://192.168.1.20:8181", headers: [:])
+        try ServerProfile.validate(name: "VPN box", kind: .openAICompatible, urlString: "http://10.8.0.2:11434", headers: [:])
     }
 
     // MARK: network class

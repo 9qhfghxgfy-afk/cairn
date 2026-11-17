@@ -182,6 +182,10 @@ public protocol InferenceProvider: Sendable, Identifiable {
     var displayName: String { get }
     var networkClass: NetworkClass { get }
     var capabilities: ProviderCapabilities { get }
+    /// The saved server profile this engine was built from, when it was built from one. The
+    /// server switcher needs it to map an engine back to the profile whose last model it should
+    /// restore; a mock or on-device engine has none and takes the default in `RemoteEngineID`.
+    var serverProfileID: UUID? { get }
 
     func models() async throws -> [ModelInfo]
 

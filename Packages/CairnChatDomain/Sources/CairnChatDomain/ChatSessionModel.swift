@@ -20,6 +20,10 @@ public final class ChatSessionModel {
     public var selectedProviderID: String
     public var selectedModelID: String
     public var lastError: String?
+    /// The shared server choice (which server is active, and what each server was last used
+    /// with). Optional so a session built without it — tests, the offline mock wiring — keeps
+    /// working exactly as before and simply remembers nothing.
+    public var selection: ServerSelectionModel?
 
     // Module-internal by design (not `private`, which is file-scoped in Swift):
     // the tree entry points in this file and the streaming core in
@@ -89,9 +93,12 @@ public final class ChatSessionModel {
         do {
             let models = try await provider.models()
             availableModels = models
+            // A remembered id may not exist on this server; fall back rather than send a
+            // name the server does not know.
             if selectedModelID.isEmpty || !models.contains(where: { $0.id == selectedModelID }) {
                 selectedModelID = models.first?.id ?? ""
             }
+            recordSelectedModel()
         } catch {
             availableModels = []
             lastError = error.localizedDescription
@@ -103,8 +110,52 @@ public final class ChatSessionModel {
             return
         }
         selectedProviderID = providerID
-        selectedModelID = ""
+        restoreLastModel()
         Task { await loadModels() }
+    }
+
+    /// Points the session at one saved server and restores what that server was last used with,
+    /// **without** loading its catalog. `bootstrap()` does that right after, and its result — a
+    /// model id the server really has — is what should end up in `selectedModelID`.
+    public func apply(serverProfileID profileID: UUID) {
+        let engineID = RemoteEngineID.make(profileID: profileID)
+        guard registry?.provider(id: engineID) != nil || providers[engineID] != nil else { return }
+        selectedProviderID = engineID
+        restoreLastModel()
+    }
+
+    /// One-tap switch from the Servers screen or the top bar of a chat: repoint the session at a
+    /// saved server, make it the shared active server, then go and fetch its models. The session
+    /// owns the reload, so no view has to know that switching and refreshing are two steps.
+    public func select(serverProfileID profileID: UUID) {
+        apply(serverProfileID: profileID)
+        // Choosing a server in a chat *is* the choice for the whole app: writing it through here
+        // is what makes the Servers screen agree on the next reload without either view polling
+        // the other.
+        selection?.setActive(profileID)
+        Task { await loadModels() }
+    }
+
+    /// Picks a model for the current server and remembers it against that server only.
+    public func choose(model modelID: String) {
+        selectedModelID = modelID
+        recordSelectedModel()
+    }
+
+    private func restoreLastModel() {
+        guard let profileID = RemoteEngineID.parse(selectedProviderID) else {
+            selectedModelID = ""
+            return
+        }
+        selectedModelID = selection?.lastModel(forProfile: profileID) ?? ""
+    }
+
+    /// Writes the current model back to the shared selection. This is what makes "last model"
+    /// mean *last used with this server*: the key is the profile, never the model name.
+    private func recordSelectedModel() {
+        guard let profileID = RemoteEngineID.parse(selectedProviderID),
+              !selectedModelID.isEmpty else { return }
+        selection?.remember(modelID: selectedModelID, forProfile: profileID)
     }
 
     // MARK: - Sending

@@ -11,6 +11,8 @@ public enum ServerProfileValidationError: Error, Equatable, LocalizedError, Send
     case userInfoInURL
     case reservedHeader(String)
     case emptyHeaderName
+    /// A profile labelled Ollama Cloud whose address is not ollama.com.
+    case cloudHostExpected
 
     public var errorDescription: String? {
         switch self {
@@ -32,13 +34,21 @@ public enum ServerProfileValidationError: Error, Equatable, LocalizedError, Send
                 + "tokens go to the Keychain, never to the settings store."
         case .emptyHeaderName:
             return "Custom header names cannot be empty."
+        case .cloudHostExpected:
+            return "Ollama Cloud is ollama.com. A server you run yourself is Ollama or "
+                + "OpenAI-compatible — the label has to match where the traffic actually goes."
         }
     }
 }
 
 extension ServerProfile {
     /// Full validation for the save path; throws user-presentable errors.
-    public static func validate(name: String, urlString: String, headers: [String: String]) throws {
+    public static func validate(
+        name: String,
+        kind: ServerProfileKind,
+        urlString: String,
+        headers: [String: String]
+    ) throws {
         guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw ServerProfileValidationError.missingName
         }
@@ -58,6 +68,9 @@ extension ServerProfile {
         guard !host.isEmpty else { throw ServerProfileValidationError.invalidURL }
         if scheme == "http" && !NetworkClassRouting.classify(host: host).allowsPlaintext {
             throw ServerProfileValidationError.plaintextPublicInternet
+        }
+        if kind == .ollamaCloud && host != ServerBackend.cloudHost {
+            throw ServerProfileValidationError.cloudHostExpected
         }
         if components.user != nil || components.password != nil {
             throw ServerProfileValidationError.userInfoInURL

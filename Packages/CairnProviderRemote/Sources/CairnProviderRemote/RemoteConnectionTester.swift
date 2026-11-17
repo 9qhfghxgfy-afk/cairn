@@ -23,7 +23,7 @@ public final class RemoteConnectionTester: RemoteTesting {
         let clock = ContinuousClock()
         let started = clock.now
         do {
-            let wire = profile.kind.wire
+            let wire = remoteWire(for: profile)
             let data = try await exchange(profile, path: wire.modelsPath, accept: wire.listAccept)
             let latencyMs = Self.latencyMs(from: started, to: clock.now)
             let models = try wire.decodeModels(data, providerID: "remote:\(profile.id.uuidString)")

@@ -11,6 +11,10 @@ public final class ChatWorkspace {
     public private(set) var session: ChatSessionModel?
     public private(set) var conversations: [Conversation] = []
     public var lastError: String?
+    /// Which saved server the app should point its chats at, and what each server was last used
+    /// with. Injected rather than reached for: `CairnAppUI` may not import SwiftData, so the App
+    /// layer hands this in as a domain type.
+    public let selection: ServerSelectionModel?
 
     public var temporaryChat: Bool {
         didSet {
@@ -38,7 +42,8 @@ public final class ChatWorkspace {
         ephemeralStore: EphemeralStore = EphemeralStore(),
         providers: [any InferenceProvider],
         mode: InferenceMode = .onDeviceOnly,
-        temporaryChat: Bool = false
+        temporaryChat: Bool = false,
+        selection: ServerSelectionModel? = nil
     ) {
         self.persistentStore = persistentStore
         self.ephemeralStore = ephemeralStore
@@ -46,6 +51,7 @@ public final class ChatWorkspace {
         self.registry = nil
         self.mode = mode
         self.temporaryChat = temporaryChat
+        self.selection = selection
     }
 
     public init(
@@ -53,7 +59,8 @@ public final class ChatWorkspace {
         ephemeralStore: EphemeralStore = EphemeralStore(),
         registry: ProviderRegistry,
         mode: InferenceMode = .onDeviceOnly,
-        temporaryChat: Bool = false
+        temporaryChat: Bool = false,
+        selection: ServerSelectionModel? = nil
     ) {
         self.persistentStore = persistentStore
         self.ephemeralStore = ephemeralStore
@@ -61,6 +68,7 @@ public final class ChatWorkspace {
         self.registry = registry
         self.mode = mode
         self.temporaryChat = temporaryChat
+        self.selection = selection
     }
 
     public var activeStore: any ChatStore {
@@ -77,6 +85,12 @@ public final class ChatWorkspace {
             return fromRegistry
         }
         return providerList.first { $0.id == id }?.displayName ?? id
+    }
+
+    /// Where an engine's traffic goes, so a switcher can say "public" out loud instead of letting
+    /// a name imply it. nil for an engine that is not registered.
+    public func providerNetworkClass(_ id: String) -> NetworkClass? {
+        (registry?.provider(id: id) ?? providerList.first { $0.id == id })?.networkClass
     }
 
     public func start() async {
@@ -144,10 +158,28 @@ public final class ChatWorkspace {
         conversation: Conversation,
         store: any ChatStore
     ) -> ChatSessionModel {
+        let session: ChatSessionModel
         if let registry {
-            return ChatSessionModel(conversation: conversation, store: store, registry: registry)
+            session = ChatSessionModel(conversation: conversation, store: store, registry: registry)
+        } else {
+            session = ChatSessionModel(conversation: conversation, store: store, providers: providerList)
         }
-        return ChatSessionModel(conversation: conversation, store: store, providers: providerList)
+        session.selection = selection
+        // Applied before any view can read the session, so a new or reopened chat opens on
+        // the server in use rather than on whatever the registry happens to list first.
+        if let activeID = selection?.activeProfileID {
+            session.apply(serverProfileID: activeID)
+        }
+        return session
+    }
+
+    /// Points the live session at the chosen server and restores that server's last model. The
+    /// caller resolves *which* profile is active: `ServersModel` owns the saved list, and this
+    /// module must not reach for a store.
+    public func apply(activeProfile profile: ServerProfile) {
+        guard profile.usableNow else { return }
+        session?.apply(serverProfileID: profile.id)
+        Task { await session?.loadModels() }
     }
 
     private func createAndBind() {

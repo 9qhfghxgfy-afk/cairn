@@ -21,20 +21,20 @@ public final class RemoteModelService: RemoteModelManaging {
     }
 
     public func loadedModels(_ profile: ServerProfile) async throws -> [String] {
-        try requireOllama(profile)
+        try require(profile.kind.backend.capabilities.loadedModelInspection)
         let data = try await exchange(profile, method: "GET", path: "/api/ps", body: nil, accept: "application/json")
-        return try OllamaCodec.decodeModelList(data, providerID: providerID(for: profile)).map(\.id)
+        return try OllamaCodec.decodeModelList(data, providerID: profile.engineID).map(\.id)
     }
 
     public func pull(model: String, profile: ServerProfile) async throws {
-        try requireOllama(profile)
+        try require(profile.kind.backend.capabilities.modelPull)
         // The pull response is an NDJSON progress stream: it must be drained to the end,
         // or the pull is abandoned halfway.
         try await drain(profile, path: "/api/pull", payload: ["name": model, "stream": true])
     }
 
     public func delete(model: String, profile: ServerProfile) async throws {
-        try requireOllama(profile)
+        try require(profile.kind.backend.capabilities.modelDelete)
         _ = try await exchange(
             profile,
             method: "DELETE",
@@ -48,10 +48,11 @@ public final class RemoteModelService: RemoteModelManaging {
         RemoteChatProvider(profile: profile, bearer: secrets.secret(for: profile.id), transport: transport)
     }
 
-    private func providerID(for profile: ServerProfile) -> String { "remote:\(profile.id.uuidString)" }
-
-    private func requireOllama(_ profile: ServerProfile) throws {
-        guard profile.kind == .ollama else { throw RemoteError.unsupportedOperation }
+    /// Capability-gated rather than kind-gated, so this answers from the same declared map the UI
+    /// derives its buttons from. LM Studio's lifecycle routes and anything the cloud does not
+    /// offer both fail here instead of firing a request that 404s in a confusing way.
+    private func require(_ supported: Bool) throws {
+        guard supported else { throw RemoteError.unsupportedOperation }
     }
 
     private func exchange(
@@ -80,7 +81,7 @@ public final class RemoteModelService: RemoteModelManaging {
         var parser = LineStreamParser()
         var lines = parser.feed(data)
         if let tail = parser.takeTrailingPartialLine(), !tail.isEmpty { lines.append(tail) }
-        let wire = profile.kind.wire
+        let wire = remoteWire(for: profile)
         for line in lines {
             for event in try wire.decodeLine(line) {
                 if case .error(let message) = event { throw RemoteError.serverMessage(message) }

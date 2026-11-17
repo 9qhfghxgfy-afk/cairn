@@ -68,6 +68,23 @@ public struct ServerProfile: Sendable, Equatable, Identifiable, Codable {
 }
 
 extension ServerProfile {
+    /// A new profile as that kind wants to start: the cloud kind arrives prefilled, named, and
+    /// **switched off**, because a server on the public internet is never added ready-to-run.
+    /// A LAN kind starts as an empty `http://` shell — the user's own address is theirs to type,
+    /// and no real address belongs in this file.
+    public static func draft(for kind: ServerProfileKind, now: Date = Date()) -> ServerProfile {
+        let backend = kind.backend
+        return ServerProfile(
+            name: backend.prefilledName,
+            kind: kind,
+            baseURLString: backend.prefilledURL,
+            enabled: !backend.offByDefault,
+            publicInternetOptIn: false,
+            createdAt: now,
+            updatedAt: now
+        )
+    }
+
     /// Parses and canonicalizes to `scheme://host[:port]`; nil when unusable.
     /// http is allowed for a private address or name only; a public-internet
     /// host must be https — see `NetworkClass.allowsPlaintext`.

@@ -17,16 +17,21 @@ public struct RemoteChatProvider: InferenceProvider {
     private let bearer: String?
 
     public init(profile: ServerProfile, bearer: String?, transport: any RemoteTransport) {
-        self.id = "remote:\(profile.id.uuidString)"
+        // One owner for the engine-id string: the switcher and the session go from a profile to
+        // this id and back, and a literal written here could drift from theirs.
+        self.id = profile.engineID
         self.displayName = profile.name
         self.profile = profile
-        self.wire = profile.kind.wire
+        self.wire = remoteWire(for: profile)
         self.transport = transport
         self.bearer = bearer
     }
 
     public var networkClass: NetworkClass { profile.networkClass }
     public var capabilities: ProviderCapabilities { wire.capabilities }
+    /// The profile this engine was built from, so switching servers can restore that server's
+    /// last model instead of guessing from a model name.
+    public var serverProfileID: UUID? { profile.id }
 
     public func models() async throws -> [ModelInfo] {
         guard profile.usableNow else { throw RemoteError.optInRequired }
