@@ -71,6 +71,11 @@ jobs:
       # loopback listener. No internet access is used, so the job stays hermetic.
       - name: Remote provider, profile, and secret tests
         run: swift test --package-path Packages/CairnProviderRemote
+      # Memory fit, single-resident eviction, catalog and repo-ID rules, checksum verification,
+      # pause/resume, and the Foundation Models availability mapping. Host-only by design: no model
+      # files, no network, no device.
+      - name: On-device inference, memory, and catalog tests
+        run: swift test --package-path Packages/CairnInferenceLocal
 
   app:
     name: Build + test on simulator
