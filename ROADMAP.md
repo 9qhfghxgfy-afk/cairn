@@ -20,7 +20,8 @@ Gate for every milestone (from `.clinerules`):
 | 6 | Local RAG, vision, web search, voice | todo | |
 | 7 | Parity backlog | todo (per-item approval) | |
 | P0 | Zero-paywall guard + parity ledger | **done** — all gates green on `c4f58aa` | [44001146864](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/44001146864) |
-| P1–P5 | Parity milestones, ledger in `docs/PARITY.md` | todo (plan approved 2026-11-16) | |
+| P1 | Servers parity: active-server selection, one-tap switching with per-server last model, `lmStudio`/`ollamaCloud` kinds, guide sheet, user-initiated LAN scan | **in progress** — implemented and locally green (guards, 87 domain + 35 remote host tests, iOS build), **no CI run number yet** | pending |
+| P2–P5 | Parity milestones, ledger in `docs/PARITY.md` | todo (plan approved 2026-11-16) | |
 
 ## Decisions (durable — update here, not in chat)
 
@@ -745,7 +746,7 @@ needs both.
 | # | Scope | Spec | Status |
 |---|---|---|---|
 | P0 | Zero-paywall guard + self-test + CI wiring + this ledger + environment correction | brief §0 | **done** — CI-verified `44001146864` |
-| P1 | Multi-server management, instant switching with per-server last model, `lmStudio` + `ollamaCloud` kinds, setup guide, user-initiated LAN scan | brief §3.4 | todo |
+| P1 | Multi-server management, instant switching with per-server last model, `lmStudio` + `ollamaCloud` kinds, setup guide, user-initiated LAN scan | brief §3.4 | **in progress** — code landed, locally green; owed: `ServersModel` selection/discovery tests, switching test through `ChatSessionModel`, `LANDiscoveryService` tests on a fake transport, LM Studio / Ollama Cloud codec+wire tests, `ServerSelectionStore` round-trip test, then a green CI run |
 | M3 | On-device inference (`mlx-swift-lm` + Foundation Models) + model manager with progress, cancel, unload, `/api/show` | §3.5 | todo |
 | P2 | Per-chat + default configuration with `configured` vs `unset`, capability-filtered payloads, injected context, themes | §3.2, §3.3, §3.10 | todo |
 | M4 | Hybrid Parallel + Synthesized engine | preserved core | todo |
@@ -800,6 +801,23 @@ on-device-verified or real-network-verified — no P0 change touches a network p
 memory.
 
 Known gaps after P0: `check-no-paywall.sh` matches names and strings, not behaviour — a cap spelled
-in some novel way still needs review, which is why the self-test exists. P1 has not started. The M2
-device checklist and the real-network route remain open and unverified.
+in some novel way still needs review, which is why the self-test exists. The M2 device checklist and
+the real-network route remain open and unverified.
+
+### P1 record — servers parity, in progress (2026-11-16)
+
+Implemented: `ServerBackend` is the single kind→endpoint/capability table (`ServerEndpoints` paths
+are absolute and no kind declares a `v0` path, which `ServerKindBackendTests` enforces); selection
+lives in `ServerSelection` keyed by profile UUID with `resolvedActive` falling forward past a
+disabled or un-opted-in server; `ServerConnectionStatus.derive` is pure and order-bound so a
+disabled row can never show a remembered success; `LANDiscoveryPlan` is pure (private-IPv4 only,
+one /24, bounded in-flight probes, `emptyScanHint` names the Local Network permission only when
+nothing at all was reached); the scan is user-initiated, cancellable, and yields drafts that go
+through the ordinary validated save path.
+
+Verification so far is **local only**: 53 guard cases, 87 domain host tests (24 new), 35 remote host
+tests, and `xcodebuild build` for the simulator. Nothing here is CI-verified, on-device-verified, or
+real-network-verified. Ollama Cloud behaviour against the real service, and LM Studio's lifecycle
+endpoints, remain unverified by design — the lifecycle calls are not wired (M3) and no network test
+is run from this machine.
 

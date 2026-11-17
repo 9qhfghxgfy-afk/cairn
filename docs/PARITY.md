@@ -23,8 +23,8 @@ verification label. `CI-verified` is not `on-device-verified`.
 | Remote streaming with real usage metrics | 3.1 | M2 | Done | CI-verified (`43764696840`); device list open |
 | Chat-history sidebar / drawer with chat list | 3.1 | M5 | Missing | unverified |
 | Editable chat title in the top bar | 3.1 | M5 | Missing | unverified |
-| Quick server/model switcher in the top bar | 3.1 | P1 | Partial — model menu only | unverified |
-| Empty state that routes to "configure a server" | 3.1 | P1 | Partial — static, no action | unverified |
+| Quick server/model switcher in the top bar | 3.1 | P1 | Done — server section (with "public internet" spelled out) + model section, one tap each | local build; host tests pending |
+| Empty state that routes to "configure a server" | 3.1 | P1 | Done — picks a kind, opens the guide, or scans the LAN | local build |
 | Composer `+` menu (Photos, Camera, Files) | 3.1, 3.8 | M6 | Missing | unverified |
 | `Thinking` / `Tools` composer chips | 3.1, 3.2 | P2 · P3 | Missing | unverified |
 | Markdown + syntax-highlighted code + copy button | 3.1 | M5 | Missing (plain `Text`) | unverified |
@@ -61,12 +61,12 @@ verification label. `CI-verified` is not `on-device-verified`.
 | Add/Edit server: name, address, kind, token, headers | 3.4 | M2 | Done | CI-verified |
 | Credential headers refused in plain storage | 3.4 | M2 | Done | CI-verified |
 | Plaintext + outbound badges, class derived from URL | 3.4 | M2 | Done | CI-verified |
-| Instant one-tap switching + per-server last model | 3.4 | P1 | Missing | unverified |
-| Status dot + Connect/test action | 3.4 | P1 | Partial — tester exists, no dot | CI-verified (tester) |
-| Selector: Ollama / LM Studio / OpenAI-compatible | 3.4 | P1 | Partial — 2 kinds; LM Studio folded into OpenAI | CI-verified (2 kinds) |
-| Ollama Cloud profile (off by default, badged) | 3.4, 3.7 | P1 | Missing | unverified |
-| "How do I get started?" guide sheet | 3.4 | P1 | Missing | unverified |
-| Scan Local Network, bounded, prefills Add Server | 3.4 | P1 | Missing | unverified |
+| Instant one-tap switching + per-server last model | 3.4 | P1 | Done — UUID-keyed, persisted, falls forward past a server that cannot answer | host unit tests (local) |
+| Status dot + Connect/test action | 3.4 | P1 | Done — derived per read: checking > inert > stale success | host unit tests (local) |
+| Selector: Ollama / LM Studio / OpenAI-compatible | 3.4 | P1 | Done — 4 kinds through the `ServerBackend` table; paths no longer live in the wires | host unit tests (local) |
+| Ollama Cloud profile (off by default, badged) | 3.4, 3.7 | P1 | Done — draft arrives named/off, `.cloudHostExpected` rejects a non-`ollama.com` host | host unit tests (local); **real network unverified** |
+| "How do I get started?" guide sheet | 3.4 | P1 | Done | local build |
+| Scan Local Network, bounded, prefills Add Server | 3.4 | P1 | Done — user-initiated, cancellable, one /24, drafts only, no ATS change | host unit tests on the plan (local); socket path CI-verified only |
 | Local Network prompt + denial handling | 3.4 | M2 | Partial — hint only, unproven on device | real-network pending |
 | On-Device row pinned at top with runtime status | 3.4, 3.5 | M3 | Missing | unverified |
 | Running / Installed / Download model manager | 3.5 | M3 | Partial — service exists, no tabs/progress | CI-verified (service) |
