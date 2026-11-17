@@ -39,11 +39,16 @@ public enum CatalogQuery {
         sort: CatalogSort = .newest,
         entries: [OnDeviceCatalogEntry] = OnDeviceCatalog.entries
     ) -> [OnDeviceCatalogEntry] {
-        let matches = entries.filter { matches($0, by: filter) }
+        // The local binding is deliberately NOT named `matches`. A local named `matches` in scope of
+        // the closure makes Swift 6.2 (CI's pinned Xcode 26.6) resolve the bare `matches(...)` call to
+        // that `[OnDeviceCatalogEntry]` value instead of to the static function below, which fails the
+        // host job with "cannot call value of non-function type" (run 44162622852). Naming it, and
+        // qualifying the callee, keeps one source file true on both toolchains.
+        let matchedEntries = entries.filter { CatalogQuery.matches($0, by: filter) }
         // A typed repo ID that is not in the library still has to be installable, which is what
         // "Not in the library? Type the exact name to install" promises.
-        let unlisted = unlistedMatch(for: filter.searchText, excluding: entries)
-        return sorted(sort, matches + unlisted)
+        let unlisted = CatalogQuery.unlistedMatch(for: filter.searchText, excluding: entries)
+        return CatalogQuery.sorted(sort, matchedEntries + unlisted)
     }
 
     public static func matches(_ entry: OnDeviceCatalogEntry, by filter: CatalogFilter) -> Bool {
