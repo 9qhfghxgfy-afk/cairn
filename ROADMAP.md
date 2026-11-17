@@ -20,7 +20,7 @@ Gate for every milestone (from `.clinerules`):
 | 6 | Local RAG, vision, web search, voice | todo | |
 | 7 | Parity backlog | todo (per-item approval) | |
 | P0 | Zero-paywall guard + parity ledger | **done** — all gates green on `c4f58aa` | [44001146864](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/44001146864) |
-| P1 | Servers parity: active-server selection, one-tap switching with per-server last model, `lmStudio`/`ollamaCloud` kinds, guide sheet, user-initiated LAN scan | **in progress** — implemented and locally green (guards, 87 domain + 35 remote host tests, iOS build), **no CI run number yet** | pending |
+| P1 | Servers parity: active-server selection, one-tap switching with per-server last model, `lmStudio`/`ollamaCloud` kinds, guide sheet, user-initiated LAN scan | **in progress** — code and all five required suites landed, locally green (guards, 95 domain + 59 remote host tests, 45 simulator tests), **no CI run number yet** | pending |
 | P2–P5 | Parity milestones, ledger in `docs/PARITY.md` | todo (plan approved 2026-11-16) | |
 
 ## Decisions (durable — update here, not in chat)
@@ -746,7 +746,7 @@ needs both.
 | # | Scope | Spec | Status |
 |---|---|---|---|
 | P0 | Zero-paywall guard + self-test + CI wiring + this ledger + environment correction | brief §0 | **done** — CI-verified `44001146864` |
-| P1 | Multi-server management, instant switching with per-server last model, `lmStudio` + `ollamaCloud` kinds, setup guide, user-initiated LAN scan | brief §3.4 | **in progress** — code landed, locally green; owed: `ServersModel` selection/discovery tests, switching test through `ChatSessionModel`, `LANDiscoveryService` tests on a fake transport, LM Studio / Ollama Cloud codec+wire tests, `ServerSelectionStore` round-trip test, then a green CI run |
+| P1 | Multi-server management, instant switching with per-server last model, `lmStudio` + `ollamaCloud` kinds, setup guide, user-initiated LAN scan | brief §3.4 | **in progress** — code landed and all five owed suites written (switching through `ChatSessionModel`, `LANDiscoveryService` on a fake transport, LM Studio + Ollama Cloud wire/codec, `ServerSelection` SwiftData round-trip, `ServersModel` selection + discovery); locally green at 95 domain + 59 remote host tests and 45 simulator tests; owed: **a green CI run** |
 | M3 | On-device inference (`mlx-swift-lm` + Foundation Models) + model manager with progress, cancel, unload, `/api/show` | §3.5 | todo |
 | P2 | Per-chat + default configuration with `configured` vs `unset`, capability-filtered payloads, injected context, themes | §3.2, §3.3, §3.10 | todo |
 | M4 | Hybrid Parallel + Synthesized engine | preserved core | todo |
@@ -820,4 +820,27 @@ tests, and `xcodebuild build` for the simulator. Nothing here is CI-verified, on
 real-network-verified. Ollama Cloud behaviour against the real service, and LM Studio's lifecycle
 endpoints, remain unverified by design — the lifecycle calls are not wired (M3) and no network test
 is run from this machine.
+
+**Test suites landed (2026-11-16, this commit).** All five P1 suites required by
+`docs/PARITY.md` §"acceptance" now exist, and the local lane is green on all of them:
+
+| Suite | Layer | What it pins down |
+| --- | --- | --- |
+| `ChatSessionServerSwitchTests` (+ `ServerSwitchTestDoubles`) | domain | switching mid-conversation repoints the engine, restores that server's last model, and leaves the tree untouched; an unusable server is refused rather than half-applied |
+| `LANDiscoveryServiceTests` (+ `LANDiscoveryTestDoubles`) | remote | one /24 swept once on a fake transport, one question per port then one generic retry, bounded parallelism (`peakConcurrency`), progress monotonic to the whole subnet, stop observed mid-sweep, and the honest empty-vs-unreachable hint |
+| `LMStudioWireTests` / `OllamaCloudWireTests` (+ `WireTestSupport`) | remote | which endpoint each kind addresses, request encoding (usage asked for on the OpenAI surface; `think` never sent to the cloud), decoding (SSE vs NDJSON, a non-list is a typed failure, reasoning only from a field the server sent), and the cloud being inert with no packet until the opt-in |
+| `ServerSelectionTests` | persistence (simulator) | active server + per-server last model read back from the row, each server keeps its own model, a deleted server leaves no trace, the read path prunes a pointer at nothing, repeated writes leave one choice |
+| `ServersModelSelectionTests` / `ServersModelDiscoveryTests` | app UI (simulator) | one tap changes the shared choice and hands it to the workspace, a server that cannot answer is refused out loud with the notice that names the opt-in, deleting the active server repoints the chat; a scan never starts itself, two taps do not start two sweeps, stopping says nothing was saved, and a finding saves through the ordinary path with no token |
+
+Local gate for that commit: `guards` 53/53, `CairnChatDomain` 95 tests, `CairnProviderRemote` 59
+tests, `xcodebuild test` 45 tests — all 0 failures. **Local runtime note:** this Mac has no iOS 26.5
+runtime, so `Scripts/ci.sh test` fell back to `iPhone 15 Pro` on the newest runtime it had (SDK
+27.2), against CI's pinned `iPhone 17` / iOS 26.5 on Xcode 26.6. `Scripts/ci.sh probe` prints both
+sides; a green CI run is what closes P1.
+
+Two of my own test expectations were wrong and were corrected against the real behaviour rather than
+the guess: SwiftData does not reject a second `@Attribute(.unique)` row on an in-memory store, so
+that test now asserts the app-visible rule (repeated writes leave one choice, an older write does not
+reappear); and a LAN kind's Add-server draft arrives prefilled with the scheme only (`http://`),
+which is the intended rule — the user's address is never guessed.
 
