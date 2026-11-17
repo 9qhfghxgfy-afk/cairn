@@ -74,36 +74,57 @@ public struct ChatConfigSheet: View {
     }
 
     private var footer: some View {
-        HStack(spacing: 10) {
-            Button {
-                draft.sampling = .unset
-            } label: {
-                Label("Clear every knob", systemImage: "arrow.counterclockwise")
-            }
-            .disabled(draft.configuredOptionCount == 0)
-
-            Button {
-                draft.reset(to: defaults)
-            } label: {
-                Label("Reset to defaults", systemImage: "leaf")
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Text("\(draft.configuredOptionCount) configured")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(CairnTheme.amber)
+                Text(summaryLine)
+                    .font(.caption)
+                    .foregroundStyle(CairnTheme.stoneLight)
             }
 
-            Spacer(minLength: 0)
-
-            if makeDefault != nil {
+            HStack(spacing: 10) {
                 Button {
-                    session.updateConfig(draft)
-                    makeDefault?(draft)
-                    dismiss()
+                    draft.sampling = .unset
                 } label: {
-                    Text("Use for new chats")
-                        .fontWeight(.semibold)
+                    Label("Clear every knob", systemImage: "arrow.counterclockwise")
                 }
-                .foregroundStyle(CairnTheme.amber)
+                .disabled(draft.configuredOptionCount == 0)
+
+                Button {
+                    draft.reset(to: defaults)
+                } label: {
+                    Label("Server Defaults", systemImage: "leaf")
+                }
+                .accessibilityLabel("Reset to Server Defaults")
+
+                Spacer(minLength: 0)
+
+                if makeDefault != nil {
+                    Button {
+                        session.updateConfig(draft)
+                        makeDefault?(draft)
+                        dismiss()
+                    } label: {
+                        Text("Apply to All New Chats")
+                            .fontWeight(.semibold)
+                    }
+                    .foregroundStyle(CairnTheme.amber)
+                }
             }
         }
         .font(.caption)
         .padding(12)
         .background(Color(.secondarySystemBackground))
+    }
+
+    /// What the chat will do to the server's own answer, in one line, so the count above it means
+    /// something. Zero is a state worth naming: it means the server decides everything Cairn could.
+    private var summaryLine: String {
+        if draft.configuredOptionCount == 0 {
+            return "Nothing asserted — the server's own settings stand."
+        }
+        return "of the knobs this chat asserts; the rest are left to the server."
     }
 }

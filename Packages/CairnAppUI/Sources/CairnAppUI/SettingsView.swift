@@ -9,10 +9,15 @@ import CairnChatDomain
 /// Save is the default configuration, on its own screen, because a default that seeds every future chat
 /// deserves a deliberate commit.
 struct SettingsView: View {
-    private let theme: ThemeModel
+    /// Not `private`: the theme section lives in `SettingsView+Theme`, and `private` in Swift means
+    /// file-private, which a second file cannot see.
+    let theme: ThemeModel
     /// Lets this screen hand the workspace the new baseline the moment it is saved, so a chat started
     /// five seconds later is seeded from it without relaunching.
     private var workspace: ChatWorkspace?
+    /// The appearance the device is showing, which decides which half of each theme is being drawn —
+    /// and therefore which half the swatches and the preview card show.
+    @Environment(\.colorScheme) private var deviceScheme
 
     init(theme: ThemeModel, workspace: ChatWorkspace? = nil) {
         self.theme = theme
@@ -28,59 +33,14 @@ struct SettingsView: View {
         }
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
-        .cairnChrome(theme.palette, scheme: theme.colorScheme)
+        .cairnChrome(theme.palette, appearance: theme.settings.appearance)
     }
 
-    // MARK: - Theme
-
-    var themeSection: some View {
-        Section {
-            ForEach(CairnPalette.all) { palette in
-                themeRow(palette)
-            }
-            Picker("Appearance", selection: Binding(
-                get: { theme.settings.appearance },
-                set: { theme.select(appearance: $0) }
-            )) {
-                ForEach(AppearanceMode.allCases) { mode in
-                    Text(mode.displayName).tag(mode)
-                }
-            }
-            .tint(CairnTheme.amber)
-        } header: {
-            Text("Theme")
-        } footer: {
-            Text(
-                "A theme changes what Cairn looks like. It changes nothing about where your words go."
-            )
-        }
-    }
-
-    func themeRow(_ palette: CairnPalette) -> some View {
-        Button {
-            theme.select(themeID: palette.id)
-        } label: {
-            HStack(spacing: 10) {
-                HStack(spacing: 4) {
-                    Circle().fill(palette.canvas).frame(width: 18, height: 18)
-                        .overlay(Circle().stroke(CairnTheme.stoneLight.opacity(0.5), lineWidth: 1))
-                    Circle().fill(palette.surface).frame(width: 18, height: 18)
-                        .overlay(Circle().stroke(CairnTheme.stoneLight.opacity(0.5), lineWidth: 1))
-                    Circle().fill(palette.accent).frame(width: 18, height: 18)
-                }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(palette.displayName).font(.subheadline.weight(.semibold))
-                    Text(palette.note)
-                        .font(.caption)
-                        .foregroundStyle(CairnTheme.stoneLight)
-                }
-                Spacer(minLength: 0)
-                if theme.settings.themeID == palette.id {
-                    Image(systemName: "checkmark.circle.fill").foregroundStyle(palette.accent)
-                }
-            }
-        }
-        .buttonStyle(.plain)
+    /// The half of the theme the app is drawing with right now, so a preview cannot show a variant the
+    /// user will never see. Read here rather than in the theme extension: `deviceScheme` is this view's
+    /// own environment value, and a same-named `View` modifier is what a second file would resolve.
+    var previewScheme: ColorScheme {
+        ThemeProvider.resolveScheme(appearance: theme.settings.appearance, deviceScheme: deviceScheme)
     }
 
     // MARK: - New chats
@@ -90,17 +50,22 @@ struct SettingsView: View {
             NavigationLink {
                 DefaultChatConfigScreen(theme: theme, workspace: workspace)
             } label: {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Default chat configuration").font(.subheadline)
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 6) {
+                        Text("Default Configuration").font(.subheadline)
+                        ConfiguredBadge(theme.settings.configuredOptionCount)
+                    }
                     Text(
                         theme.settings.hasConfiguredDefaults
-                            ? "\(theme.settings.configuredOptionCount) knobs asserted for every new chat"
-                            : "Nothing asserted — every new chat lets the server decide"
+                            ? "Asserted for every chat you start from now on."
+                            : "Nothing asserted — every new chat lets the server decide."
                     )
                     .font(.caption)
                     .foregroundStyle(CairnTheme.stoneLight)
                 }
             }
+        } header: {
+            Text("Default Configuration")
         } footer: {
             Text(
                 "New chats only. A chat you already had keeps the settings it started with — otherwise "

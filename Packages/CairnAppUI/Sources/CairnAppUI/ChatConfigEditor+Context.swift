@@ -29,18 +29,19 @@ extension ChatConfigEditor {
 
     func toggleRow(_ key: ContextKey) -> some View {
         Toggle(isOn: toggleBinding(key)) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(key.displayName)
-                    .font(.subheadline)
-                    .foregroundStyle(.primary)
-                Text(key.explainer)
-                    .font(.caption)
-                    .foregroundStyle(CairnTheme.stoneLight)
-                if key.isConditional {
-                    Label("Only added when the feature is live", systemImage: "bolt.horizontal")
-                        .font(.caption2)
-                        .foregroundStyle(CairnTheme.amber)
+            HStack(alignment: .top, spacing: 6) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(key.displayName)
+                        .font(.subheadline)
+                        .foregroundStyle(.primary)
+                    if key.isConditional {
+                        Label("Only added when the feature is live", systemImage: "bolt.horizontal")
+                            .font(.caption2)
+                            .foregroundStyle(CairnTheme.amber)
+                    }
                 }
+                Spacer(minLength: 4)
+                InfoButton(title: key.displayName, text: key.explainer)
             }
         }
         .tint(CairnTheme.amber)

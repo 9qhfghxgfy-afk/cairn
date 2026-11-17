@@ -66,12 +66,12 @@ public struct CairnRootView: View {
                 }
             }
         }
-        // The chosen palette, from the stored theme id: the accent actions take, the surface the app
-        // sits on, and which half of the system appearance to pin. Nothing here changes where a prompt
-        // goes — a theme is a look, never a network decision.
+        // The chosen theme, from the stored theme id: the accent actions take, the surface the app
+        // sits on, and which half of it to paint. Nothing here changes where a prompt goes — a theme
+        // is a look, never a network decision.
         .cairnChrome(
             settings?.palette ?? .trailhead,
-            scheme: settings?.colorScheme
+            appearance: settings?.settings.appearance ?? .system
         )
         .task { await workspace.start() }
     }

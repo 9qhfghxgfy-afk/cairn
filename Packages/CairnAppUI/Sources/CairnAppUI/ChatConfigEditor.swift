@@ -7,6 +7,9 @@ import CairnChatDomain
 /// One form serves two screens — the per-chat sheet and the Default Configuration editor in Settings.
 /// They must be the same controls with the same wording, because a user who learned the per-chat sheet
 /// should not have to relearn the settings screen, and two wordings drift.
+///
+/// The sections live in their own files: persona, sampling, and context each have enough going on to
+/// deserve one, and a 400-line form is the kind of file nobody edits correctly.
 struct ChatConfigEditor: View {
     @Binding var config: ChatConfig
     /// Which knobs the engine in use will read. `Settings` passes `.all`, since a baseline has to be
@@ -16,6 +19,8 @@ struct ChatConfigEditor: View {
     /// The exact system block, produced by the same call the stream uses. `nil` hides the section.
     var preview: String?
     var supportNote: String?
+    /// Owns the randomness for the seed control, so a preview or a test can make it repeatable.
+    var seedCandidate: () -> Int = { Int.random(in: 1...999_999) }
 
     var body: some View {
         Form {
@@ -25,29 +30,6 @@ struct ChatConfigEditor: View {
             if let preview { previewSection(preview) }
         }
         .scrollContentBackground(.hidden)
-    }
-
-    // MARK: - Persona
-
-    var personaSection: some View {
-        Section {
-            TextField(
-                "You are a patient teacher. Never give the answer before the hint.",
-                text: $config.persona,
-                axis: .vertical
-            )
-            .lineLimit(3...8)
-            .foregroundStyle(.primary)
-
-            Text(
-                "Sent first, exactly as written, ahead of anything Cairn adds. Left empty, nothing of "
-                    + "yours is sent — and if every toggle below is off, there is no system message at all."
-            )
-            .font(.caption)
-            .foregroundStyle(CairnTheme.stoneLight)
-        } header: {
-            SectionHeader("Persona", count: config.persona.trimmingCharacters(in: .whitespaces).isEmpty ? nil : 1)
-        }
     }
 
     // MARK: - Answer style and thinking
@@ -63,42 +45,24 @@ struct ChatConfigEditor: View {
 
     var thinkingRow: some View {
         Toggle(isOn: $config.thinkingEnabled) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Ask for reasoning").font(.subheadline)
-                Text(
-                    "The panel appears only if this model actually returns reasoning. Cairn never "
-                        + "writes a thinking display around an answer it has no reasoning for."
+            HStack(alignment: .top, spacing: 6) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Ask for reasoning").font(.subheadline)
+                    Text(
+                        "The panel appears only if this model actually returns reasoning."
+                    )
+                    .font(.caption)
+                    .foregroundStyle(CairnTheme.stoneLight)
+                }
+                Spacer(minLength: 4)
+                InfoButton(
+                    title: "Ask for reasoning",
+                    text: "Cairn asks this backend for its reasoning and shows it only if the backend "
+                        + "actually returns any. Cairn never writes a thinking display around an answer "
+                        + "it has no reasoning for, and never invents one."
                 )
-                .font(.caption)
-                .foregroundStyle(CairnTheme.stoneLight)
             }
         }
         .tint(CairnTheme.amber)
-    }
-}
-
-/// A section header with the "N configured" count beside it, so a screen full of controls does not
-/// have to be read end to end to know whether this chat asks anything of the server.
-struct SectionHeader: View {
-    private let title: String
-    private let count: Int?
-
-    init(_ title: String, count: Int? = nil) {
-        self.title = title
-        self.count = count
-    }
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Text(title)
-            if let count {
-                Text("\(count) set")
-                    .font(.caption2.weight(.semibold))
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(Capsule().fill(CairnTheme.amber.opacity(0.2)))
-                    .foregroundStyle(CairnTheme.amber)
-            }
-        }
     }
 }

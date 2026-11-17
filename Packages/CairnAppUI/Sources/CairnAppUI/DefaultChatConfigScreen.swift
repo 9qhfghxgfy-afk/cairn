@@ -40,7 +40,7 @@ struct DefaultChatConfigScreen: View {
                 Button("Save") { save() }
             }
         }
-        .cairnChrome(theme.palette, scheme: theme.colorScheme)
+        .cairnChrome(theme.palette, appearance: theme.settings.appearance)
     }
 
     /// No turn exists for a baseline, so the preview states nothing about an engine: it shows the

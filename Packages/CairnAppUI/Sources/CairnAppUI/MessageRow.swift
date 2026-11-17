@@ -6,6 +6,9 @@ import CairnChatDomain
 public struct MessageRow: View {
     let session: ChatSessionModel
     let node: ChatNode
+    /// The active theme's colours, so the transcript is the theme the user picked rather than the one
+    /// the app shipped with. Status colours stay fixed on purpose — see `CairnTheme`.
+    @Environment(\.cairnTokens) private var tokens
 
     @State var isEditing = false
     @State var draftText = ""
@@ -22,7 +25,7 @@ public struct MessageRow: View {
                 reasoningPanel(thinking)
             }
             Text(node.text.isEmpty ? "…" : node.text)
-                .foregroundStyle(node.role == .user ? CairnTheme.stoneLight : .white)
+                .foregroundStyle(tokens.onCanvas)
                 .textSelection(.enabled)
 
             if node.role == .assistant { metricsFooter }
@@ -32,7 +35,7 @@ public struct MessageRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(node.role == .user ? CairnTheme.stone.opacity(0.55) : CairnTheme.slate)
+                .fill(node.role == .user ? tokens.userBubble : tokens.assistantBubble)
                 .overlay(
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
                         .stroke(borderColor.opacity(0.5), lineWidth: 1)

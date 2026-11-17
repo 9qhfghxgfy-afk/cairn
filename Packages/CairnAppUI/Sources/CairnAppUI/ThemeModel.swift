@@ -29,16 +29,21 @@ public final class ThemeModel {
         self.settings = settings
     }
 
-    public var palette: CairnPalette { CairnPalette.palette(id: settings.themeID) }
+    /// The theme, resolved through the provider so there is one path from a stored id to paint.
+    public var palette: CairnPalette { ThemeProvider.theme(id: settings.themeID) }
 
     /// Which half of the system appearance to pin. `nil` for "follow the device", which is what
     /// `.preferredColorScheme` needs to be handed in order to not override anything.
-    public var colorScheme: ColorScheme? {
-        switch settings.appearance {
-        case .system: return nil
-        case .light: return .light
-        case .dark: return .dark
-        }
+    public var colorScheme: ColorScheme? { ThemeProvider.pinnedScheme(settings.appearance) }
+
+    /// The colours to draw with, given what the device is showing right now. Views that need the
+    /// device's own appearance pass it in; `cairnChrome` does this from the environment.
+    public func tokens(deviceScheme: ColorScheme) -> CairnThemeTokens {
+        ThemeProvider.tokens(
+            themeID: settings.themeID,
+            appearance: settings.appearance,
+            deviceScheme: deviceScheme
+        )
     }
 
     public func select(themeID: String) { mutate { $0.themeID = themeID } }
