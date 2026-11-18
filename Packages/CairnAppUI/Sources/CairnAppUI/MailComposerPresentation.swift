@@ -16,8 +16,17 @@ import UIKit
 /// The composer is presented from the top-most view controller of the active scene, because a tool call
 /// finishes while the user is looking at whatever sheet the chat left open — a draft that appears behind
 /// it reads as a failure to open at all.
+///
+/// The delegate conformance is marked `@preconcurrency` because MessageUI predates Swift's isolation
+/// annotations: `MFMailComposeViewControllerDelegate` is nonisolated, while everything presenting and
+/// dismissing a composer has to do lives on the main actor. Apple delivers these callbacks on the main
+/// thread, so the isolation this class claims is the isolation the callback really arrives on — the
+/// attribute records that fact rather than opening a race. Swift 6 otherwise refuses the conformance
+/// outright (CI run 44239762797, and this branch never compiled on the host lane because MessageUI does
+/// not exist on macOS).
 @MainActor
-public final class MailComposerPresentation: NSObject, MailDraftPresenting, MFMailComposeViewControllerDelegate {
+public final class MailComposerPresentation:
+    NSObject, MailDraftPresenting, @preconcurrency MFMailComposeViewControllerDelegate {
     public override init() { super.init() }
 
     public var isAvailable: Bool { MFMailComposeViewController.canSendMail() }
