@@ -1527,6 +1527,45 @@ CI-verified, on-device-verified or real-network-verified.
   path too, because sources arrive after the row was created; deleting a message or a conversation deletes
   its files, which is the difference between deleting and hiding.
 
+### What landed — the composer, the message row, and the app wiring (second pass, 2026-11-18)
+
+- `ComposerDraft.swift` (`CairnAppUI`) — the files waiting for Send, as one object with the acceptance rule
+  inside it. A photo goes through the injected `ImagePreparing` and the chip shows what the codec actually
+  produced (new bytes, and a new extension when it re-encoded); a document is read here, on the phone, and is
+  staged with the text it yielded; anything refused is refused with the extractor's or the codec's own
+  sentence, held on the draft rather than in `lastError` because it belongs beside the paperclip the user just
+  pressed.
+- `AttachmentPickerMenu.swift`, `PendingAttachmentChips.swift`, `AttachmentChipView.swift`,
+  `ComposerAttachments.swift`, `ThumbnailDecoder.swift` — the paperclip (Photo Library and Files as the two
+  different things they are, with the plain-text limit stated before the pick rather than after the refusal),
+  the staged chips with their remove button, and the three lines the composer can say: a refusal in rust, the
+  vision warning in amber, and where these files actually live in stone. A chip whose bytes are gone says so in
+  words; an empty box would read as a broken app.
+- `ChatScreen+Composer.swift` — Send's three exits in order: nothing to send, the vision gate blocks it and the
+  draft stays full, it goes and both the text and the draft clear. The gate consulted here is the session's own
+  `visionDecision`, so the amber line above the composer cannot promise something the send two statements later
+  refuses.
+- `MessageRow+Attachments.swift` — the files under the sentence they came with, read through
+  `ChatSessionModel.attachmentPayload` and never off disk from a view; and the sources under a grounded answer,
+  in the citation's own numbering, with the file, the chunk, the character offset, the ranking number and a
+  short quote, collapsed until asked for.
+- `ExportedAttachment.swift`, `ExportedNode.swift`, `ChatTranscript.swift`, `ChatTranscript+Sources.swift` —
+  an export describes an attachment (kind, name, declared type, byte count, the text read from a document) and
+  carries not one byte of it; an import restores the description and invents no pixels; a transcript says what
+  was attached, says the pixels are not in the file, and prints each answer's sources. Moving a photograph out
+  of the phone as a side effect of "export the chat" is not a decision the app makes alone.
+- `AttachmentNotices.swift` (`CairnChatDomain`) — the two sentences about where a file really lives: a temporary
+  chat keeps nothing after the app closes, and a store that could not get a directory keeps a file for this
+  session only. Neither blocks a send; both refuse to promise what cannot be delivered.
+- `App/AttachmentWiring.swift` — the one place the store's file reader and the session that asks for it meet,
+  installed before any session is built, carrying both the reader and the honest answer about storage.
+  `App/ImageIOPreparer.swift` — ImageIO against real bytes: read the header without decoding, resample through
+  the thumbnail API so a 12 MP photo never becomes a full-size bitmap, check the ceiling against what was
+  actually produced rather than an estimate, and rename the file when the bytes changed format.
+- `App/CairnApp.swift`, `CairnRootView.swift`, `ChatScreen.swift`, `MessageRow.swift` — the seams handed through
+  rather than reached for, so a preview or a test builds with `PassthroughImagePreparer` and no files, and a
+  view never becomes a second reader of the conversation's contents.
+
 ### The decisions, and the reason each one is there
 
 1. **A file's bytes never enter the database.** Opening a chat reads every message row in it. A photograph in
@@ -1565,6 +1604,39 @@ CI-verified, on-device-verified or real-network-verified.
 asserts what actually leaves the device: an image appears in the payload of the turn it was attached to and in
 no later turn; a document's passages appear as a system block and never as an attachment; a model that cannot
 see never receives the image and the user is told before anything is sent.
+
+Eight more host tests in the second pass, 320 → **328**: `AttachmentExportTests` — the exported file names an
+attachment and contains no base64 of it; a message that carried nothing writes what it always wrote (no empty
+array); an imported attachment comes back as a description with no bytes; an attachment of a kind this build
+does not have is refused rather than guessed at, because image and document differ in what may leave the
+device; the transcript says what was attached and says the pixels are not in it; a source line names file,
+chunk, character and rank; a citation with no score says nothing about ranking; and the number that ranked a
+passage is the number its citation carries.
+
+Twenty-nine new simulator tests (`Tests/CairnTests`, run by the CI test job on iPhone 17 / iOS 26.5), each one
+about something a host build cannot answer:
+
+- `AttachmentPersistenceTests` (7) — the file is written beside the row and reads back by the attachment's own
+  id; a document keeps its text in the row and its bytes in the file; deleting a message, or the conversation,
+  removes the bytes; a row whose file was deleted out from under it survives and says the bytes are gone; a
+  store that cannot write fails the save instead of writing a row that names nothing; an in-memory store keeps
+  nothing and says so.
+- `ComposerDraftTests` (11) — the composer's rules run against the composer: plain text read here and staged
+  with what it yielded, a non-text container refused with the instruction to export it as text, an oversized
+  file refused before its bytes are looked at, a staged photo being what the codec produced rather than what
+  was handed in, a refusal in the codec's own words, non-UTF-8 text refused rather than decoded by guesswork,
+  a good pick clearing the sentence about the bad one, removal leaving the others in their original order, and
+  `clear` taking both the files and the refusal.
+- `AttachmentWiringTests` (5) — the session reads a stored file back through the wiring; a chat started later
+  gets the same reader; an unwired workspace says it cannot keep a file while still sending the one in memory;
+  a store that could not get a directory passes that on instead of promising; and the composer's warning is the
+  same sentence as the send's decision, because both come from the session.
+- `ImageIOPreparerTests` (6) — real bytes through the real codec: a 3000×2000 photo comes back with its longest
+  side at 1,568, under the encoded ceiling, named `.jpg` because its bytes changed format; a photo that already
+  fits is not re-encoded; a PNG keeps being a PNG; prose named `photo.jpg` is refused as unreadable rather than
+  as too big; no bytes at all is refused as nothing to read; and a file over the memory ceiling is refused
+  before anything is decoded.
+
 
 ### What is owed before M6 can be claimed
 

@@ -72,7 +72,7 @@ final class ImageIOPreparerTests: XCTestCase {
 
     func testAPNGIsNotQuietlyTurnedIntoAJPEG() throws {
         let bytes = try bitmap(width: 640, height: 480, type: .png)
-        let prepared = try XCTUnwrap(ImageIOPreparer().prepare(bytes, name: "diagram.png").success)
+        let prepared = try ImageIOPreparer().prepare(bytes, name: "diagram.png").get()
 
         XCTAssertEqual(prepared.declaredType, UTType.png.identifier, "the header says what the file is")
         XCTAssertEqual(prepared.name, "diagram.png", "and the name keeps that promise")
