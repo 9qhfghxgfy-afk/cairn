@@ -12,12 +12,13 @@ extension ChatListView {
             openChat: { open(chat) }
         )
         .listRowBackground(CairnTheme.slate.opacity(0.5))
+        // One swipe, one edge. Two `.swipeActions` calls on one row is the shape SwiftUI is least
+        // predictable about, and three buttons on the trailing edge is a thing people already know how to
+        // do: pull left, pick one.
         .swipeActions(edge: .trailing) {
             Button("Delete", role: .destructive) { deleteTarget = chat }
             Button("Duplicate") { workspace.duplicate(conversationID: chat.id) }
                 .tint(CairnTheme.moss)
-        }
-        .swipeActions(edge: .leading) {
             Button("Rename") {
                 renameText = ChatListQuery.visibleTitle(chat)
                 renameTarget = chat
@@ -50,7 +51,11 @@ extension ChatListView {
         .padding(.vertical, 4)
     }
 
+    /// Opening a saved chat out of a temporary one leaves temporary mode. That is not a side effect to
+    /// apologise for: the toggle never carries history over, and the temporary chat has already been said
+    /// out loud to be going away. Staying in it while a tap quietly does nothing would be the worse answer.
     func open(_ chat: Conversation) {
+        if workspace.temporaryChat { workspace.temporaryChat = false }
         workspace.select(conversationID: chat.id)
         dismiss()
     }
