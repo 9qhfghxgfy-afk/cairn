@@ -65,7 +65,7 @@ final class ToolWiringTests: XCTestCase {
 
         // A device with no composer gets no mail tool rather than a tool that answers "done" and opens
         // nothing.
-        let noComposer = BuiltInToolRegistry.make(searchState: { .default }, webToolsAllowed: false)
+        let noComposer = BuiltInToolRegistry.make(searchState: { WebSearchState() }, webToolsAllowed: false)
         XCTAssertEqual(noComposer.names, [BuiltInTool.calculator], "only what this build can really do")
     }
 
