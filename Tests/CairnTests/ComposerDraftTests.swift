@@ -133,14 +133,22 @@ final class ComposerDraftTests: XCTestCase {
         XCTAssertEqual(subject.staged.first?.name, "second.txt", "the chips do not shuffle under the user's hand")
     }
 
-    func testClearingTheDraftTakesTheRefusalWithTheFiles() {
-        var subject = draft(refusing: .notPlainText)
-        subject.accept(documentBytes: Data("anything".utf8), name: "notes.txt")
-        XCTAssertNotNil(subject.refusal)
+    func testClearingTheDraftTakesTheRefusalAndTheFilesWithIt() {
+        // A refusal is a statement about the last pick, so it has to leave when the draft does: a composer that
+        // has been emptied must not go on saying no about a file that is no longer in it.
+        var refused = draft(refusing: .unreadableImage)
+        refused.accept(imageBytes: Data([0xFF, 0xD8]), name: "Photo 1")
+        XCTAssertNotNil(refused.refusal)
+        refused.clear()
+        XCTAssertNil(refused.refusal)
 
-        subject.clear()
-        XCTAssertTrue(subject.isEmpty)
-        XCTAssertNil(subject.refusal, "a cleared composer must not go on saying no about a file that is gone")
+        // And the files: after a send that really started, the composer is empty, not merely hidden.
+        let kept = PreparedImage(data: Data([0xFF, 0xD8, 0x09]), name: "Photo 1.jpg")
+        var staged = ComposerDraft(preparer: StubPreparer(outcome: .success(kept)))
+        staged.accept(imageBytes: Data(count: 600), name: "Photo 1")
+        XCTAssertEqual(staged.staged.count, 1)
+        staged.clear()
+        XCTAssertTrue(staged.isEmpty)
     }
 
     func testTheLineAboutWhereFilesLiveNamesTheReasonThatActuallyApplies() {
