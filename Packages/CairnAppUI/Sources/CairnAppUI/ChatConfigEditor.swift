@@ -10,7 +10,7 @@ import CairnChatDomain
 ///
 /// The sections live in their own files: persona, sampling, and context each have enough going on to
 /// deserve one, and a 400-line form is the kind of file nobody edits correctly.
-struct ChatConfigEditor: View {
+struct ChatConfigEditor<Extra: View>: View {
     @Binding var config: ChatConfig
     /// Which knobs the engine in use will read. `Settings` passes `.all`, since a baseline has to be
     /// writable for servers other than the one selected right now; the request filter then drops a key
@@ -21,12 +21,33 @@ struct ChatConfigEditor: View {
     var supportNote: String?
     /// Owns the randomness for the seed control, so a preview or a test can make it repeatable.
     var seedCandidate: () -> Int = { Int.random(in: 1...999_999) }
+    /// One section the mounting screen supplies, placed between the injections and the live preview.
+    /// The per-chat sheet uses it for the hybrid rows; the Default Configuration editor passes nothing,
+    /// because a baseline has no engines in front of it to choose between.
+    @ViewBuilder var extra: () -> Extra
+
+    init(
+        config: Binding<ChatConfig>,
+        support: SamplingSupport = .all,
+        preview: String? = nil,
+        supportNote: String? = nil,
+        seedCandidate: @escaping () -> Int = { Int.random(in: 1...999_999) },
+        @ViewBuilder extra: @escaping () -> Extra
+    ) {
+        self._config = config
+        self.support = support
+        self.preview = preview
+        self.supportNote = supportNote
+        self.seedCandidate = seedCandidate
+        self.extra = extra
+    }
 
     var body: some View {
         Form {
             personaSection
             samplingSection
             contextSection
+            extra()
             if let preview { previewSection(preview) }
         }
         .scrollContentBackground(.hidden)
@@ -64,5 +85,24 @@ struct ChatConfigEditor: View {
             }
         }
         .tint(CairnTheme.amber)
+    }
+}
+
+extension ChatConfigEditor where Extra == EmptyView {
+    /// The form on its own — the shape the Default Configuration editor uses, where there is no pair
+    /// of engines to choose between because a baseline is written before any server is picked.
+    init(
+        config: Binding<ChatConfig>,
+        support: SamplingSupport = .all,
+        preview: String? = nil,
+        supportNote: String? = nil,
+        seedCandidate: @escaping () -> Int = { Int.random(in: 1...999_999) }
+    ) {
+        self.init(
+            config: config, support: support, preview: preview, supportNote: supportNote,
+            seedCandidate: seedCandidate
+        ) {
+            EmptyView()
+        }
     }
 }

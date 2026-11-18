@@ -103,14 +103,49 @@ public struct ChatScreen: View {
                 temporaryToggle
             }
 
-            if session?.isBusy == true {
+            if let hybrid = liveHybridSnapshot {
+                HybridProgressView(snapshot: hybrid)
+            } else if session?.isBusy == true {
                 StreamingStatusView(
                     phase: session?.phase ?? .idle,
                     tokensPerSecond: session?.liveTokensPerSecond
                 )
             }
+
+            // A hybrid mode a chat cannot run yet is said here rather than left to fail silently on
+            // the next send: the user chose the mode, so the mode owes them the reason.
+            if let refusal = hybridRefusal {
+                Text(refusal)
+                    .font(.caption)
+                    .foregroundStyle(CairnTheme.rust)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
         .padding(12)
+    }
+
+    /// The panel a hybrid turn drives: a live snapshot only while a hybrid turn is really in flight.
+    ///
+    /// The session leaves its snapshot standing after a hybrid turn ends so the panels can still be
+    /// read beside the answer, which means a chat in another mode must be excluded by its mode — not
+    /// by the snapshot's presence — or a finished turn would keep animating in the header. Once a turn
+    /// is over, the stored drafts and provenance on the node are what the user reads.
+    var liveHybridSnapshot: HybridSnapshot? {
+        guard let session,
+              HybridPanelRule.showsPanel(
+                  mode: session.conversation.mode,
+                  isBusy: session.isBusy,
+                  hasSnapshot: session.hybrid != nil
+              ),
+              let snapshot = session.hybrid else { return nil }
+        return snapshot
+    }
+
+    /// Why this chat cannot run the hybrid mode it is in, or nil when it can — the same
+    /// `HybridPlan` refusal the configuration sheet shows and the turn itself refuses with.
+    var hybridRefusal: String? {
+        guard let session, session.conversation.mode.isHybrid, !session.isBusy else { return nil }
+        return session.hybridBlockReason
     }
 
     // MARK: - Transcript

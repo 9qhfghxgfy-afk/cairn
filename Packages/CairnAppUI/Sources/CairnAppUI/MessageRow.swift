@@ -28,7 +28,12 @@ public struct MessageRow: View {
                 .foregroundStyle(tokens.onCanvas)
                 .textSelection(.enabled)
 
+            // One hybrid node holds several drafts; they hang off the answer they were folded into,
+            // so the card for a side can never drift from the text above it.
+            hybridDrafts
+
             if node.role == .assistant { metricsFooter }
+            provenanceFooter
             controls
         }
         .padding(12)
@@ -45,7 +50,7 @@ public struct MessageRow: View {
 
     var header: some View {
         HStack(spacing: 8) {
-            Text(node.role == .user ? "You" : (node.kind == .synthesized ? "Synthesized" : "Cairn"))
+            Text(roleTitle)
                 .font(.caption.weight(.bold))
                 .foregroundStyle(CairnTheme.amber)
 
@@ -63,8 +68,9 @@ public struct MessageRow: View {
         }
     }
 
-    /// Collapsed by default. Per-draft panels and timers land with the Hybrid
-    /// engine; the gate (real reasoning only) is already enforced here.
+    /// The node's own reasoning, collapsed by default, present only when the node actually carries
+    /// thinking text — which happens only when a backend emitted it. A candidate's own reasoning hangs
+    /// off its own draft card, gated the same way. Nothing here is ever paraphrased into existence.
     func reasoningPanel(_ thinking: String) -> some View {
         DisclosureGroup {
             Text(thinking)

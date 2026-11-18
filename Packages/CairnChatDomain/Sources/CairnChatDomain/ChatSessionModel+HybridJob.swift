@@ -31,6 +31,13 @@ extension ChatSessionModel {
         registry?.provider(id: id) ?? providers[id]
     }
 
+    /// The name a picker shows for one engine. An engine that is not registered right now is named
+    /// by its id rather than guessed at, because inventing a name for a server the user cannot see
+    /// is how a row ends up promising an answer nothing will give.
+    public func engineDisplayName(_ engineID: String) -> String {
+        engine(id: engineID)?.displayName ?? engineID
+    }
+
     /// The model this engine would be asked for: what was read from it, then what the app
     /// remembers it was last used with, then what the chat currently has selected. Never a name
     /// carried over from a different engine.

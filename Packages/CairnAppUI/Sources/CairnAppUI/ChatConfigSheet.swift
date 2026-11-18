@@ -34,7 +34,9 @@ public struct ChatConfigSheet: View {
                 support: session.samplingSupport,
                 preview: draftPreview,
                 supportNote: engineNote
-            )
+            ) {
+                HybridConfigSection(session: session, plan: hybridPlan)
+            }
             .navigationTitle("This chat")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -56,6 +58,18 @@ public struct ChatConfigSheet: View {
     /// what moves is the text that will be sent.
     private var draftPreview: String {
         draft.systemPrompt(in: session.contextEnvironment, turn: session.currentTurnContext)
+    }
+
+    /// The hybrid rows are edited on the draft like every other knob and written once, on Done.
+    ///
+    /// While the chat stores no plan the rows show what Cairn would choose from the engines registered
+    /// right now, so a user is never asked to fill two blank rows out of nothing — and a sheet nobody
+    /// touched still stores nothing, which is what keeps "no plan stored" meaning "choose at turn time".
+    private var hybridPlan: Binding<HybridPlan> {
+        Binding(
+            get: { draft.hybrid ?? HybridPlan.defaultPlan(from: session.hybridEngineOptions) },
+            set: { draft.hybrid = $0 }
+        )
     }
 
     private var engineNote: String? {

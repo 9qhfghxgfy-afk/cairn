@@ -17,7 +17,10 @@ extension MessageRow {
         case .interrupted:
             tag("paused", CairnTheme.amber)
         case .complete:
+            // Both hybrid shapes are worth naming on a finished node: one answer was written from
+            // several drafts, the other is two drafts held side by side.
             if node.kind == .synthesized { tag("synthesized", CairnTheme.moss) }
+            if node.kind == .hybridParallel { tag("compared", CairnTheme.moss) }
         }
     }
 

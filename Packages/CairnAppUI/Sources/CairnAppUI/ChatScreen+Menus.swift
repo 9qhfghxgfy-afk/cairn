@@ -4,8 +4,10 @@ import CairnChatDomain
 /// Selector menus for `ChatScreen`.
 extension ChatScreen {
 
-    /// Hybrid modes are visible but disabled: the schema already stores a synthesized
-    /// node from Milestone 1, and the engine that fills it lands in Milestone 4.
+    /// The mode this chat answers in. Both hybrid modes are live now that the hybrid engine exists:
+    /// a chat whose plan is not built yet is not hidden behind a disabled row, it is switched to and
+    /// then told what is missing — in the header caption, in the configuration sheet, and again on the
+    /// turn that refuses to start. One refusal, worded in one place.
     var modeMenu: some View {
         Menu {
             ForEach(InferenceMode.allCases) { mode in
@@ -18,7 +20,6 @@ extension ChatScreen {
                         Text(modeTitle(mode))
                     }
                 }
-                .disabled(mode != .onDeviceOnly && mode != .remoteOnly)
             }
         } label: {
             pill(symbol: "square.2.layers.3d", title: modeTitle(workspace.mode))
@@ -120,8 +121,8 @@ extension ChatScreen {
         switch mode {
         case .onDeviceOnly: return "On device"
         case .remoteOnly: return "Remote"
-        case .hybridParallel: return "Hybrid parallel (M4)"
-        case .hybridSynthesized: return "Hybrid synthesized (M4)"
+        case .hybridParallel: return "Hybrid parallel"
+        case .hybridSynthesized: return "Hybrid synthesized"
         }
     }
 }
