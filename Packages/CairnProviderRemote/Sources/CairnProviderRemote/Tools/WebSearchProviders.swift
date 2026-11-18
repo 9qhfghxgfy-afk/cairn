@@ -75,7 +75,7 @@ enum WebSearchParsing {
         for key in ["results", "items", "organic", "documents", "web"] {
             if case .array(let entries)? = value.dictionaryValue?[key] { return entries }
         }
-        if case .array(let entries)? = value { return entries }
+        if case .array(let entries) = value { return entries }
         return []
     }
 

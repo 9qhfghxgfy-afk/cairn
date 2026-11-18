@@ -1,4 +1,5 @@
 import Foundation
+import CairnChatDomain
 
 /// Reading the keyless endpoint's result list out of its HTML.
 ///
