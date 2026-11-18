@@ -107,23 +107,70 @@ extension MessageRow {
                 }
             }
         } else if node.role == .user {
-            Button {
-                draftText = node.text
-                isEditing = true
-            } label: {
-                Label("Edit", systemImage: "square.and.pencil")
+            HStack(spacing: 14) {
+                Button {
+                    draftText = node.text
+                    isEditing = true
+                } label: {
+                    Label("Edit", systemImage: "square.and.pencil")
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(CairnTheme.stoneLight)
+
+                CopyButton("Copy") { node.text }
             }
-            .buttonStyle(.borderless)
-            .foregroundStyle(CairnTheme.stoneLight)
         } else if node.role == .assistant, node.state != .streaming {
-            Button {
-                session.regenerate(assistantNodeID: node.id)
-            } label: {
-                Label("Regenerate", systemImage: "arrow.clockwise")
+            HStack(spacing: 14) {
+                Button {
+                    session.regenerate(assistantNodeID: node.id)
+                } label: {
+                    Label("Regenerate", systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(CairnTheme.stoneLight)
+                .disabled(session.isBusy)
+
+                // Drawn only on an answer that really stopped short. The rule is the domain's — a stopped
+                // or interrupted turn, or a finished one the server cut off at its token ceiling — and a
+                // failed turn is left to Regenerate, because its error is the story there.
+                if session.canContinue(node) {
+                    Button {
+                        session.continueGeneration(nodeID: node.id)
+                    } label: {
+                        Label("Continue", systemImage: "arrow.down.forward.circle")
+                    }
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(CairnTheme.amber)
+                    .disabled(session.isBusy)
+                    .accessibilityHint("Adds the rest of this answer as a new branch, keeping this one")
+                }
+
+                copyMenu
             }
-            .buttonStyle(.borderless)
-            .foregroundStyle(CairnTheme.stoneLight)
-            .disabled(session.isBusy)
         }
     }
+
+    /// Copy an answer as prose, or as the Markdown it was written in — two different texts, and the user
+    /// needs to be able to choose. Prose is what a note or another chat wants; the source is what a file
+    /// or a README wants. Neither is this screen's rendering: a code block copies its own exact lines from
+    /// inside the block, where a highlighted span is not a string and a wrapped line is not a newline.
+    private var copyMenu: some View {
+        Menu {
+            Button("Copy text") { Pasteboard.copy(answerProse) }
+            Button("Copy Markdown") { Pasteboard.copy(node.text) }
+        } label: {
+            Label("Copy", systemImage: "doc.on.doc")
+        }
+        .buttonStyle(.borderless)
+        .foregroundStyle(CairnTheme.stoneLight)
+    }
+
+    /// The answer with its markup resolved, which is what a reader of the screen actually saw. Markup is
+    /// not content: a copy that carries `**` around a word is carrying the model's punctuation, not the
+    /// emphasis. Text the parser could not read is handed back untouched rather than emptied.
+    private var answerProse: String {
+        let blocks = MarkdownParser.blocks(from: node.text)
+        return blocks.isEmpty ? node.text : blocks.plainText
+    }
 }
+

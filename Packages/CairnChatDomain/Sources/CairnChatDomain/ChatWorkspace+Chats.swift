@@ -86,4 +86,86 @@ extension ChatWorkspace {
             return nil
         }
     }
+
+    // MARK: - Out and back in
+
+    /// The readable copy of one chat, or of every saved chat when `conversationID` is nil.
+    ///
+    /// Only the persistent store is read, which is what keeps a temporary chat out of an exported file:
+    /// the thing the user chose to have forgotten is not something an export should quietly hand back. The
+    /// way to export a temporary chat is to keep a copy of it first, and say so.
+    public func transcriptMarkdown(conversationID: UUID? = nil) -> String? {
+        do {
+            if let conversationID {
+                guard let chat = try persistentStore.conversation(id: conversationID) else {
+                    lastError = StoreError.conversationNotFound(conversationID).errorDescription
+                    return nil
+                }
+                return ChatTranscript.markdown(
+                    conversation: chat,
+                    nodes: try persistentStore.nodes(conversationID: conversationID)
+                )
+            }
+            let chats = try persistentStore.loadConversations()
+            guard !chats.isEmpty else {
+                lastError = "There are no saved chats to export."
+                return nil
+            }
+            var messages: [ChatNode] = []
+            for chat in chats {
+                messages.append(contentsOf: try persistentStore.nodes(conversationID: chat.id))
+            }
+            return ChatTranscript.markdown(conversations: chats, nodes: messages)
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// The `.cairn` file of one chat, or of every saved chat. Lossless where the transcript is readable.
+    public func exportFileData(conversationID: UUID? = nil) -> Data? {
+        do {
+            if let conversationID {
+                guard let chat = try persistentStore.conversation(id: conversationID) else {
+                    lastError = StoreError.conversationNotFound(conversationID).errorDescription
+                    return nil
+                }
+                return try ChatExport.data(
+                    conversations: [chat],
+                    nodes: try persistentStore.nodes(conversationID: conversationID)
+                )
+            }
+            let chats = try persistentStore.loadConversations()
+            guard !chats.isEmpty else {
+                lastError = "There are no saved chats to export."
+                return nil
+            }
+            var messages: [ChatNode] = []
+            for chat in chats {
+                messages.append(contentsOf: try persistentStore.nodes(conversationID: chat.id))
+            }
+            return try ChatExport.data(conversations: chats, nodes: messages)
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Opens a `.cairn` file into the saved store.
+    ///
+    /// An import always lands in the persistent store as an ordinary chat, never in the ephemeral one: a
+    /// file the user opened is something they chose to keep, and writing it into the temporary store would
+    /// lose it at the next launch. Id collisions are handled inside `ChatImport` by re-ids-ing the whole
+    /// file as a copy, so an import can never overwrite a chat that is already here.
+    public func importChatFile(_ data: Data) -> ChatImportPlan? {
+        do {
+            let plan = try ChatImport.apply(try ChatExport.decode(data), to: persistentStore)
+            reloadConversations()
+            return plan
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
 }
+

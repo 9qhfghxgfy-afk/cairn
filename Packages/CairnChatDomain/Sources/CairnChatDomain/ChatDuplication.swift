@@ -80,6 +80,9 @@ public enum ChatDuplication {
             updatedAt: now,
             mode: chat.mode,
             config: chat.config,
+            // Kept as written. Whether a copy may live on disk is the caller's decision, not this
+            // function's: `duplicate` copies inside the saved store, `keepCopyOfCurrentChat` copies out of
+            // the ephemeral one, and only the caller knows which store it is about to write to.
             isTemporary: chat.isTemporary
         )
         // A chat copied from one that had no leaf pointer opens at the deepest message it kept, so the

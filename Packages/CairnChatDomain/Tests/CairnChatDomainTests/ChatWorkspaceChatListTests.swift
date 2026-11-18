@@ -131,5 +131,62 @@ final class ChatWorkspaceChatListTests: XCTestCase {
         XCTAssertNil(workspace.keepCopyOfCurrentChat(), "there is nothing at risk of being lost here")
         XCTAssertEqual(try disk.nodes(conversationID: session.conversation.id).count, 2, "and nothing was copied")
     }
+
+    func testExportingOneChatThenImportingItBackAddsACopyRatherThanTouchingTheOriginal() async throws {
+        let (workspace, disk, _) = makeWorkspace()
+        await workspace.start()
+        let session = try XCTUnwrap(workspace.session)
+        session.send("what is a cairn?")
+        await SessionHarness.settle(session)
+        let original = try XCTUnwrap(disk.conversation(id: session.conversation.id))
+        let before = try disk.nodes(conversationID: session.conversation.id)
+
+        let data = try XCTUnwrap(workspace.exportFileData(conversationID: session.conversation.id))
+        let plan = try XCTUnwrap(workspace.importChatFile(data))
+
+        XCTAssertTrue(plan.assignedFreshIDs, "the ids are already here, so the file comes in as a copy")
+        XCTAssertEqual(workspace.chats().count, 2)
+        let reopened = try XCTUnwrap(disk.conversation(id: plan.conversations[0].id))
+        XCTAssertEqual(reopened.title, "\(original.title) (copy)")
+        XCTAssertEqual(try disk.nodes(conversationID: original.id).count, before.count, "the original is untouched")
+        XCTAssertEqual(try disk.nodes(conversationID: reopened.id).count, before.count, "and the copy is whole")
+    }
+
+    func testATranscriptIsReadableAndAFileIsLosslessForTheSameChat() async throws {
+        let (workspace, disk, _) = makeWorkspace()
+        await workspace.start()
+        let session = try XCTUnwrap(workspace.session)
+        session.send("Explain cairns")
+        await SessionHarness.settle(session)
+
+        let page = try XCTUnwrap(workspace.transcriptMarkdown(conversationID: session.conversation.id))
+        XCTAssertTrue(page.hasPrefix("# "))
+        XCTAssertTrue(page.contains("Explain cairns"))
+
+        let data = try XCTUnwrap(workspace.exportFileData(conversationID: session.conversation.id))
+        let read = try ChatImport.contents(try ChatExport.decode(data))
+        XCTAssertEqual(read.conversations.map { $0.id }, [session.conversation.id])
+        XCTAssertEqual(read.nodes.count, try disk.nodes(conversationID: session.conversation.id).count)
+    }
+
+    func testATemporaryChatCannotBeExportedFromTheSavedStoreAndSaysWhy() async throws {
+        let (workspace, _, _) = makeWorkspace(temporary: true)
+        await workspace.start()
+        let session = try XCTUnwrap(workspace.session)
+        session.send("a question I do not want kept")
+        await SessionHarness.settle(session)
+
+        XCTAssertNil(workspace.transcriptMarkdown(conversationID: session.conversation.id))
+        XCTAssertNil(workspace.exportFileData(conversationID: session.conversation.id))
+        XCTAssertNotNil(workspace.lastError, "the refusal has to be said, not silently returned")
+        XCTAssertNil(workspace.transcriptMarkdown(), "and an all-chats export finds nothing to export")
+    }
+
+    func testAFileThatIsNotACairnChatIsRefusedAtTheDoor() throws {
+        let (workspace, _, _) = makeWorkspace()
+        XCTAssertNil(workspace.importChatFile(Data("not a chat".utf8)))
+        XCTAssertTrue(workspace.lastError?.contains("could not be read") == true)
+    }
 }
+
 

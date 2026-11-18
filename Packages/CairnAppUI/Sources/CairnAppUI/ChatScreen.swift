@@ -22,6 +22,13 @@ public struct ChatScreen: View {
         VStack(spacing: 0) {
             header
             Divider().background(CairnTheme.stone.opacity(0.5))
+            // Above the transcript rather than in a settings screen, because the thing it is warning about
+            // is the text currently on screen.
+            if workspace.temporaryChat {
+                TempChatBanner(workspace: workspace)
+                    .padding(.horizontal, 12)
+                    .padding(.top, 10)
+            }
             transcript
             composer
         }

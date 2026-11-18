@@ -117,12 +117,5 @@ extension ChatScreen {
         .foregroundStyle(CairnTheme.stoneLight)
     }
 
-    func modeTitle(_ mode: InferenceMode) -> String {
-        switch mode {
-        case .onDeviceOnly: return "On device"
-        case .remoteOnly: return "Remote"
-        case .hybridParallel: return "Hybrid parallel"
-        case .hybridSynthesized: return "Hybrid synthesized"
-        }
-    }
+    func modeTitle(_ mode: InferenceMode) -> String { mode.displayName }
 }

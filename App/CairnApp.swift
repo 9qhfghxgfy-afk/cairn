@@ -26,6 +26,10 @@ struct CairnLaunchView: View {
     /// The tool assembly, kept alive for the life of the app: it holds the mail composer and reads
     /// Settings and the Keychain on behalf of the tools every chat gets.
     @State private var toolWiring: ToolWiring?
+    /// A chat file that arrived before the workspace existed. iOS hands an opened file over in the same
+    /// moment it launches the app, so the file is held for a beat and imported as soon as there is a store
+    /// to import it into — rather than dropped on the floor because the launch lost a race.
+    @State private var pendingImportURL: URL?
 
     var body: some View {
         Group {
@@ -39,6 +43,17 @@ struct CairnLaunchView: View {
                 )
             } else {
                 ProgressView().controlSize(.large)
+            }
+        }
+        .onOpenURL { url in
+            // A chat file another app handed over: Mail, Files, a share sheet. Nothing is fetched — the URL
+            // is a file the system placed for this app, never an address, and an import only ever adds:
+            // `ChatImport` gives a file whose ids are already here a fresh set, so opening a file cannot
+            // overwrite a chat that already exists.
+            if let workspace {
+                importChatFile(url, into: workspace)
+            } else {
+                pendingImportURL = url
             }
         }
         .task {
@@ -123,6 +138,12 @@ struct CairnLaunchView: View {
                 workspace = builtWorkspace
                 servers = builtServers
                 theme = builtTheme
+
+                // The file the app was launched with, if one arrived before there was anywhere to put it.
+                if let pending = pendingImportURL {
+                    pendingImportURL = nil
+                    importChatFile(pending, into: builtWorkspace)
+                }
             } catch {
                 // Typed metadata only: never log prompt content, URLs, or paths.
                 startupFailure = error.localizedDescription
@@ -138,5 +159,21 @@ struct CairnLaunchView: View {
             // The statistics switch decides what is drawn, so it travels to the sessions the same way.
             if let workspace, let toolWiring { toolWiring.install(on: workspace) }
         }
+    }
+
+    /// Reading a chat file the system handed this app and putting it in the saved store.
+    ///
+    /// The claim is taken for the read and dropped straight after — a file outside the app belongs to the
+    /// system, and holding a grant Cairn no longer needs would be keeping a permission nobody asked for.
+    /// A file that is not a Cairn chat is refused by the importer, which writes the reason where the chat
+    /// screen shows it; nothing is half-imported and nothing is logged.
+    private func importChatFile(_ url: URL, into workspace: ChatWorkspace) {
+        let claimed = url.startAccessingSecurityScopedResource()
+        defer { if claimed { url.stopAccessingSecurityScopedResource() } }
+        guard let data = try? Data(contentsOf: url) else {
+            workspace.lastError = "That file could not be read."
+            return
+        }
+        workspace.importChatFile(data)
     }
 }

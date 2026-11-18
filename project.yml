@@ -85,6 +85,26 @@ targets:
         NSBonjourServices:
           - _http._tcp
         LSApplicationCategoryType: public.app-category.productivity
+        # A Cairn chat file: JSON with a type of its own, so the file a user exports has a name and a kind
+        # in the Files app, and a file handed back to Cairn arrives as something this app recognises. It
+        # conforms to public.json, so any editor can still open it — the declaration adds a name, it hides
+        # nothing. Nothing here opens a network path: an opened file is bytes the system hands over.
+        UTExportedTypeDeclarations:
+          - UTTypeIdentifier: app.cairn.chat
+            UTTypeConformsTo:
+              - public.json
+            UTTypeDescription: "Cairn chat"
+            UTTypeTagSpecification:
+              public.filename-extension:
+                - cairn
+              public.mime-type:
+                - application/vnd.cairn.chat
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: Cairn chat
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Owner
+            LSItemContentTypes:
+              - app.cairn.chat
     configFiles:
       # Signing chain. Config/Signing.xcconfig optionally #includes the git-ignored
       # Config/Local.xcconfig, so a local Team ID is picked up when the file exists and CI,

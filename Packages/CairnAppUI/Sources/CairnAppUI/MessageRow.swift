@@ -24,9 +24,7 @@ public struct MessageRow: View {
             if let thinking = node.thinking, !thinking.isEmpty {
                 reasoningPanel(thinking)
             }
-            Text(node.text.isEmpty ? "…" : node.text)
-                .foregroundStyle(tokens.onCanvas)
-                .textSelection(.enabled)
+            bodyText
 
             // One hybrid node holds several drafts; they hang off the answer they were folded into,
             // so the card for a side can never drift from the text above it.
@@ -54,6 +52,32 @@ public struct MessageRow: View {
 
     var header: some View {
         HStack(spacing: 8) {
+    /// A finished answer drawn as the Markdown it is; the user's own words and a still-arriving answer
+    /// drawn as plain text.
+    ///
+    /// A fence typed half a sentence ago would be drawn as a code block that has not closed yet, and a
+    /// layout that jumps on every token is harder to read than the tokens. Marking up what the user typed
+    /// would be reading into their message rather than showing it, so their turn stays exactly what they
+    /// sent. The copy button underneath offers the text either way.
+    @ViewBuilder var bodyText: some View {
+        if rendersMarkdown {
+            MarkdownMessageView(text: node.text)
+        } else {
+            Text(node.text.isEmpty ? "…" : node.text)
+                .foregroundStyle(tokens.onCanvas)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    var rendersMarkdown: Bool {
+        node.role == .assistant
+            && !node.text.isEmpty
+            && node.state != .streaming
+            && session.conversation.config.responseFormat != .plain
+    }
+
+    var header: some View {
             Text(roleTitle)
                 .font(.caption.weight(.bold))
                 .foregroundStyle(CairnTheme.amber)
