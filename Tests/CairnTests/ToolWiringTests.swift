@@ -1,17 +1,31 @@
+import Foundation
 import XCTest
 import CairnChatDomain
 import CairnAppUI
 import CairnProviderRemote
 import CairnPersistence
 
-/// A Keychain the test can seed, so the route decision can be pinned without a secure enclave.
-@MainActor
+/// A Keychain the test can seed, so the route decision can be pinned without a secure enclave. Not
+/// main-actor-isolated: `KeychainOperating` is a nonisolated protocol, so the lock is what serialises
+/// it — the same shape `FakeKeychainOperator` uses in the remote suite.
 final class MemoryKeychain: KeychainOperating, @unchecked Sendable {
+    private let lock = NSLock()
     private var items: [KeychainQuery: Data] = [:]
 
-    func set(_ query: KeychainQuery, value: Data) throws { items[query] = value }
-    func data(for query: KeychainQuery) throws -> Data? { items[query] }
-    func remove(_ query: KeychainQuery) throws { items[query] = nil }
+    func set(_ query: KeychainQuery, value: Data) throws {
+        lock.lock(); defer { lock.unlock() }
+        items[query] = value
+    }
+
+    func data(for query: KeychainQuery) throws -> Data? {
+        lock.lock(); defer { lock.unlock() }
+        return items[query]
+    }
+
+    func remove(_ query: KeychainQuery) throws {
+        lock.lock(); defer { lock.unlock() }
+        items[query] = nil
+    }
 }
 
 /// P3b wiring: the app layer is the only place a registry can be built, because the tools it holds need
@@ -53,10 +67,6 @@ final class ToolWiringTests: XCTestCase {
         }
         XCTAssertTrue(unacknowledged.availableDefinitions(context: offered).allSatisfy { !$0.requiresPublicInternet })
 
-        let armed = registry(acknowledged)
-        for name in BuiltInTool.webNames {
-            XCTAssertNotNil(armed.tool(name), "\(name) arrives with the acknowledgement")
-        }
         let armed = registry(acknowledged)
         for name in BuiltInTool.webNames {
             XCTAssertNotNil(armed.tool(name), "\(name) arrives with the acknowledgement")
