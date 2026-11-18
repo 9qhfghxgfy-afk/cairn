@@ -6,27 +6,16 @@ import CairnChatDomain
 @testable import CairnPersistence
 
 /// What the M5 screens promise, checked where the promise lives: an exported file really is the chat it
-/// came from, a highlighted code line keeps every character it was given, and the new views build a real
-/// layout instead of crashing on the way there.
+/// came from, and a highlighted code line keeps every character it was given.
 ///
-/// The pixels are not asserted. What is asserted is the part a person depends on and cannot see: that the
-/// bytes handed to the share sheet are the whole chat, that colour never edits the source, and that a
-/// screen with a tree behind it survives being put on screen.
+/// The pixels are not asserted, and no view is put on screen here. The first attempt at this file hosted the
+/// new screens in a `UIWindow` with no window scene to measure that they built a layout; that hung CI's
+/// simulator test lane for twenty minutes, and what it would have proved — a hosted view has a height — was
+/// not worth the lane it held up. The screens are proved on the device checklist instead; what is proved here
+/// is the part a person depends on and cannot see: the bytes handed to the share sheet are the whole chat,
+/// and colour never edits the source.
 @MainActor
 final class ChatExportAndRenderingTests: XCTestCase {
-    /// Held so the window is not released while the hosted view is being measured.
-    private var hostWindow: UIWindow?
-
-    private func host<V: View>(_ view: V) -> UIViewController {
-        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
-        let root = UIHostingController(rootView: view)
-        window.rootViewController = root
-        window.makeKeyAndVisible()
-        hostWindow = window
-        root.view.layoutIfNeeded()
-        return root
-    }
-
     /// The mock streams on its own clock, so a turn is waited for rather than assumed. The helper lives
     /// here because the domain's harness is inside the domain's test target and is not shared.
     private func settle(_ session: ChatSessionModel) async {
@@ -98,19 +87,15 @@ final class ChatExportAndRenderingTests: XCTestCase {
         XCTAssertEqual(UIPasteboard.general.string, wanted)
     }
 
-    func testTheNewScreensSurviveBeingPutOnScreen() async throws {
-        let workspace = try await workspace()
-        let session = try XCTUnwrap(workspace.session)
-        session.send("Explain a cairn in two lines")
-        await settle(session)
-
-        let answer = "## A cairn\n\nA **cairn** is a stack of stones. Use `stones`, not branches.\n\n"
-            + "- visible from the trail\n- built from what is there\n"
-        XCTAssertGreaterThan(host(MarkdownMessageView(text: answer)).view.frame.height, 0)
-        let code = CodeBlockView(infoString: "swift", lines: ["let x = 1", "// one arm"])
-        XCTAssertGreaterThan(host(code).view.frame.height, 0)
-        XCTAssertGreaterThan(host(ChatListView(workspace: workspace)).view.frame.height, 0)
-        XCTAssertGreaterThan(host(TempChatBanner(workspace: workspace)).view.frame.height, 0)
-        XCTAssertGreaterThan(host(ChatExportSheet(workspace: workspace)).view.frame.height, 0)
+    /// Copying the prose of an answer must not hand back markup, and must not lose text either. That is a
+    /// claim about the renderer's own file, so it is checked here rather than only in the domain suite.
+    func testCopyingProseGivesWhatWasReadRatherThanWhatWasMarkedUp() {
+        let answer = "## Cairns\n\nA **cairn** is a stack of stones. Use `stones`.\n"
+        let blocks = MarkdownParser.blocks(from: answer)
+        let prose = blocks.isEmpty ? answer : blocks.plainText
+        XCTAssertFalse(prose.contains("## "), "a heading marker is punctuation the model typed, not prose")
+        XCTAssertFalse(prose.contains("**"), "so is a bold marker")
+        XCTAssertFalse(prose.contains("`"), "and so is an inline-code marker")
+        XCTAssertTrue(prose.contains("cairn"), "and the words the user read are still there")
     }
 }
