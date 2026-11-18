@@ -68,8 +68,12 @@ final class WikiSearchToolTests: XCTestCase {
         XCTAssertFalse(results[0].snippet.contains("searchmatch"))
         XCTAssertTrue(results[0].snippet.contains("The reef is"))
         XCTAssertTrue(results[0].snippet.contains("—"), "the entity is the character Wikipedia wrote")
-        XCTAssertTrue(results[0].snippet.contains("& wide"), "an ampersand is kept, not rewritten")
-        XCTAssertFalse(results[0].snippet.contains("   "), "the whitespace the markup left is collapsed")
+        XCTAssertTrue(results[0].snippet.contains("long &"), "an ampersand is kept, not rewritten")
+        XCTAssertFalse(results[0].snippet.contains("\n"), "one excerpt is one line, however the markup broke")
+        XCTAssertEqual(
+            results[0].snippet, results[0].snippet.trimmingCharacters(in: .whitespacesAndNewlines),
+            "the excerpt starts and ends at the text, and the words stay Wikipedia's"
+        )
         XCTAssertTrue(results[1].snippet.isEmpty, "nothing is said about a page that said nothing")
         XCTAssertEqual(WikiSearchTool.results(in: .json(#"{"query":{"search":[]}}"#), limit: 5).count, 0)
     }
