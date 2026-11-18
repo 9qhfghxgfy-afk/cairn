@@ -226,6 +226,9 @@ final class OpenAICodecTests: XCTestCase {
                     case .finished(let reason): finish = reason
                     case .usage(let p, let c): usage = (p, c)
                     case .streamDone: break
+                    // A text-only stream must not yield call fragments; stitched calls have their own
+                    // suite, and one appearing here would mean the decoder is inventing them.
+                    case .toolCallDelta: XCTFail("unexpected call fragment in a text-only stream")
                     case .error: XCTFail("unexpected error event")
                     }
                 }

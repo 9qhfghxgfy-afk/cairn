@@ -11,9 +11,29 @@ final class ScriptedSteps: @unchecked Sendable {
     private let steps: [[StreamChunk]]
     private let lock = NSLock()
     private var index = 0
+    /// Every request the loop handed this fake, in the order it handed them. Recorded **inside** the
+    /// fake rather than in a captured local, because the engine closure is `@Sendable` and may not
+    /// mutate a captured variable — and "what did the model see on step two" is the question two of
+    /// these tests ask.
+    private var received: [GenerationRequest] = []
 
     init(_ steps: [[StreamChunk]]) {
         self.steps = steps
+    }
+
+    var requests: [GenerationRequest] {
+        lock.lock(); defer { lock.unlock() }
+        return received
+    }
+
+    /// Takes the next step and records the request it was taken for, under one lock, so a two-step
+    /// loop cannot record one request twice or hand out the same step twice.
+    func take(_ request: GenerationRequest) -> [StreamChunk] {
+        lock.lock()
+        defer { lock.unlock() }
+        received.append(request)
+        defer { index += 1 }
+        return index < steps.count ? steps[index] : [.content("(no more scripted steps)")]
     }
 
     func next() -> [StreamChunk] {
@@ -24,9 +44,10 @@ final class ScriptedSteps: @unchecked Sendable {
     }
 
     var engine: ToolLoopEngine {
-        ToolLoopEngine { _ in
-            AsyncThrowingStream { continuation in
-                for chunk in self.next() { continuation.yield(chunk) }
+        ToolLoopEngine { request in
+            let step = self.take(request)
+            return AsyncThrowingStream { continuation in
+                for chunk in step { continuation.yield(chunk) }
                 continuation.finish()
             }
         }
@@ -86,22 +107,15 @@ final class ToolLoopTests: XCTestCase {
             [ToolTestSupport.calculatorCall()],
             [.content("done")],
         ])
-        var seen: [GenerationRequest] = []
         var outcome: ToolLoopOutcome?
-        let engine = ToolLoopEngine { request in
-            seen.append(request)
-            return AsyncThrowingStream { continuation in
-                for chunk in steps.next() { continuation.yield(chunk) }
-                continuation.finish()
-            }
-        }
         for try await event in ToolLoop.stream(
-            request: ToolTestSupport.request, engine: engine,
+            request: ToolTestSupport.request, engine: steps.engine,
             registry: ToolTestSupport.registry, format: .native,
             context: .forTurn(toolsEnabled: true)
         ) {
             if case .completed(let settled) = event { outcome = settled }
         }
+        let seen = steps.requests
         XCTAssertEqual(seen.count, 2)
         let second = try XCTUnwrap(seen.last)
         XCTAssertTrue(
@@ -118,7 +132,7 @@ final class ToolLoopTests: XCTestCase {
     func testPromptProtocolCallIsParsedOutOfProseAndNotShownToTheUser() async throws {
         let prose = "Let me work that out.\n"
             + "<function=calculator><parameter=expression>6*7</parameter></function>"
-        let steps = ScriptedSteps([.content(prose), .content("It is 42.")])
+        let steps = ScriptedSteps([[.content(prose)], [.content("It is 42.")]])
         var outcome: ToolLoopOutcome?
         for try await event in ToolLoop.stream(
             request: ToolTestSupport.request, engine: steps.engine,

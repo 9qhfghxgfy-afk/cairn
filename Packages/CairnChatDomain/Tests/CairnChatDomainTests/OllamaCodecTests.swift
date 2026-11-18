@@ -176,6 +176,9 @@ final class OllamaCodecTests: XCTestCase {
             case .content(let t): text += t
             case .thinking(let t): thinking += t
             case .finished(let info): finished = info
+            // These tests feed text-only streams, so a structured call here means the decoder invented
+            // one. Refusing it out loud is the honest answer; ignoring it would let a bug pass.
+            case .toolCall: XCTFail("unexpected tool call in a text-only stream")
             case .error: XCTFail("unexpected error event")
             }
         }

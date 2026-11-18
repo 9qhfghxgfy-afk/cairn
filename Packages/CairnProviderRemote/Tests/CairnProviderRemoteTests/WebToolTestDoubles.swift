@@ -1,4 +1,5 @@
 import Foundation
+import XCTest
 import CairnChatDomain
 @testable import CairnProviderRemote
 
