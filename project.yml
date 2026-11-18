@@ -111,6 +111,10 @@ targets:
     platform: iOS
     sources:
       - Tests/CairnTests
+      # One app-layer file, compiled straight into the test bundle: it holds the residency wiring M4
+      # promises (the factory that turns a registry into the gate every session gets) and has no @main
+      # and no app-only imports, so the simulator suite can prove that factory instead of trusting it.
+      - App/HybridWiring.swift
     dependencies:
       - package: CairnChatDomain
       - package: CairnPersistence
@@ -118,6 +122,9 @@ targets:
       # factory to prove that saved profiles really become engines.
       - package: CairnAppUI
       - package: CairnProviderRemote
+      # The residency gate a hybrid turn asks is built here, on the real memory reading, so the
+      # simulator suite has to be able to construct it and the registry behind it.
+      - package: CairnInferenceLocal
     configFiles:
       # The one shared xcconfig, same as the app target, so a local Team ID in Local.xcconfig covers
       # app and tests together; the bundle ids stay distinct because the test bundle is derived as

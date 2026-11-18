@@ -51,6 +51,10 @@ struct CairnLaunchView: View {
                 // `.onDevice`, so a turn that runs here sends nothing anywhere and shows no badge.
                 let onDeviceEngines = OnDeviceWiring.engines()
                 let registry = ProviderRegistry(providers: [MockStreamingProvider()] + onDeviceEngines)
+                // One owner for "what is resident in this process": the memory-pressure watch releases
+                // through this registry and a hybrid turn's residency answer reads and releases through
+                // the same one, so the two paths cannot disagree about what is loaded.
+                let onDeviceRegistry = OnDeviceModelRegistry()
                 // Which server is in use, and what each server was last used with, is one shared
                 // object. The Servers screen and every chat read and write it, so a tap in either
                 // place is true in the other — and it is written through to disk, so it survives a
@@ -65,6 +69,10 @@ struct CairnLaunchView: View {
                     registry: registry,
                     selection: selection
                 )
+                // The hybrid memory answer is injected before any session exists, so the first chat
+                // the app opens already asks the real device question. Without this every session keeps
+                // the domain default: one on-device model at a time, released between runs.
+                builtWorkspace.residency = HybridWiring.residencyGate(onDeviceRegistry)
                 // Read once, then copied into each chat as it is created. Changing the default later
                 // cannot rewrite a conversation the user already has.
                 builtWorkspace.apply(defaults: builtTheme.settings.defaultChatConfig)
@@ -88,7 +96,6 @@ struct CairnLaunchView: View {
                 // than assumed, plus the Model Manager for every server's loaded and installed
                 // models. Both are handed to the Servers screen as values and a view model, so
                 // CairnAppUI never imports a runtime.
-                let onDeviceRegistry = OnDeviceModelRegistry()
                 builtServers.onDeviceReport = OnDeviceWiring.report()
                 builtServers.modelManager = ModelManagerModel(
                     managing: factory.modelService(),

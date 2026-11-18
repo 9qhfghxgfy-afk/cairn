@@ -25,6 +25,15 @@ public final class ChatWorkspace {
     /// behaviour behind their back.
     public var defaultConfig: ChatConfig = .default
 
+    /// The memory answer a hybrid turn asks: may two on-device models be resident at one instant,
+    /// and what has to be released before the next one loads.
+    ///
+    /// Only the app layer can read the real ceiling, so it injects one here; a workspace wired
+    /// without a gate leaves every session on the domain's strict default, which is one on-device
+    /// model at a time with a release between them. Set before `start()` so the first session a
+    /// workspace makes already carries it.
+    public var residency: (any HybridResidencyGating)?
+
     /// Points the baseline at a new Default Configuration. Existing chats keep what they were seeded
     /// with — only chats created from here on take it.
     public func apply(defaults: ChatConfig) {
@@ -180,6 +189,9 @@ public final class ChatWorkspace {
             session = ChatSessionModel(conversation: conversation, store: store, providers: providerList)
         }
         session.selection = selection
+        // The memory gate travels with the session, so a hybrid turn in this chat asks the real
+        // device question rather than the domain default. Nil keeps the strict default in place.
+        if let residency { session.residency = residency }
         // Applied before any view can read the session, so a new or reopened chat opens on
         // the server in use rather than on whatever the registry happens to list first.
         if let activeID = selection?.activeProfileID {
