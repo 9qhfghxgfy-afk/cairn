@@ -63,7 +63,12 @@ extension ChatListView {
     /// Reading a file the user picked. Nothing is guessed about it: the bytes are handed to the importer,
     /// which either recognises them or refuses them, and the refusal is what gets said.
     func importFile(_ result: Result<[URL], Error>) {
-        guard case .success(let urls), let url = urls.first else {
+        // Two steps rather than one condition. `guard case .success(let urls), let url = urls.first` does not
+        // parse — a binding after a pattern-matching condition is rejected — and a version that tries to be
+        // cleverer than the compiler is not worth the line it saves.
+        var picked: [URL] = []
+        if case .success(let urls) = result { picked = urls }
+        guard let url = picked.first else {
             if case .failure(let failure) = result { notice = failure.localizedDescription }
             return
         }

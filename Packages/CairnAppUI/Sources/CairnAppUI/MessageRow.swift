@@ -9,9 +9,15 @@ public struct MessageRow: View {
     /// The active theme's colours, so the transcript is the theme the user picked rather than the one
     /// the app shipped with. Status colours stay fixed on purpose — see `CairnTheme`.
     @Environment(\.cairnTokens) private var tokens
+    /// The row's own way out, read from the environment the app provides. The Markdown underneath replaces
+    /// `openURL` for its own subtree so a link tap can be caught; this stays the real one, which is what
+    /// the "Open" button in that warning is allowed to call.
+    @Environment(\.openURL) private var openExternalURL
 
     @State var isEditing = false
     @State var draftText = ""
+    /// A link the answer offered, held until the user agrees to leave. Nothing opens on the tap that asked.
+    @State var externalURL: URL?
 
     public init(session: ChatSessionModel, node: ChatNode) {
         self.session = session
@@ -48,10 +54,11 @@ public struct MessageRow: View {
                         .stroke(borderColor.opacity(0.5), lineWidth: 1)
                 )
         )
+        // The row answers for its own link, so the warning is attached here rather than to the whole
+        // transcript. The tap that asked to open is the tap that gets asked back.
+        .alert(externalTitle(for: externalURL), isPresented: isOpeningExternal) { externalButtons }
     }
 
-    var header: some View {
-        HStack(spacing: 8) {
     /// A finished answer drawn as the Markdown it is; the user's own words and a still-arriving answer
     /// drawn as plain text.
     ///
@@ -62,6 +69,10 @@ public struct MessageRow: View {
     @ViewBuilder var bodyText: some View {
         if rendersMarkdown {
             MarkdownMessageView(text: node.text)
+                .environment(\.openURL, OpenURLAction { url in
+                    openExternal(url)
+                    return .handled
+                })
         } else {
             Text(node.text.isEmpty ? "…" : node.text)
                 .foregroundStyle(tokens.onCanvas)
@@ -78,6 +89,7 @@ public struct MessageRow: View {
     }
 
     var header: some View {
+        HStack(spacing: 8) {
             Text(roleTitle)
                 .font(.caption.weight(.bold))
                 .foregroundStyle(CairnTheme.amber)
