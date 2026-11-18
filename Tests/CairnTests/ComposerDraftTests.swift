@@ -1,3 +1,4 @@
+import CairnAppUI
 import CairnChatDomain
 import XCTest
 
