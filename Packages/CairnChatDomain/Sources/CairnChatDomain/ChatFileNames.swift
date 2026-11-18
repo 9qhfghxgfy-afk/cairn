@@ -51,12 +51,17 @@ public enum ChatFileNames {
     /// `@MainActor` class cannot be called from a plain function, which is what makes a name hard to test.
     public static func name(for chat: Conversation?, markdown: Bool, now: Date = Date()) -> String {
         let suffix = markdown ? "md" : "cairn"
-        guard let chat else { return "cairn-chats-\(now.iso8601.prefix(10)).\(suffix)" }
+        // Second-precise, and run back through `safeSegment`: `iso8601` carries colons, and a colon in a file
+        // name is a path separator on some systems. A date-only stamp would not do — two chats whose titles
+        // were never typed, exported on the same afternoon, would land on one name, and in a shared folder
+        // the second export would quietly replace the first.
+        let stamp = safeSegment(now.iso8601)
+        guard let chat else { return "cairn-chats-\(stamp).\(suffix)" }
         let stem = safeSegment(ChatListQuery.visibleTitle(chat))
         // Two chats whose titles were never typed would otherwise export to the same name, and a name the
         // user cannot tell apart in a file list is a name that gets overwritten.
         if ChatListQuery.visibleTitle(chat) == ChatListQuery.untitledTitle {
-            return "\(stem)-\(now.iso8601.prefix(10)).\(suffix)"
+            return "\(stem)-\(stamp).\(suffix)"
         }
         return "\(stem).\(suffix)"
     }

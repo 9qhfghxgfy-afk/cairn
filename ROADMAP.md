@@ -1305,7 +1305,8 @@ for the rest of a stopped answer.
 
 
 - **`MessageRow+Controls`** — Stop stays while streaming; after a turn that was stopped, interrupted or cut
-  at the token limit, the row offers **Continue from where it stopped**, plus **Copy text** and
+  at the token limit, the row offers **Continue** — add the rest of this answer, on a branch of its own —
+  plus **Copy text** and
   **Copy Markdown**. The three continuation cases are one domain rule (`ChatContinuation`), so the button
   cannot disagree with the state.
 - **`TempChatBanner`** — a persistent line in the chat plus the badge already on the toggle: the chat is not
@@ -1315,9 +1316,9 @@ for the rest of a stopped answer.
   through a transient `fileURLWithContents`; nothing is cached on disk by the app. Import accepts either
   shape, refuses what it does not recognise, and re-assigns fresh ids on a clash instead of writing over a
   chat that is already here.
-- **`ChatFileNames`** — a name from the title, `Untitled 2026-11-18 14-32-05` otherwise, so two untitled
-  chats do not overwrite each other in a shared folder; anything that is not a letter or a digit becomes a
-  dash, so a title containing a slash cannot become a folder.
+- **`ChatFileNames`** — a name from the title, `Untitled-chat-2026-11-18T14-32-05Z` otherwise (second-precise
+  and colon-free, so two untitled chats exported on the same afternoon are two files), and anything that is
+  not a letter or a digit becomes a dash, so a title containing a slash cannot become a folder.
 - **Backgrounding ends a turn** — `CairnRootView` interrupts an active turn when the scene leaves the
   foreground, which is what makes the paused marker and the Continue offer true rather than decorative.
 
@@ -1351,7 +1352,7 @@ Each line states what it proves. A pass on one line is not evidence for the next
    exact lines including comments. The first must equal what was read, not the syntax.
 7. **Tap a link in an answer.** It warns that it opens outside Cairn before it opens. A silent jump is a
    defect, not a convenience.
-8. **Stop mid-answer → Continue from where it stopped**, twice. Each continuation extends the same answer
+8. **Stop mid-answer → Continue**, twice. Each continuation extends the same answer
    instead of answering the question again. Then **Start over** on that answer: a sibling is written, the leaf
    moves, and the branch stepper still steps.
 9. **Background the app mid-stream and come back.** The answer is marked stopped and Continue is offered — it

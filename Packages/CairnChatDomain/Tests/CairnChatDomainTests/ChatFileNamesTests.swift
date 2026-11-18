@@ -46,11 +46,20 @@ final class ChatFileNamesTests: XCTestCase {
         )
         XCTAssertTrue(name.hasPrefix("Untitled-chat-"), "the export says what the list says")
         XCTAssertTrue(name.hasSuffix(".md"))
+        XCTAssertTrue(name.contains("2027-01-15"), "the day it was made is in the name")
+        XCTAssertFalse(name.contains(":"), "a colon is a path separator somewhere; a file name never has one")
+
+        // The claim is "two do not collide", so the test says it: the same untitled chat exported an hour
+        // later must be a different file, or the second export quietly replaces the first.
+        let later = ChatFileNames.name(
+            for: Conversation(title: "   "), markdown: true, now: Date(timeIntervalSince1970: 1_800_003_600)
+        )
+        XCTAssertNotEqual(name, later, "two untitled exports from the same day are two files")
     }
 
     func testTheAllChatsNameIsDateStampedAndSaysNothingAboutTheDevice() {
         let name = ChatFileNames.name(for: nil, markdown: false, now: Date(timeIntervalSince1970: 1_800_000_000))
-        XCTAssertEqual(name, "cairn-chats-2027-01-15.cairn")
+        XCTAssertEqual(name, "cairn-chats-2027-01-15T08-00-00Z.cairn")
         XCTAssertFalse(name.contains(":"))
     }
 }
