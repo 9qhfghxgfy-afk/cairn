@@ -38,11 +38,29 @@ final class WikiSearchToolTests: XCTestCase {
         XCTAssertNil(RequestReader.header(request, "Cookie"))
     }
 
+    /// A JSON document as one endpoint would answer it, built by the serialiser. Hand-quoting a fixture
+    /// that carries quoted markup inside a JSON string is how a test goes wrong in its own fixture
+    /// rather than in the parser under test.
+    private func jsonPayload(_ payload: [String: Any]) throws -> WebHTTPResponse {
+        WebHTTPResponse(
+            status: 200, data: try XCTUnwrap(JSONSerialization.data(withJSONObject: payload)),
+            mimeType: "application/json", finalURL: nil
+        )
+    }
+
     /// Highlighting tags and entities are unwrapped, the article address is built from the title the
     /// API named, and a result with no excerpt keeps its emptiness rather than gaining a summary.
     func testAnExcerptArrivesAsProseWithItsAddressAndNoInventedSummary() throws {
-        let body = #"{"query":{"search":[{"title":"Great Barrier Reef","snippet":"The <span class="searchmatch">reef</span> is &mdash; long &amp;   wide."},{"title":"Bare Title"}]}}"#
-        let results = WikiSearchTool.results(in: .json(body), limit: 5)
+        let markup = #"The <span class="searchmatch">reef</span> is &mdash; long &amp;   wide."#
+        let results = WikiSearchTool.results(
+            in: try jsonPayload([
+                "query": ["search": [
+                    ["title": "Great Barrier Reef", "snippet": markup],
+                    ["title": "Bare Title"],
+                ]],
+            ]),
+            limit: 5
+        )
         XCTAssertEqual(results.count, 2)
         XCTAssertEqual(results[0].title, "Great Barrier Reef")
         XCTAssertEqual(results[0].url, "https://en.wikipedia.org/wiki/Great%20Barrier%20Reef")

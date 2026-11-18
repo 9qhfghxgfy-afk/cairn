@@ -24,15 +24,20 @@ final class WebFetchToolTests: XCTestCase {
         XCTAssertEqual(WebFetchGuard.decision(for: URL(string: "http://example.com/page")), .notHTTPS)
         for blocked in [
             "https://127.0.0.1/api/tags", "https://localhost:11434/api/tags",
-            "https://192.168.1.20:11434/api/tags", "http://192.168.1.20:8080/v1/models",
-            "https://10.8.0.1/chat", "https://100.64.1.2/chat", "https://172.16.0.1/chat",
-            "https://box.local/api/tags",
+            "https://192.168.1.20:11434/api/tags", "https://10.8.0.1/chat",
+            "https://100.64.1.2/chat", "https://172.16.0.1/chat", "https://box.local/api/tags",
         ] {
             XCTAssertEqual(
                 WebFetchGuard.decision(for: URL(string: blocked)), .privateTarget,
                 "\(blocked) is a private target, even over https"
             )
         }
+        // The plainer reason is checked first: this address is both private and plaintext, and the
+        // fetch tool's https rule is what refuses it before anything else is consulted. Cairn does
+        // reach a private server over plain http — through `ServerProfile`, which is not this tool.
+        XCTAssertEqual(
+            WebFetchGuard.decision(for: URL(string: "http://192.168.1.20:8080/v1/models")), .notHTTPS
+        )
         // Credentials in an address are refused rather than stripped: a model that typed them meant
         // them to travel, and Cairn does not carry a secret to someone else's server.
         XCTAssertEqual(

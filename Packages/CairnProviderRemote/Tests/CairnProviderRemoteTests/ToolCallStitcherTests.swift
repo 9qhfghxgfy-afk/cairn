@@ -30,8 +30,8 @@ final class ToolCallStitcherTests: XCTestCase {
     /// with their arguments rejoined. A reply that stopped in order to call a tool stopped on purpose.
     func testFragmentsAcrossChunksStitchIntoCallsInTheOrderTheyStarted() throws {
         let calls = try stitch([
-            #"{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call-1","function":{"name":"web_search","arguments":"{\"query\":\"ra"}}]}}]}"#,
-            #"{"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"in Paris\"}"}}]}}]}"#,
+            #"{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call-1","function":{"name":"web_search","arguments":"{\"query\":\"rain in"}}]}}]}"#,
+            #"{"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":" Paris\"}"}}]}}]}"#,
             #"{"choices":[{"delta":{"tool_calls":[{"index":1,"id":"call-2","function":{"name":"calculator","arguments":"{}"}}]}}]}"#,
         ])
         XCTAssertEqual(calls.map(\.name), [BuiltInTool.webSearch, BuiltInTool.calculator])
