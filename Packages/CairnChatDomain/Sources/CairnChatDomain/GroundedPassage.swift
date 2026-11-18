@@ -11,10 +11,14 @@ public struct RetrievedPassage: Sendable, Equatable, Identifiable, Codable {
     public var chunkIndex: Int
     public var startCharacter: Int
     public var text: String
+    /// The ranking number that put this passage where it is. Optional because a passage written before M6
+    /// carried none, and because a caller may build one by hand — the absence is recorded rather than filled
+    /// in with a plausible zero.
+    public var score: Double?
 
     public init(
         number: Int, documentID: UUID, documentName: String, chunkIndex: Int,
-        startCharacter: Int, text: String
+        startCharacter: Int, text: String, score: Double? = nil
     ) {
         self.number = number
         self.documentID = documentID
@@ -22,6 +26,7 @@ public struct RetrievedPassage: Sendable, Equatable, Identifiable, Codable {
         self.chunkIndex = chunkIndex
         self.startCharacter = startCharacter
         self.text = text
+        self.score = score
     }
 
     public var id: Int { number }
@@ -43,10 +48,14 @@ public struct SourceCitation: Sendable, Equatable, Identifiable, Codable {
     public var startCharacter: Int
     public var excerpt: String
     public var characterCount: Int
+    /// The retrieval score that ranked this passage, when the turn that produced it had one. Kept because a
+    /// source line is worth more with "this was the strongest match" than without it, and optional because
+    /// a citation written before M6 carried none.
+    public var score: Double?
 
     public init(
         number: Int, documentName: String, chunkIndex: Int, startCharacter: Int,
-        excerpt: String, characterCount: Int
+        excerpt: String, characterCount: Int, score: Double? = nil
     ) {
         self.number = number
         self.documentName = documentName
@@ -54,6 +63,7 @@ public struct SourceCitation: Sendable, Equatable, Identifiable, Codable {
         self.startCharacter = startCharacter
         self.excerpt = excerpt
         self.characterCount = characterCount
+        self.score = score
     }
 
     public init(_ passage: RetrievedPassage) {
@@ -63,15 +73,27 @@ public struct SourceCitation: Sendable, Equatable, Identifiable, Codable {
             chunkIndex: passage.chunkIndex,
             startCharacter: passage.startCharacter,
             excerpt: passage.excerpt,
-            characterCount: passage.text.count
+            characterCount: passage.text.count,
+            score: passage.score
         )
     }
 
     public var id: Int { number }
 
-    /// How the row and the transcript name a source: `[2] notes.md, from character 1_600`.
+    /// The ranking number as the user reads it. BM25 is a ranking value, not a probability, so it is labelled
+    /// `rank` and never dressed up as a percentage or a confidence — a bigger one means "matched higher in
+    /// the ordering", which is the only claim the arithmetic supports.
+    public var scoreLabel: String? {
+        guard let score else { return nil }
+        return "rank \(String(format: "%.2f", score))"
+    }
+
+    /// How the row and the transcript name a source: `[2] notes.md, chunk 2, from character 1600`, with the
+    /// ranking number after it when the answer carries one.
     public var label: String {
-        "[\(number)] \(documentName), chunk \(chunkIndex + 1), from character \(startCharacter)"
+        let place = "[\(number)] \(documentName), chunk \(chunkIndex + 1), from character \(startCharacter)"
+        guard let scoreLabel else { return place }
+        return "\(place), \(scoreLabel)"
     }
 }
 

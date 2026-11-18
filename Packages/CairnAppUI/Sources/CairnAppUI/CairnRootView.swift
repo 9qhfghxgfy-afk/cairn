@@ -11,6 +11,10 @@ public struct CairnRootView: View {
     /// App-wide settings: the theme painted on this screen, and the Default Configuration new chats
     /// start from. Optional so previews and tests can build a root view with no store behind it.
     private var settings: ThemeModel?
+    /// The thing that can resize a photo before it joins a message. Handed through rather than reached for:
+    /// `CairnAppUI` may draw an image, but the size a photo becomes is the domain's rule
+    /// (`ImagePreparationPolicy`), and the codec that applies it belongs to the app.
+    private var imagePreparer: (any ImagePreparing)?
     @Environment(\.scenePhase) private var scenePhase
     @State private var showingServers = false
     @State private var showingSettings = false
@@ -19,16 +23,18 @@ public struct CairnRootView: View {
     public init(
         workspace: ChatWorkspace,
         servers: ServersModel? = nil,
-        settings: ThemeModel? = nil
+        settings: ThemeModel? = nil,
+        imagePreparer: (any ImagePreparing)? = nil
     ) {
         self.workspace = workspace
         self.servers = servers
         self.settings = settings
+        self.imagePreparer = imagePreparer
     }
 
     public var body: some View {
         NavigationStack {
-            ChatScreen(workspace: workspace, settings: settings)
+            ChatScreen(workspace: workspace, settings: settings, imagePreparer: imagePreparer)
                 .navigationTitle("Cairn")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {

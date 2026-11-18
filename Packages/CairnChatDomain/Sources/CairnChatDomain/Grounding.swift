@@ -50,7 +50,7 @@ public enum Grounding {
             return GroundingOutcome(documentsConsidered: considered)
         }
 
-        var chosen: [DocumentChunk] = []
+        var chosen: [ScoredChunk] = []
         var used = 0
         var dropped = 0
         for scored in ranked {
@@ -61,16 +61,20 @@ public enum Grounding {
                 continue
             }
             used += cost
-            chosen.append(scored.chunk)
+            chosen.append(scored)
         }
-        let passages = chosen.enumerated().map { offset, chunk in
+        // The score travels with the chunk it scored, so the citation an answer is credited with says not
+        // only where the passage came from but how strongly it matched — the one fact about the retrieval a
+        // reader can use to decide whether to go and read the file themselves.
+        let passages = chosen.enumerated().map { offset, scored in
             RetrievedPassage(
                 number: offset + 1,
-                documentID: chunk.documentID,
-                documentName: chunk.documentName,
-                chunkIndex: chunk.index,
-                startCharacter: chunk.startCharacter,
-                text: chunk.text
+                documentID: scored.chunk.documentID,
+                documentName: scored.chunk.documentName,
+                chunkIndex: scored.chunk.index,
+                startCharacter: scored.chunk.startCharacter,
+                text: scored.chunk.text,
+                score: scored.score
             )
         }
         return GroundingOutcome(

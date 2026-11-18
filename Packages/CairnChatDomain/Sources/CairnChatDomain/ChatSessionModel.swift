@@ -60,7 +60,20 @@ public final class ChatSessionModel {
     /// touches a file: a stored node carries an attachment's metadata and, for a document, the text Cairn
     /// read out of it — never the pixels, which would make opening a transcript read every photograph ever
     /// attached. A turn that is about to send one of those photographs asks for its bytes here.
-    public var attachmentBytes: ((UUID) -> Data?)?
+    ///
+    /// `@MainActor` because everything that owns those bytes is main-actor bound: `SwiftDataStore` is, since
+    /// `ModelContext` is not `Sendable`, and every caller is a session on the main actor. Saying so here is
+    /// what lets the app hand over `store.attachmentData` directly instead of wrapping a main-actor call in
+    /// a non-isolated closure, which Swift 6 rejects.
+    public var attachmentBytes: (@MainActor (UUID) -> Data?)?
+
+    /// Whether this device will keep an attached file between turns.
+    ///
+    /// The app writes it from `SwiftDataStore.canStoreAttachments`. It is false when the store is in memory
+    /// or the system would not hand out a directory, and the composer says so out loud rather than letting a
+    /// user believe a photograph had been saved. Nothing is blocked by it — a file still rides the turn it
+    /// was picked for — this only decides what the app is allowed to promise about next time.
+    public var attachmentStorageAvailable: Bool = true
 
     /// The `Generation Statistics` switch, injected from app-wide settings so a chat shows the metrics
     /// footer only when the user asked for it. The measurements themselves stay on the node either
@@ -230,14 +243,10 @@ public final class ChatSessionModel {
             lastError = "No inference provider is selected."
             return
         }
-        // Hybrid modes are where an engine that cannot see an image has a route to one that can, so the
-        // gate reads them as a set: if any engine the turn could ask is able to see, the photo has a way
-        // to arrive. Any other mode is decided by the engine that will answer.
-        let engines = conversation.mode.isHybrid ? registeredEngines : [provider]
-        let gate = VisionGate.decide(
-            attachments: staged,
-            modelSees: engines.contains { $0.capabilities.vision }
-        )
+        // One decision, read from `canSeeImages`, so the warning above the composer and this refusal are the
+        // same sentence about the same engines. Silently dropping a photo the user attached is the failure
+        // this app is not allowed to have.
+        let gate = visionDecision(for: staged)
         if gate.blocksSend, let reason = VisionGate.message(for: gate) {
             lastError = reason
             return

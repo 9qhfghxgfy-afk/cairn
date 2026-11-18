@@ -43,6 +43,18 @@ public final class ChatWorkspace {
     public var outboundWebAllowed: Bool = false
     public var showsGenerationStats: Bool = true
 
+    /// Reads the stored bytes of one attachment, injected by the app because only the app layer owns the
+    /// directory the files live in — `CairnChatDomain` never opens a file, and `CairnAppUI` may not import
+    /// SwiftData. Nil by construction, which is what a test or an unwired workspace gets: a session that can
+    /// describe an attachment and cannot read its bytes, and refuses to send it rather than sending nothing.
+    public var attachmentReader: (@MainActor (UUID) -> Data?)?
+
+    /// Whether the persistent store can keep an attached file between turns, written by the app from
+    /// `SwiftDataStore.canStoreAttachments`. It travels to every session the workspace makes, so the
+    /// composer's promise about a file agrees with the store that would have held it — and a temporary chat,
+    /// which lives in `EphemeralStore`, is told the truth about itself separately.
+    public var attachmentStorageAvailable: Bool = true
+
     /// Points the baseline at a new Default Configuration. Existing chats keep what they were seeded
     /// with — only chats created from here on take it.
     public func apply(defaults: ChatConfig) {
@@ -227,6 +239,11 @@ public final class ChatWorkspace {
         session.toolRegistry = toolRegistry
         session.outboundWebAllowed = outboundWebAllowed
         session.showsGenerationStats = showsGenerationStats
+        // The attachment reader travels the same way, and unconditionally: the workspace is the source of
+        // truth for where a stored file's bytes come from, so a session never holds a reader its own store
+        // cannot back. Nil is the honest value for an unwired workspace or a test.
+        session.attachmentBytes = attachmentReader
+        session.attachmentStorageAvailable = attachmentStorageAvailable
         // The memory gate travels with the session, so a hybrid turn in this chat asks the real
         // device question rather than the domain default. Nil keeps the strict default in place.
         if let residency { session.residency = residency }

@@ -35,6 +35,10 @@ public struct MessageRow: View {
             }
             bodyText
 
+            // The files this message carried, directly under the words they came with. A photo belongs to its
+            // sentence, not to a gallery elsewhere in the app.
+            attachmentChips
+
             // One hybrid node holds several drafts; they hang off the answer they were folded into,
             // so the card for a side can never drift from the text above it.
             hybridDrafts
@@ -42,6 +46,10 @@ public struct MessageRow: View {
             // The calls this answer was built from, beside the answer — including the ones still
             // running, which is how a multi-step turn reads as work in progress rather than a hang.
             toolRunCards
+
+            // Where a grounded answer came from, folded under it: the answer is what the user came to read,
+            // and a wall of quotes in front of it buries the thing they asked for.
+            sourceList
 
             if node.role == .assistant { metricsFooter }
             provenanceFooter

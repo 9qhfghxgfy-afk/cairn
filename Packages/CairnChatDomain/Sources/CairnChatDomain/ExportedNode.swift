@@ -25,6 +25,18 @@ public struct ExportedNode: Sendable, Equatable, Codable {
     public var provenance: HybridProvenance?
     public var toolsOffered: [String]
     public var toolRun: ToolRun?
+    /// What the user attached to this message, as metadata only.
+    ///
+    /// Optional rather than an empty array because a file written before M6 has no such key, and because a
+    /// message that carried nothing should write the same bytes it always did. nil means "the file never
+    /// said", which reads back as "nothing attached" — the same answer a missing column gives in
+    /// `ChatRecord`, for the same reason.
+    ///
+    /// The bytes are not here, deliberately: see `ExportedAttachment`.
+    public var attachments: [ExportedAttachment]?
+    /// The passages this answer was grounded in — file name, place in the file, ranking score, and a bounded
+    /// quote. Numbers and a name and a short quote only; the document itself is not in the file.
+    public var citations: [SourceCitation]?
 
     public init(_ node: ChatNode) {
         self.id = node.id
@@ -44,14 +56,28 @@ public struct ExportedNode: Sendable, Equatable, Codable {
         self.provenance = node.provenance
         self.toolsOffered = node.toolsOffered
         self.toolRun = node.toolRun
+        // Metadata, never the file: what a reader of this export can learn about an attachment is what the
+        // row itself knows — the name, the kind, the size, and the text Cairn read from a document here.
+        self.attachments = ExportedAttachments.export(node.attachments)
+        self.citations = node.citations.isEmpty ? nil : node.citations
     }
 
-    /// nil when any of the three enums carries a value this build does not have — again a refusal, not
-    /// a guess. A message is never silently re-typed into the nearest known kind.
+    /// nil when any of the three enums, or an attachment's kind, carries a value this build does not have —
+    /// again a refusal, not a guess. A message is never silently re-typed into the nearest known kind, and
+    /// an attachment is never re-typed into the nearest known kind either: image and document differ in what
+    /// may leave the device, so guessing would be a privacy decision made on the app's own behalf.
     public func toNode() -> ChatNode? {
         guard let nodeRole = ChatRole(rawValue: role),
               let nodeKind = NodeKind(rawValue: kind),
               let nodeState = NodeState(rawValue: state) else { return nil }
+        // An attachment comes back with no bytes, which is what the file holds. The row that stores it then
+        // has no file beside it either, so `attachmentPayload` answers nil and the app says the file is
+        // gone rather than inventing pixels.
+        var restored: [ChatAttachment] = []
+        for entry in attachments ?? [] {
+            guard let attachment = entry.toAttachment() else { return nil }
+            restored.append(attachment)
+        }
         return ChatNode(
             id: id,
             conversationID: conversationID,
@@ -69,7 +95,9 @@ public struct ExportedNode: Sendable, Equatable, Codable {
             metrics: metrics,
             provenance: provenance,
             toolsOffered: toolsOffered,
-            toolRun: toolRun
+            toolRun: toolRun,
+            attachments: restored,
+            citations: citations ?? []
         )
     }
 }

@@ -65,6 +65,10 @@ public enum ChatTranscript {
         lines.append("")
         lines.append(node.text.isEmpty ? "_(no text)_" : node.text)
         lines.append("")
+        // What the message carried, and where its answer came from. A Markdown transcript is the human copy,
+        // and a chat that quoted a file is only trustworthy if the copy says which file and which part of it.
+        lines.append(contentsOf: attachmentLines(for: node))
+        lines.append(contentsOf: sourceLines(for: node))
 
         if let thinking = node.thinking, !thinking.isEmpty {
             lines.append("**Reasoning, as the model sent it**")

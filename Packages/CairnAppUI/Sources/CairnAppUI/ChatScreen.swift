@@ -8,12 +8,21 @@ public struct ChatScreen: View {
     /// Present once the app wires app-wide settings. A chat's own configuration saves without it — the
     /// settings object is only needed for "Use for new chats", which writes the baseline.
     let settings: ThemeModel?
-    @State private var composerText = ""
+    /// The files waiting for Send. A reference type rather than view state because the acceptance rule and
+    /// the refusal have to survive the sheet a picker dismisses, and because a test has to be able to put a
+    /// file in the composer without a simulator: see `ComposerDraft`.
+    let draft: ComposerDraft
+    @State var composerText = ""
     @State private var showingConfig = false
 
-    public init(workspace: ChatWorkspace, settings: ThemeModel? = nil) {
+    /// `imagePreparer` is the thing that can resize a photo — UIKit and ImageIO, which the domain cannot
+    /// import. Left nil in previews and tests, which then get `PassthroughImagePreparer`: it checks the bytes
+    /// and claims nothing about having resampled them, which is the honest fallback rather than a lie about
+    /// a size the file never became.
+    public init(workspace: ChatWorkspace, settings: ThemeModel? = nil, imagePreparer: (any ImagePreparing)? = nil) {
         self.workspace = workspace
         self.settings = settings
+        self.draft = ComposerDraft(preparer: imagePreparer ?? PassthroughImagePreparer())
     }
 
     var session: ChatSessionModel? { workspace.session }
@@ -197,59 +206,6 @@ public struct ChatScreen: View {
         .padding(.top, 60)
     }
 
-    // MARK: - Composer
-
-    var composer: some View {
-        VStack(spacing: 6) {
-            if let session {
-                ComposerChips(session: session, theme: settings)
-            }
-            if let error = workspace.lastError ?? session?.lastError {
-                Text(error)
-                    .font(.caption)
-                    .foregroundStyle(CairnTheme.rust)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            HStack(alignment: .bottom, spacing: 8) {
-                TextField("Ask Cairn…", text: $composerText, axis: .vertical)
-                    .textFieldStyle(.plain)
-                    .padding(10)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .fill(CairnTheme.slate)
-                    )
-                    .foregroundStyle(.white)
-                    .onSubmit(send)
-
-                if session?.isBusy == true {
-                    Button(action: stop) {
-                        Image(systemName: "stop.fill")
-                            .padding(10)
-                            .background(Circle().fill(CairnTheme.rust.opacity(0.85)))
-                            .foregroundStyle(.white)
-                    }
-                } else {
-                    Button(action: send) {
-                        Image(systemName: "arrow.up")
-                            .padding(10)
-                            .background(Circle().fill(CairnTheme.amber))
-                            .foregroundStyle(CairnTheme.slateDeep)
-                    }
-                    .disabled(composerText.trimmingCharacters(in: .whitespaces).isEmpty)
-                }
-            }
-        }
-        .padding(12)
-    }
-
-    func send() {
-        let text = composerText
-        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        session?.send(text)
-        composerText = ""
-    }
-
-    func stop() {
-        session?.cancelStreaming()
-    }
+    // The composer — the text field, the paperclip, the files it is holding, and what happens on Send —
+    // lives in ChatScreen+Composer.swift, with the send and the stop that belong to it.
 }

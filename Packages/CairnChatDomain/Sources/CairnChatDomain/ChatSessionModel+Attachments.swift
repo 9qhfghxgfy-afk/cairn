@@ -35,4 +35,38 @@ extension ChatSessionModel {
     public static let unreadableAttachmentMessage =
         "The file behind one of this message's images can no longer be read on this device, so it cannot "
         + "be sent again. Re-attach the image, or edit the message to send the text without it."
+
+    // MARK: - The vision answer, asked once
+
+    /// Whether any engine this turn could ask has been declared able to see an image.
+    ///
+    /// Hybrid modes are where an engine that cannot see has a route to one that can, so the whole engine set
+    /// decides those; any other mode is decided by the engine that will answer. The capability a provider
+    /// declares is the only thing read here — there is no "usually handles images" in this app, and a guess
+    /// about a model class is how a photo ends up described by something that never received it.
+    public var canSeeImages: Bool {
+        let engines: [any InferenceProvider]
+        if conversation.mode.isHybrid {
+            engines = registeredEngines
+        } else if let provider = activeProvider {
+            engines = [provider]
+        } else {
+            engines = []
+        }
+        return engines.contains { $0.capabilities.vision }
+    }
+
+    /// The gate's decision for a set of attachments, computed by the same rule the send computes.
+    ///
+    /// One function for both the standing line above the composer and the refusal at send, for the same
+    /// reason grounding has one builder: a preview that disagrees with the request is a second, prettier
+    /// explanation of a decision the app then does not make.
+    public func visionDecision(for attachments: [ChatAttachment]) -> VisionDecision {
+        VisionGate.decide(attachments: attachments, modelSees: canSeeImages)
+    }
+
+    /// The standing warning while an image is staged against an engine that cannot see it.
+    public func visionWarning(for attachments: [ChatAttachment]) -> String? {
+        VisionGate.message(for: visionDecision(for: attachments))
+    }
 }

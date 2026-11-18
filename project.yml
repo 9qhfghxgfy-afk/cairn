@@ -139,6 +139,12 @@ targets:
       # can be built (a window, a Keychain, and the two Settings switches meet only here), and it has no
       # @main either. Testing it here is what proves a chat really gets the web tools the switches allow.
       - App/ToolWiring.swift
+      # M6's two attachment seams, for the same reason and for the same reason they need a simulator: the
+      # preparer is ImageIO against real bytes (a host build has no codec, which is why the domain's own
+      # preparer is the honest passthrough), and the wiring is the one place the store's file reader meets
+      # the session that asks for it. Neither has @main.
+      - App/ImageIOPreparer.swift
+      - App/AttachmentWiring.swift
     dependencies:
       - package: CairnChatDomain
       - package: CairnPersistence

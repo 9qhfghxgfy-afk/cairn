@@ -2,9 +2,10 @@ import Foundation
 
 /// One chunk with the score that put it where it is.
 ///
-/// The score is a ranking number, not a probability, and it is never shown to the user as one. It is
-/// kept in the value so a test can assert that a better-matching chunk beat a worse one rather than
-/// asserting a particular order that the arithmetic happens to produce today.
+/// The score is a ranking number, not a probability, and it is never presented as one: a source line shows
+/// it as `rank 4.20`, which claims only that this passage matched higher than the one below it. It is kept
+/// in the value so a test can assert that a better-matching chunk beat a worse one rather than asserting a
+/// particular order that the arithmetic happens to produce today.
 public struct ScoredChunk: Sendable, Equatable {
     public var chunk: DocumentChunk
     public var score: Double

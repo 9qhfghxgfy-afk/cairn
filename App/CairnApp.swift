@@ -34,7 +34,15 @@ struct CairnLaunchView: View {
     var body: some View {
         Group {
             if let workspace {
-                CairnRootView(workspace: workspace, servers: servers, settings: theme)
+                // `ImageIOPreparer` is the app's way of resizing a photo: the domain decided the size
+                // (`ImagePreparationPolicy`) and cannot decode a pixel, so the seam is handed in here. A root
+                // view built without one — a preview, a test — gets the honest passthrough instead.
+                CairnRootView(
+                    workspace: workspace,
+                    servers: servers,
+                    settings: theme,
+                    imagePreparer: ImageIOPreparer()
+                )
             } else if let startupFailure {
                 ContentUnavailableView(
                     "Cairn could not open its local store",
@@ -94,6 +102,11 @@ struct CairnLaunchView: View {
                 // Read once, then copied into each chat as it is created. Changing the default later
                 // cannot rewrite a conversation the user already has.
                 builtWorkspace.apply(defaults: builtTheme.settings.defaultChatConfig)
+                // The file side of attachments, installed before any session exists, for the same reason the
+                // memory answer is: a chat opened from the list must already be able to read back the photo its
+                // own row names. Only this layer can hold the store and hand its reader down — the domain never
+                // opens a file, and `CairnAppUI` may not import SwiftData.
+                AttachmentWiring.install(on: builtWorkspace, store: persistent)
                 let builtServers = ServersModel(
                     storing: persistent,
                     testing: factory.tester(),
