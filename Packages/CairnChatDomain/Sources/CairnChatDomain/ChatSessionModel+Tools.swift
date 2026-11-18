@@ -45,15 +45,18 @@ extension ChatSessionModel {
 
     /// The one system block for a turn: the assembled context, then the tool block last. Both the
     /// sheet's preview and the wire come through here.
+    ///
+    /// `turn` is handed in by the streaming path so this block is built from the same `TurnContext` the
+    /// request is described by — preview and wire cannot drift, because both are given the same value.
+    /// When it is nil, the path the session is on is used, which is what a tool turn needs.
     func systemPrompt(
         for provider: any InferenceProvider,
         selection: ToolSelection,
-        format: ToolCallingProtocol
+        format: ToolCallingProtocol,
+        turn: TurnContext? = nil
     ) -> String {
-        let base = conversation.config.systemPrompt(
-            in: contextEnvironment,
-            turn: turnContext(for: provider)
-        )
+        let context = turn ?? turnContext(for: provider, history: path)
+        let base = conversation.config.systemPrompt(in: contextEnvironment, turn: context)
         let block = selection.instruction(format: format)
         if block.isEmpty { return base }
         if base.isEmpty { return block }

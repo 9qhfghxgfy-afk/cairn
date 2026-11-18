@@ -53,6 +53,15 @@ public final class ChatSessionModel {
     /// Settings, and `false` by construction: a session built in a test, or a chat the user never
     /// armed, cannot reach the internet through a tool.
     public var outboundWebAllowed: Bool = false
+    /// Reads the stored bytes of one attachment, or nil when they cannot be read.
+    ///
+    /// Injected by the app, which owns the directory the files live in; nil by construction, which is the
+    /// state a test or a mock wiring is in. It is a reader rather than a store because this module never
+    /// touches a file: a stored node carries an attachment's metadata and, for a document, the text Cairn
+    /// read out of it — never the pixels, which would make opening a transcript read every photograph ever
+    /// attached. A turn that is about to send one of those photographs asks for its bytes here.
+    public var attachmentBytes: ((UUID) -> Data?)?
+
     /// The `Generation Statistics` switch, injected from app-wide settings so a chat shows the metrics
     /// footer only when the user asked for it. The measurements themselves stay on the node either
     /// way — this switch decides what is drawn, not what was recorded.
@@ -203,11 +212,41 @@ public final class ChatSessionModel {
 
     // MARK: - Sending
 
-    public func send(_ rawText: String) {
+    /// Sends one turn, with whatever the composer was holding.
+    ///
+    /// `attachments` are the files staged at the moment Send was pressed. They go onto the user node
+    /// before anything is asked of an engine, because the node is what makes them durable: a file that
+    /// lived only in the composer would be gone if the turn failed, and a document the retrieval has to
+    /// read has to survive to the next question in the same chat.
+    ///
+    /// An image this turn's engines cannot see stops the send instead of going out without it. That is
+    /// the vision gate in one line: silently dropping a photo the user attached is the failure this app
+    /// is not allowed to have.
+    public func send(_ rawText: String, attachments: [ChatAttachment] = []) {
         let text = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, !isBusy else { return }
+        let staged = Attachments.sorted(attachments)
+        guard !text.isEmpty || !staged.isEmpty, !isBusy else { return }
         guard let provider = activeProvider else {
             lastError = "No inference provider is selected."
+            return
+        }
+        // Hybrid modes are where an engine that cannot see an image has a route to one that can, so the
+        // gate reads them as a set: if any engine the turn could ask is able to see, the photo has a way
+        // to arrive. Any other mode is decided by the engine that will answer.
+        let engines = conversation.mode.isHybrid ? registeredEngines : [provider]
+        let gate = VisionGate.decide(
+            attachments: staged,
+            modelSees: engines.contains { $0.capabilities.vision }
+        )
+        if gate.blocksSend, let reason = VisionGate.message(for: gate) {
+            lastError = reason
+            return
+        }
+        // An image stored on this device is read back from its file, not from the row. This turn's images
+        // were just picked by the user and still hold their bytes, so this passes today; it is here because
+        // the same check has to hold on a turn that arrives by another route.
+        guard staged.allSatisfy({ attachmentPayload($0) != nil }) else {
+            lastError = Self.unreadableAttachmentMessage
             return
         }
 
@@ -219,7 +258,8 @@ public final class ChatSessionModel {
                 parentID: conversation.activeLeafID,
                 role: .user,
                 text: text,
-                now: Date()
+                now: Date(),
+                attachments: staged
             )
             working = userTurn.nodes
             try store.saveNode(userTurn.node)
@@ -227,9 +267,18 @@ public final class ChatSessionModel {
             var updated = conversation
             updated.activeLeafID = userTurn.node.id
             updated.updatedAt = Date()
-            if updated.title == "New chat" { updated.title = Self.makeTitle(from: text) }
+            if updated.title == "New chat" {
+                updated.title = Self.makeTitle(from: text, otherwiseFrom: staged)
+            }
             try store.saveConversation(updated)
 
+            // Retrieval runs on the path that ends at the question just written, which is the same path
+            // the request will be built from, so the passages the block carries and the sources this node
+            // is credited with are the same passages and sources.
+            let grounding = Grounding.outcome(
+                for: ChatTree.visiblePath(nodes: working, activeLeafID: userTurn.node.id),
+                windowTokens: conversation.config.sampling.contextWindow
+            )
             let assistantTurn = ChatTree.append(
                 to: working,
                 conversationID: conversation.id,
@@ -240,7 +289,8 @@ public final class ChatSessionModel {
                 state: .streaming,
                 providerID: provider.id,
                 modelID: selectedModelID,
-                now: Date()
+                now: Date(),
+                citations: grounding.citations
             )
             working = assistantTurn.nodes
             try store.saveNode(assistantTurn.node)

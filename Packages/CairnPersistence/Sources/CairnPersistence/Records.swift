@@ -77,6 +77,16 @@ public final class ChatRecord {
     /// The tool names this turn was offered, as JSON. Kept because "the model used a tool" is only
     /// auditable if the record also says what it could have used.
     public var toolsOfferedJSON: Data?
+    /// What the user attached to this message — `AttachmentMetadata` as JSON. Metadata only, never the
+    /// bytes: a photograph in a column here would be read whole every time a transcript is opened, so the
+    /// file lives beside the database under `AttachmentFiles` and this column says what it is, how big it
+    /// is, and — for a document — the text Cairn read out of it on this device. That text is what a later
+    /// turn searches, which is what makes "what did the file I sent earlier say" answerable without
+    /// re-reading anything.
+    public var attachmentsJSON: Data?
+    /// The sources an answer was grounded in — `[SourceCitation]` as JSON. Numbers, a file name and a
+    /// character offset, so a source line still reads after the original file is gone.
+    public var citationsJSON: Data?
 
     public init(
         id: UUID,
@@ -95,7 +105,9 @@ public final class ChatRecord {
         metricsJSON: Data?,
         provenanceJSON: Data? = nil,
         toolRunJSON: Data? = nil,
-        toolsOfferedJSON: Data? = nil
+        toolsOfferedJSON: Data? = nil,
+        attachmentsJSON: Data? = nil,
+        citationsJSON: Data? = nil
     ) {
         self.id = id
         self.conversationID = conversationID
@@ -114,5 +126,7 @@ public final class ChatRecord {
         self.provenanceJSON = provenanceJSON
         self.toolRunJSON = toolRunJSON
         self.toolsOfferedJSON = toolsOfferedJSON
+        self.attachmentsJSON = attachmentsJSON
+        self.citationsJSON = citationsJSON
     }
 }

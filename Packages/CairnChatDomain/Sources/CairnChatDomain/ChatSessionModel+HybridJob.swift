@@ -135,12 +135,27 @@ extension ChatSessionModel {
         let config = conversation.config
         let selection = toolSelection(for: provider)
         let format = toolRouting(for: provider).format
+        // Retrieval runs once here and the one result is handed to the prompt block and to the turn
+        // description, so the passages, the citations and the source list cannot disagree about what the
+        // engine was actually shown.
+        let grounding = Grounding.outcome(
+            for: history, windowTokens: config.sampling.contextWindow
+        )
+        let turn = turnContext(for: provider, history: history, grounding: grounding)
+        // Images ride on the turn they were attached to and on no other turn; documents never ride at
+        // all, because what leaves the device for a document is the passage that answered.
+        let messages = ChatTree.attaching(
+            imagePayloads(in: history),
+            toLastUserOf: ChatTree.messages(
+                for: history,
+                systemPrompt: systemPrompt(
+                    for: provider, selection: selection, format: format, turn: turn
+                )
+            )
+        )
         return GenerationRequest(
             modelID: modelID,
-            messages: ChatTree.messages(
-                for: history,
-                systemPrompt: systemPrompt(for: provider, selection: selection, format: format)
-            ),
+            messages: messages,
             config: config,
             tools: selection.definitions,
             toolProtocol: format

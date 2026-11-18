@@ -30,6 +30,15 @@ extension ChatSessionModel {
 
         var working = nodes
         do {
+            // Picking a stopped answer back up asks the same question again, so the same images go with
+            // it. If a photo's file can no longer be read, the continuation stops here with a reason
+            // rather than streaming an answer built without it.
+            guard attachmentsReadable(
+                in: ChatTree.visiblePath(nodes: working, activeLeafID: stopped.id)
+            ) else {
+                lastError = Self.unreadableAttachmentMessage
+                return
+            }
             // The sibling is seeded with the stopped text, so a stop half-way through the continuation
             // still leaves a whole answer rather than a second half of one.
             let result = ChatTree.append(
@@ -42,7 +51,10 @@ extension ChatSessionModel {
                 state: .streaming,
                 providerID: provider.id,
                 modelID: selectedModelID,
-                now: Date()
+                now: Date(),
+                // The continuation is the same answer to the same question over the same documents, so it
+                // keeps the sources the stopped answer was credited with.
+                citations: stopped.citations
             )
             working = result.nodes
             try store.saveNode(result.node)

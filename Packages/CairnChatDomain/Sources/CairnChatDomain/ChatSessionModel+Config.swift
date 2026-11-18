@@ -10,6 +10,10 @@ extension ChatSessionModel {
 
     /// The exact block this chat would inject on the current turn. The configuration sheet shows
     /// this live, character for character, as toggles move.
+    /// "Current turn" is the turn the path ends at — the newest question on screen — because that is the
+    /// only turn a document or image block can honestly describe. A question still being typed is not
+    /// something the sheet can know; for the turn it does describe, preview and wire come from the same
+    /// call and stay byte-identical.
     public var injectedContextPreview: String {
         guard let provider = activeProvider else {
             return conversation.config.systemPrompt(in: contextEnvironment, turn: currentTurnContext)
@@ -18,7 +22,10 @@ extension ChatSessionModel {
         // would show a prompt the request does not send.
         let selection = toolSelection(for: provider)
         return systemPrompt(
-            for: provider, selection: selection, format: toolRouting(for: provider).format
+            for: provider,
+            selection: selection,
+            format: toolRouting(for: provider).format,
+            turn: turnContext(for: provider, history: path)
         )
     }
 
@@ -37,18 +44,39 @@ extension ChatSessionModel {
     public var reasoningSupported: Bool { activeProvider?.capabilities.thinking ?? false }
 
     public var currentTurnContext: TurnContext {
-        if let provider = activeProvider { return turnContext(for: provider) }
+        if let provider = activeProvider { return turnContext(for: provider, history: path) }
         // No engine selected: state nothing about the backend rather than guessing, so the
-        // capability line is left out instead of being wrong.
-        return TurnContext(contextTokens: conversation.config.sampling.contextWindow)
+        // capability line is left out instead of being wrong. Attachments are still reported, because
+        // they are a fact about this conversation and not about a server.
+        let grounding = Grounding.outcome(
+            for: path, windowTokens: conversation.config.sampling.contextWindow
+        )
+        return TurnContext(
+            fileCount: grounding.documentsConsidered,
+            imageCount: ChatTree.currentTurnImages(in: path).count,
+            passages: grounding.passages,
+            contextTokens: conversation.config.sampling.contextWindow
+        )
     }
 
     /// What this turn can do, read from the engine's declared capabilities — never from an
     /// assumption about what a model class usually supports.
-    func turnContext(for provider: any InferenceProvider) -> TurnContext {
+    ///
+    /// `history` is the path the turn will be sent with, so the attachment facts describe the same
+    /// conversation the request will: the images of the newest user message, and the documents the
+    /// retrieval actually searched. With no history both are zero, which is what a session with nothing
+    /// in it means.
+    func turnContext(
+        for provider: any InferenceProvider,
+        history: [ChatNode] = [],
+        grounding: GroundingOutcome? = nil
+    ) -> TurnContext {
         let capabilities = provider.capabilities
         let config = conversation.config
         let offered = toolSelection(for: provider)
+        let resolved = grounding ?? Grounding.outcome(
+            for: history, windowTokens: config.sampling.contextWindow
+        )
         return TurnContext(
             backendLabel: Self.backendLabel(for: provider),
             onDevice: provider.networkClass == .onDevice,
@@ -64,8 +92,30 @@ extension ChatSessionModel {
             toolNames: ToolPromptBlock.names(offered.definitions),
             webFetchActive: false,
             visionOn: capabilities.vision,
+            // Documents counted by the retrieval pass, which counts distinct attachments rather than
+            // passages: one file cut into six passages is still one file the user attached.
+            fileCount: resolved.documentsConsidered,
+            imageCount: ChatTree.currentTurnImages(in: history).count,
+            passages: resolved.passages,
             contextTokens: config.sampling.contextWindow
         )
+    }
+
+    /// The grounding this conversation's current turn would be sent with — the passages, the sources,
+    /// and how many passages did not fit. The sheet shows this so "what did my document contribute" is
+    /// an answerable question rather than something buried in a prompt.
+    public var currentGrounding: GroundingOutcome {
+        Grounding.outcome(for: path, windowTokens: conversation.config.sampling.contextWindow)
+    }
+
+    /// The documents on this conversation's path, for the sheet's list.
+    public var attachedDocuments: [ChatAttachment] {
+        Attachments.documents(ChatTree.documents(in: path))
+    }
+
+    /// The images attached to the newest message on the path, whether or not this engine can see them.
+    public var currentTurnImageCount: Int {
+        ChatTree.currentTurnImages(in: path).count
     }
 
     /// A class of backend, never a profile name or address: the model does not need to know which

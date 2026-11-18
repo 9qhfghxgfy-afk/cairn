@@ -53,9 +53,17 @@ extension ContextAssembly {
             return "A web search ran for this turn. Open at least one of the result URLs and answer "
                 + "from what that page says, citing it. An answer from memory alone is not enough."
         case .fileContext:
-            return "The user attached \(turn.fileCount) document(s) to this conversation. Ground "
-                + "your answer in them. If they do not cover the question, say so rather than "
-                + "filling the gap."
+            let lead = "The user attached \(turn.fileCount) document\(turn.fileCount == 1 ? "" : "s") "
+                + "to this conversation. Ground your answer in them. If they do not cover the "
+                + "question, say so rather than filling the gap."
+            guard !turn.passages.isEmpty else { return lead }
+            let listed = turn.passages
+                .map { "[\($0.number)] \($0.documentName): \($0.text)" }
+                .joined(separator: "\n\n")
+            return lead + "\n\nPassages taken from those documents on this device, most relevant "
+                + "first, each marked with its number:\n\n\(listed)\n\nMark every claim that comes "
+                + "from a passage with its number, like [2]. Where the passages do not cover "
+                + "something, say that instead of supplying it from memory."
         case .imageContext:
             return "The user attached \(turn.imageCount) image(s) to this turn. Say what is "
                 + "actually visible in them before drawing any conclusion from them."

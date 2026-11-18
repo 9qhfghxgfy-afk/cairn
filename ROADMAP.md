@@ -754,7 +754,7 @@ needs both.
 | M4 | Hybrid Parallel + Synthesized engine | preserved core | **Closed** — engine, session path, provenance storage, hybrid picker, live panels, draft cards, and the measured residency gate. **CI-verified `44209524177`** on `9bbd82b` (guards 53/53; 159 domain + 69 remote + 60 on-device host tests; simulator build + 95 `CairnTests`, 0 failures). **Not** on-device-verified, **not** real-network-verified. Record at the end of this file |
 | P3 | Tool runtime + built-ins + search routing (keyless default, SearXNG optional, cloud key-gated) | §3.7 | **Closed** — the loop (native wire **and** prompt-protocol fallback), the five built-ins, the three search routes with the F4 resolution, per-chat arming with the outbound badge and disclosure, the tool run on the one assistant node with its cards, and the deferred Statistics toggle. **CI-verified `44242238211`** on `0b3e3fc` (guards 53/53; host suites 184 domain + 93 remote + 60 on-device + 17 native, 0 failures; simulator build **SUCCEEDED** + 104 `CairnTests`, 0 failures on iPhone 17 / iOS 26.5). **Not** on-device-verified, **not** real-network-verified. Record at the end of this file |
 | M5 | Chat list, Markdown + code copy, Continue Generation, duplicate chat, temp banner, background processing, `.cairn`/`.md` | §3.1, §3.9 | **Closed** — the domain half and the screen half are both written: chat list with search, rename, duplicate, delete and open; Markdown answers with highlighted code and copy-as-prose / copy-the-source; Continue on a stopped, interrupted or token-cut answer; the temporary-chat line with keep-a-copy; `.md` and `.cairn` export through the system share sheet; `.cairn` import from the file picker and by opening a file from another app; a backgrounded turn really is stopped and offered for continuation. 268 domain host tests green, guards 53/53 local. **CI-verified `44396176219`** on `0ecd1d4` (guards 53/53; host suites 268 domain + 93 remote + 60 on-device + 17 native, 0 failures; simulator build **SUCCEEDED** + 108 `CairnTests`, 0 failures on iPhone 17 / iOS 26.5). **Not** on-device-verified, **not** real-network-verified: the 14-line M5 device checklist has never been run on a phone, and three named gaps stay open — `BGContinuedProcessingTask` for a turn that outlives the app, an all-chats export, and an editable title in the top bar. Record at the end of this file |
-| M6 | File + image attachments, chunked retrieval with citations, vision gating | §3.8 | todo |
+| M6 | File + image attachments, chunked retrieval with citations, vision gating | §3.8 | **in progress — code landed 2026-11-18, UI owed.** The domain engine (accept ceilings, image prep rule, text extraction, chunking, BM25 retrieval, grounding, vision gate) and the persistence half (attachment metadata column, citation column, file store beside the database, delete cleanup) are written; 320 domain host tests green, guards 53/53. **Not CI-verified** — this Windows machine compiles neither SwiftData nor UIKit, so the persistence and app halves have never been compiled anywhere. Record at the end of this file |
 | P4 | On-device model sharing server over LAN (`NWListener`, both dialects) | §3.6 | todo |
 | P5 | Accessibility, AppIcon, licenses/privacy/issues, doc refresh | §3.10 | todo |
 
@@ -1463,4 +1463,127 @@ on-device-verified, and a line that fails on a real device reopens M5 as a defec
 - **No editable title in the top bar.** A chat is renameable from the drawer — swipe a row, then the rename
   dialog — and the top bar shows the title it has, but that title is a `Text`, not a field, so renaming means
   leaving the chat to go and find it.
+
+## M6 — attachments, chunked retrieval with citations, vision gating (**in progress 2026-11-18**)
+
+Spec §3.8. Started 2026-11-18 on the Windows fallback machine, which is why the honest status is
+"code landed, not compiled everywhere": `CairnChatDomain` compiles and tests here; `CairnPersistence`
+needs SwiftData and the app needs UIKit, and neither exists on this machine. Nothing here is claimed as
+CI-verified, on-device-verified or real-network-verified.
+
+### What landed — `CairnChatDomain` (compiles and tests on the host)
+
+- `ChatAttachment.swift` — the value a message carries: kind (image/document), the user's file name, the
+  declared UTI, the byte count, the bytes, and for a document the text Cairn read out of it here. Plus the
+  ceilings (`AttachmentCeilings`) and `AttachmentRejection`, which is the whole vocabulary of "I cannot take
+  this file" and why.
+- `AttachmentAcceptance.swift` — one function that turns a picked file into either an attachment or a reason
+  the user can read. Empty file, wrong kind, too big to hold in memory, too big to send: each says so.
+- `DocumentTextExtraction.swift` — plain text, Markdown, CSV and JSON come out as themselves with their
+  declared type normalised; anything that needs a real parser (PDF, DOCX) is refused with an instruction to
+  paste the text, because guessing at a binary format here would produce a confident wrong answer.
+- `DocumentChunker.swift` — a document is cut into passages of ~1,200 characters with 200 characters of
+  overlap, on paragraph boundaries where it can be, so an answer can point at a place in a file instead of
+  at the whole file.
+- `TextTokenizer.swift` — lowercase, fold apostrophes, drop punctuation, emit unigrams and bigrams. Bigrams
+  are what make "context window" findable by "window context".
+- `LexicalRetrieval.swift` — BM25 (k1 1.2, b 0.75) over the chunks of every document attached anywhere in
+  the conversation's visible path, with a query-term guard: a query whose terms appear in no document
+  retrieves nothing, and an empty retrieval is reported as "nothing found", never as "here is something
+  anyway".
+- `GroundedPassage.swift`, `GroundingValues.swift`, `Grounding.swift` — the passage, the citation, and the
+  block that gets injected into the system prompt. A citation carries the file name, the chunk index, the
+  character range and the score, so a source line still reads after the file is gone from the phone.
+- `VisionGate.swift` — one question with one answer: can any engine in play see an image? If yes, send; if
+  no, refuse the send and say why. A picture is never quietly dropped, because an answer about a photo the
+  model never saw is worse than no answer.
+- `ImagePreparation.swift` — the size rule (longest edge 1,568, encoded ceiling 2.5 MB) as a pure decision,
+  with `ImagePreparing` as the seam: the domain decides the target, the presentation layer resamples.
+  `PassthroughImagePreparer` is the honest no-codec fallback for host builds and tests.
+- `ChatTreeAttachments.swift` — the images of the current turn, the documents of the whole visible path, and
+  the "can every image still be read" check, all as pure functions over the tree.
+- `ChatSessionModel+Attachments.swift` — the session's side of the same rules: `attachmentBytes` (the one
+  reader of files), `attachmentStorageAvailable`, `pendingAttachments` (pick → accept → chunk before the
+  composer shows a chip), and the two refusal strings the user can actually act on.
+- `ChatModels.swift`, `ChatTreeMutations.swift` — a node carries `attachments` and `citations`; edit and
+  regenerate carry a user message's attachments onto its new sibling, so editing the text does not silently
+  detach the photo.
+- `ChatSessionModel.swift` and `+Streaming`, `+HybridJob`, `+ToolTurn`, `+Tools`, `+Config`, `+Continue`,
+  `+TreeOps` — the vision gate at every entry point that can send an image, grounding injected into the
+  system context by the **same** function used for the preview, images injected only into the turn they
+  belong to, and a refusal before anything is written when a stored file has gone unreadable.
+
+### What landed — `CairnPersistence` (written here, never compiled here)
+
+- `AttachmentMetadata.swift` — what a row stores about an attachment: kind, name, declared type, byte count
+  and the extracted document text. Never the bytes.
+- `AttachmentFiles.swift` — the bytes beside the database, one file per attachment named by its UUID, inside
+  the app's own Application Support. Not iCloud, not a shared container, no path from the user's original
+  file.
+- `Records.swift`, `Mapping.swift` — an `attachmentsJSON` column and a `citationsJSON` column; both read back
+  as nothing when the column is absent, which is what a pre-M6 row is.
+- `SwiftDataStore.swift`, `SwiftDataStore+Attachments.swift` — bytes are written before the row that names
+  them, so a row can never point at a file that does not exist; the citation column is written on the update
+  path too, because sources arrive after the row was created; deleting a message or a conversation deletes
+  its files, which is the difference between deleting and hiding.
+
+### The decisions, and the reason each one is there
+
+1. **A file's bytes never enter the database.** Opening a chat reads every message row in it. A photograph in
+   a row is read whole on every open, so forty photos in a conversation would make opening it slow in order to
+   show text. The row carries name, kind, size and the extracted text; the pixels are read only to draw one
+   thumbnail or to send one turn.
+2. **An image is sent only on the turn it was attached to, never as standing history.** A photo re-sent on
+   every later turn is the same megabytes crossing the user's network for every question they ask afterwards,
+   and it is a second copy of the file on the machine at the other end. The node keeps the image so the
+   conversation still shows it; the payload goes out once.
+3. **A document is never re-sent as a file.** Its retrieved passages go into the system block; the file does
+   not. This is what keeps a five-turn-old document from costing bandwidth on turn six, and it is why the
+   extracted text is the thing that is stored.
+4. **The vision gate answers one question and refuses rather than degrades.** `VisionGate.decide` takes a
+   single `modelSees` flag derived from the engines in play. If nothing can see the image, the send stops with
+   a sentence naming what to do. An earlier draft of this logic considered sending the text and dropping the
+   image; that path is not in the app, because the answer would then describe a picture nobody showed it.
+5. **Grounding is built by one function used by both the preview and the request.** Preview and request must
+   not be able to disagree, or "show me what you are about to send" becomes a second, prettier lie.
+6. **Retrieval is BM25 in pure Swift, no embeddings.** An embedding model is a download the user did not ask
+   for and a second model held in memory; the rules say one on-device model unless `os_proc_available_memory`
+   allows two. Lexical retrieval answers "what did the file I attached say" honestly, and it is unit-testable
+   without a simulator.
+7. **A file that has gone unreadable stops the turn.** Regenerate and continue re-read the image of the turn
+   they are re-asking. If the bytes are gone, the session refuses with "re-attach the image, or edit the
+   message" instead of writing an empty node and asking the model a question it cannot see.
+8. **PDF and DOCX are refused with instructions, not guessed.** A hand-rolled parser for those formats would
+   return partial text with full confidence; the honest answer is that Cairn reads text files here and the
+   user can paste what they need.
+
+### Tests
+
+52 new domain tests, 268 → **320**, all green on the host: `AttachmentAcceptanceTests` (14),
+`DocumentChunkerTests` (11), `LexicalRetrievalTests` (12), `GroundingTests` (10), `VisionGateTests` (8),
+`AttachmentTurnTests` (13). The last suite runs against `RecordingEngine` / `RequestRecorder` doubles, so it
+asserts what actually leaves the device: an image appears in the payload of the turn it was attached to and in
+no later turn; a document's passages appear as a system block and never as an attachment; a model that cannot
+see never receives the image and the user is told before anything is sent.
+
+### What is owed before M6 can be claimed
+
+- **The composer.** A paperclip that opens the photo picker and the file picker, chips for what is pending
+  with a remove button, the `VisionGate.warning(for:modelSees:)` line before the send rather than after, and
+  the acceptance refusal shown where the user just tapped. `ComposerChips.swift` and `ChatScreen.swift` are
+  the files.
+- **The message row.** Attachment chips on a user message, thumbnails read through
+  `ChatSessionModel.attachmentPayload` (never off disk from a view), and the source line under a grounded
+  answer: file name, place in the file, score. `MessageRow.swift`, `MessageRow+Controls.swift`.
+- **App wiring.** `session.attachmentBytes = store.attachmentData`, `session.attachmentStorageAvailable` from
+  `SwiftDataStore.canStoreAttachments`, and a UIKit-backed `ImagePreparing` in the app target that reads real
+  dimensions and resamples to `ImagePreparationPolicy.targetSize`.
+- **Export.** `.cairn` must carry attachment metadata and citations; the transcript must show sources. An
+  attachment's bytes should not be embedded in an exported transcript by surprise — that is a separate,
+  opt-in decision, and right now the honest behaviour is metadata only.
+- **Temporary chats.** Attachments in a temp chat live in memory only and die with the process. That is the
+  rule; the composer has to say it rather than letting a user believe a photo was saved.
+- **Everything in this milestone is unverified.** No CI run, no simulator build, no phone. `CairnPersistence`
+  and the app target have never been compiled on this machine, so the first Mac build is likely to find
+  something. Gate: `Scripts/ci.sh all` on the Mac, then the device pass.
 

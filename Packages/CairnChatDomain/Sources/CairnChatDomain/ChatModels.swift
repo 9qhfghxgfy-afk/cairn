@@ -139,6 +139,14 @@ public struct ChatNode: Sendable, Equatable, Identifiable {
     /// unified answer, and what failed. `nil` for every non-hybrid node and for every
     /// message written before M4.
     public var provenance: HybridProvenance?
+    /// What the user attached to this message. Empty for every node written before M6, which is how a
+    /// pre-M6 row keeps reading as "nothing attached" rather than "an attachment with no bytes".
+    /// An image travels only to an engine that can see it (`VisionGate`), and a document is read on the
+    /// device — these bytes never leave except inside a turn the user sent.
+    public var attachments: [ChatAttachment]
+    /// The passages this answer was grounded in, numbered as the prompt numbered them. Empty when the
+    /// turn quoted nothing, which includes every turn with no documents attached.
+    public var citations: [SourceCitation]
 
     public init(
         id: UUID = UUID(),
@@ -157,7 +165,9 @@ public struct ChatNode: Sendable, Equatable, Identifiable {
         metrics: GenerationMetrics? = nil,
         provenance: HybridProvenance? = nil,
         toolsOffered: [String] = [],
-        toolRun: ToolRun? = nil
+        toolRun: ToolRun? = nil,
+        attachments: [ChatAttachment] = [],
+        citations: [SourceCitation] = []
     ) {
         self.id = id
         self.conversationID = conversationID
@@ -176,7 +186,15 @@ public struct ChatNode: Sendable, Equatable, Identifiable {
         self.provenance = provenance
         self.toolsOffered = toolsOffered
         self.toolRun = toolRun
+        self.attachments = attachments
+        self.citations = citations
     }
+
+    /// The attachments in the order a row and a transcript both use.
+    public var sortedAttachments: [ChatAttachment] { Attachments.sorted(attachments) }
+
+    /// Images the user attached here, whether or not this turn was allowed to send them.
+    public var attachedImages: [ChatAttachment] { Attachments.images(attachments) }
 }
 
 // `Conversation` lives in Conversation.swift and `ChatConfig` in ChatConfig.swift: P2 moved the

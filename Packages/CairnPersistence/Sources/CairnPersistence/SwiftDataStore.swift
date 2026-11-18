@@ -13,6 +13,10 @@ public final class SwiftDataStore: ChatStore {
     /// Internal, not private: `SwiftDataStore+Profiles.swift` extends this type in another
     /// file and needs the same single writer.
     let context: ModelContext
+    /// The files the attachments in these rows point at, or nil for an in-memory store — which writes
+    /// nothing at all, including no photographs. Internal for the same reason as `context`: the attachment
+    /// extension of this type is in another file and needs the same single place files are written.
+    let attachmentFiles: AttachmentFiles?
 
     /// - Parameter inMemory: used by tests and by any "do not write to disk" path.
     public init(inMemory: Bool = false) throws {
@@ -32,10 +36,18 @@ public final class SwiftDataStore: ChatStore {
         } catch {
             throw StoreError.writeFailed("Could not open the local chat database.")
         }
+        // An in-memory store has no directory to write to; a disk store that cannot get one keeps the
+        // conversation working in memory and says so at the composer rather than failing to open.
+        attachmentFiles = inMemory ? nil : AttachmentFiles.inApplicationSupport()
         // Main-actor bound context matches this store's isolation, and keeps the
         // app and the store on one writer instead of juggling several contexts.
         context = container.mainContext
     }
+
+    // MARK: - Attachment bytes
+
+    /// Reading a stored file and cleaning up after a delete live in `SwiftDataStore+Attachments.swift`, so
+    /// this file stays the shape of the store: conversations, nodes, one writer.
 
     // MARK: - Conversations
 
@@ -96,11 +108,15 @@ public final class SwiftDataStore: ChatStore {
             throw StoreError.conversationNotFound(id)
         }
         let nodeDescriptor = FetchDescriptor<ChatRecord>(predicate: #Predicate { $0.conversationID == id })
-        for node in try context.fetch(nodeDescriptor) {
+        let nodeRecords = try context.fetch(nodeDescriptor)
+        for node in nodeRecords {
             context.delete(node)
         }
         context.delete(record)
         try context.save()
+        // And the files with them. A deleted conversation that left its photographs behind is not a deleted
+        // conversation; it is a conversation the user cannot see but whose contents still sit on the phone.
+        removeAttachmentFiles(from: nodeRecords)
     }
 
     // MARK: - Nodes
@@ -114,6 +130,9 @@ public final class SwiftDataStore: ChatStore {
     }
 
     public func saveNode(_ node: ChatNode) throws {
+        // Bytes first, row second: a row that names a file which was never written is a message whose image
+        // silently disappeared, so a failure to store the file fails the save instead.
+        try attachmentFiles?.store(node.attachments)
         let nodeID = node.id
         var descriptor = FetchDescriptor<ChatRecord>(predicate: #Predicate { $0.id == nodeID })
         descriptor.fetchLimit = 1
@@ -130,6 +149,10 @@ public final class SwiftDataStore: ChatStore {
             existing.draftsJSON = JSONCodec.encodeIfNotEmpty(node.drafts)
             existing.metricsJSON = node.metrics.flatMap { JSONCodec.encode($0) }
             existing.provenanceJSON = node.provenance.flatMap { JSONCodec.encode($0) }
+            // Sources arrive when a grounded answer finishes, which is after the row was first written with
+            // an empty text — so the citation column has to be written on the update path too, or the
+            // answer's sources would never be stored.
+            existing.citationsJSON = JSONCodec.encodeIfNotEmpty(node.citations)
         } else {
             context.insert(ChatRecord(node))
         }
@@ -142,7 +165,11 @@ public final class SwiftDataStore: ChatStore {
         guard let record = try context.fetch(descriptor).first else {
             throw StoreError.nodeNotFound(id)
         }
+        let attachmentIDs = AttachmentMetadataCodec.ids(in: record.attachmentsJSON)
         context.delete(record)
         try context.save()
+        // The row goes first so a delete that fails leaves the file, not the row pointing at a file that is
+        // already gone.
+        attachmentFiles?.remove(ids: attachmentIDs)
     }
 }

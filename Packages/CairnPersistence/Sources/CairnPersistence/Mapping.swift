@@ -81,7 +81,11 @@ extension ChatRecord {
             metricsJSON: node.metrics.flatMap { JSONCodec.encode($0) },
             provenanceJSON: node.provenance.flatMap { JSONCodec.encode($0) },
             toolRunJSON: node.toolRun.flatMap { JSONCodec.encode($0) },
-            toolsOfferedJSON: JSONCodec.encodeIfNotEmpty(node.toolsOffered)
+            toolsOfferedJSON: JSONCodec.encodeIfNotEmpty(node.toolsOffered),
+            // What the user attached, as metadata plus the text read from a document here on the device —
+            // never the file's bytes, which live in `AttachmentFiles` beside the database.
+            attachmentsJSON: AttachmentMetadataCodec.encode(node.attachments),
+            citationsJSON: JSONCodec.encodeIfNotEmpty(node.citations)
         )
     }
 
@@ -107,7 +111,12 @@ extension ChatRecord {
             // A node with no tool column is a node from before P3, or a turn that ran no tool: both
             // read as "no calls", never as an empty call record the UI would render as a card.
             toolsOffered: JSONCodec.decode([String].self, from: toolsOfferedJSON) ?? [],
-            toolRun: JSONCodec.decode(ToolRun.self, from: toolRunJSON)
+            toolRun: JSONCodec.decode(ToolRun.self, from: toolRunJSON),
+            // An attachment reads back with empty bytes on purpose — the file is beside the database and
+            // the session reads it back only for the turn about to send it. A row with no column is a
+            // message from before M6, which had nothing attached to it.
+            attachments: AttachmentMetadataCodec.decode(attachmentsJSON),
+            citations: JSONCodec.decode([SourceCitation].self, from: citationsJSON) ?? []
         )
     }
 }

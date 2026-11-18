@@ -13,15 +13,11 @@ extension ChatSessionModel {
         let selection = toolSelection(for: provider)
         let format = toolRouting(for: provider).format
         let offered = ToolPromptBlock.names(selection.definitions)
-        let request = GenerationRequest(
-            modelID: selectedModelID,
-            messages: ChatTree.messages(
-                for: history,
-                systemPrompt: systemPrompt(for: provider, selection: selection, format: format)
-            ),
-            config: conversation.config,
-            tools: selection.definitions,
-            toolProtocol: format
+        // The same builder the plain and hybrid turns use, so a tool turn carries the same images on the
+        // same message and the same passages inside the same block. A second copy of this assembly is
+        // where a tool turn would quietly start sending something the plain turn does not.
+        let request = generationRequest(
+            to: provider, modelID: selectedModelID, history: history
         )
 
         accumulator = StreamAccumulator()

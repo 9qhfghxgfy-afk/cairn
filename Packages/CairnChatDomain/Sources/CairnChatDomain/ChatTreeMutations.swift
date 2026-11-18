@@ -24,7 +24,9 @@ public extension ChatTree {
         state: NodeState = .complete,
         providerID: String? = nil,
         modelID: String? = nil,
-        now: Date = Date()
+        now: Date = Date(),
+        attachments: [ChatAttachment] = [],
+        citations: [SourceCitation] = []
     ) -> AppendResult {
         let node = ChatNode(
             conversationID: conversationID,
@@ -36,13 +38,19 @@ public extension ChatTree {
             branchIndex: nextBranchIndex(in: nodes, parentID: parentID),
             providerID: providerID,
             modelID: modelID,
-            createdAt: now
+            createdAt: now,
+            attachments: attachments,
+            citations: citations
         )
         return AppendResult(node: node, nodes: nodes + [node])
     }
 
     /// Edit = a new sibling of the edited node under the SAME parent carrying the
     /// new text. The original node and everything below it remain a branch.
+    ///
+    /// The sibling carries the original's attachments. An edit changes the words; it does not un-attach
+    /// the photo or the document the user pinned to that message, and a sibling that quietly arrived
+    /// without them would be a message missing a file the user can still see in the branch beside it.
     static func edit(
         nodes: [ChatNode],
         nodeID: UUID,
@@ -60,13 +68,18 @@ public extension ChatTree {
             branchIndex: nextBranchIndex(in: nodes, parentID: target.parentID),
             providerID: target.providerID,
             modelID: target.modelID,
-            createdAt: now
+            createdAt: now,
+            attachments: target.attachments
         )
         return AppendResult(node: replacement, nodes: nodes + [replacement])
     }
 
     /// Regenerate = a new assistant sibling attached to the same parent as the
     /// previous answer (the same user turn), starting empty and streaming.
+    ///
+    /// It carries the previous answer's citations: the question and the documents are the same ones, so
+    /// the sources the passages came from are the same sources. Dropping them would make a regenerated
+    /// answer look ungrounded when it was grounded in exactly the same passages.
     static func regenerate(
         nodes: [ChatNode],
         assistantNodeID: UUID,
@@ -85,7 +98,8 @@ public extension ChatTree {
             branchIndex: nextBranchIndex(in: nodes, parentID: target.parentID),
             providerID: providerID,
             modelID: modelID,
-            createdAt: now
+            createdAt: now,
+            citations: target.citations
         )
         return AppendResult(node: fresh, nodes: nodes + [fresh])
     }

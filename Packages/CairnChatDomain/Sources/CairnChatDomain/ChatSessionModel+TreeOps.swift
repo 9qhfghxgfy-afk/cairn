@@ -17,6 +17,17 @@ extension ChatSessionModel {
         }
 
         var working = nodes
+        // A regenerated answer is asked over the same user message, so it carries that message's images
+        // again. A photo whose file has gone stops the turn before anything is written, rather than leaving
+        // an empty answer on the tree and a new one that never saw the picture. The path read is the one
+        // the answer being replaced sits on — the new sibling does not exist yet, and the question beside it
+        // is what decides which images are needed.
+        guard attachmentsReadable(
+            in: ChatTree.visiblePath(nodes: working, activeLeafID: assistantNodeID)
+        ) else {
+            lastError = Self.unreadableAttachmentMessage
+            return
+        }
         do {
             guard let result = ChatTree.regenerate(
                 nodes: working,

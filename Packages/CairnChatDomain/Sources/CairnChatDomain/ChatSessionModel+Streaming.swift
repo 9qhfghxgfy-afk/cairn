@@ -89,4 +89,17 @@ extension ChatSessionModel {
         let firstLine = text.split(whereSeparator: { $0.isNewline }).first.map(String.init) ?? text
         return String(firstLine.prefix(48))
     }
+
+    /// A title for a turn that had no words: the first attachment names the chat. A conversation whose
+    /// first message was a photograph or a PDF should not sit under "New chat" forever, and the file's own
+    /// name is the only title here that the user can actually check.
+    static func makeTitle(
+        from text: String, otherwiseFrom attachments: [ChatAttachment]
+    ) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.isEmpty else { return makeTitle(from: trimmed) }
+        guard let first = attachments.first else { return "New chat" }
+        guard !first.name.isEmpty else { return first.kind.label }
+        return String(first.name.prefix(48))
+    }
 }

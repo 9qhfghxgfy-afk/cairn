@@ -20,6 +20,10 @@ public struct TurnContext: Sendable, Equatable {
     public var visionOn: Bool
     public var fileCount: Int
     public var imageCount: Int
+    /// Passages Cairn read out of the attached documents for this turn, numbered as they are numbered
+    /// in the block. Empty on every turn with no documents, and on every turn whose documents did not
+    /// answer the question — in both cases the file block says what was attached and nothing more.
+    public var passages: [RetrievedPassage]
     /// Only a context size the user actually configured; the server's own is not Cairn's to state.
     public var contextTokens: Int?
 
@@ -34,6 +38,7 @@ public struct TurnContext: Sendable, Equatable {
         visionOn: Bool = false,
         fileCount: Int = 0,
         imageCount: Int = 0,
+        passages: [RetrievedPassage] = [],
         contextTokens: Int? = nil
     ) {
         self.backendLabel = backendLabel
@@ -46,6 +51,7 @@ public struct TurnContext: Sendable, Equatable {
         self.visionOn = visionOn
         self.fileCount = fileCount
         self.imageCount = imageCount
+        self.passages = passages
         self.contextTokens = contextTokens
     }
 
