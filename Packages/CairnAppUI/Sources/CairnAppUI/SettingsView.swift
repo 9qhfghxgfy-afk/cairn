@@ -29,6 +29,7 @@ struct SettingsView: View {
             themeSection
             newChatSection
             turnSection
+            toolsSection
             aboutSection
         }
         .navigationTitle("Settings")
@@ -75,15 +76,31 @@ struct SettingsView: View {
     }
 
     var turnSection: some View {
-        Section("Turns") {
+        Section {
             Toggle(
-                "Show tokens per second while a turn runs",
                 isOn: Binding(
                     get: { theme.settings.showsGenerationStats },
                     set: { theme.setShowsGenerationStats($0) }
                 )
-            )
+            ) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Generation Statistics").font(.subheadline)
+                    Text(
+                        "Show elapsed time, tokens generated, and tokens per second under every answer."
+                    )
+                    .font(.caption)
+                    .foregroundStyle(CairnTheme.stoneLight)
+                }
+            }
             .tint(CairnTheme.amber)
+        } header: {
+            Text("Turns")
+        } footer: {
+            Text(
+                "Turning this off hides the numbers; it does not stop them being measured. A turn that "
+                    + "took 40 seconds still says so in its record, so a chat you open next month can "
+                    + "still be understood."
+            )
         }
     }
 

@@ -68,6 +68,12 @@ public final class ModelManagerModel {
         guard let profile else { return }
         do {
             detail = try await lifecycle.detail(model: modelID, profile: profile)
+            // The published capability flags the detail endpoint names — including tools — fold onto
+            // the installed row, so the list itself says what the server said rather than what a model
+            // name sounds like it should support.
+            if let detail {
+                installed = installed.map { detail.applied(to: $0) }
+            }
         } catch let issue as ModelLifecycleError {
             detail = nil
             notice = issue.message

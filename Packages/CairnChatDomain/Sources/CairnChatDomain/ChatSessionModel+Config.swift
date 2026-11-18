@@ -29,6 +29,13 @@ extension ChatSessionModel {
         activeProvider?.samplingSupport ?? .none
     }
 
+    /// Whether the selected engine has declared it emits reasoning.
+    ///
+    /// The `Thinking` chip reads this to say what will actually happen: a chip up against a backend
+    /// that has never produced a reasoning field still shows no panel, and the chip should have said so
+    /// instead of letting the empty panel read as a fault.
+    public var reasoningSupported: Bool { activeProvider?.capabilities.thinking ?? false }
+
     public var currentTurnContext: TurnContext {
         if let provider = activeProvider { return turnContext(for: provider) }
         // No engine selected: state nothing about the backend rather than guessing, so the
@@ -76,6 +83,16 @@ extension ChatSessionModel {
 
     /// Applies an edited configuration and persists the conversation row, so a knob moved in the
     /// sheet is true for the next turn and after a relaunch.
+    /// The composer's `Thinking` chip: ask this backend for reasoning, and say nothing about it on a
+    /// backend that has not been seen to emit any (`TurnContext.thinkingOn` ANDs this with the
+    /// engine's declared capability, so the chip cannot promise a panel that never fills).
+    public func setThinking(_ on: Bool) {
+        var config = conversation.config
+        guard config.thinkingEnabled != on else { return }
+        config.thinkingEnabled = on
+        updateConfig(config)
+    }
+
     public func updateConfig(_ config: ChatConfig) {
         var updated = conversation
         updated.config = config

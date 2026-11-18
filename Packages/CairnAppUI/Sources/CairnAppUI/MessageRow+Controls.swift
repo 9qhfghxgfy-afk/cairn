@@ -59,10 +59,17 @@ extension MessageRow {
         }
     }
 
+    /// The measurements this turn produced, drawn only when the `Generation Statistics` switch is up.
+    ///
+    /// The switch decides what is **drawn**, not what was recorded: `metrics` stays on the node either
+    /// way, so turning the footer off does not un-measure a turn the user may want to inspect later.
+    /// Elapsed seconds are shown because they are the number that explains a slow turn; tok/s is the
+    /// one that explains a long one.
     @ViewBuilder
     var metricsFooter: some View {
-        if let metrics = node.metrics {
+        if session.showsGenerationStats, let metrics = node.metrics {
             HStack(spacing: 10) {
+                Text(String(format: "%.1f s", metrics.elapsedSeconds))
                 if let rate = metrics.tokensPerSecond {
                     Text(String(format: "%.1f tok/s", rate))
                 }
@@ -71,7 +78,18 @@ extension MessageRow {
             }
             .font(.caption2.monospaced())
             .foregroundStyle(CairnTheme.stoneLight.opacity(0.8))
+            .accessibilityLabel(generationStatsSpoken(metrics))
         }
+    }
+
+    private func generationStatsSpoken(_ metrics: GenerationMetrics) -> String {
+        var parts: [String] = [String(format: "%.1f seconds", metrics.elapsedSeconds)]
+        if let rate = metrics.tokensPerSecond {
+            parts.append(String(format: "%.1f tokens per second", rate))
+        }
+        parts.append("\(metrics.tokensGenerated) tokens")
+        parts.append("finished: \(metrics.finishReason.rawValue)")
+        return "Generation statistics: \(parts.joined(separator: ", "))"
     }
 
     @ViewBuilder

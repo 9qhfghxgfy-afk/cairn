@@ -59,6 +59,19 @@ public final class ThemeModel {
         mutate { $0.showsGenerationStats = shows }
     }
 
+    /// The outbound web acknowledgement, granted from Settings or from the composer's first-use
+    /// disclosure. It goes through the one settings row like every other switch here, so the
+    /// acknowledgement survives a relaunch instead of being re-asked — or silently forgotten.
+    public func setOutboundWebAllowed(_ allowed: Bool) {
+        mutate { $0.setOutboundWebAllowed(allowed) }
+    }
+
+    /// The user's own SearXNG endpoint; nil or empty means "not set", which routes search to the
+    /// keyless default rather than to a broken address.
+    public func setSearXNGURL(_ url: String?) {
+        mutate { $0.setSearXNGURL(url) }
+    }
+
     public func save(_ updated: AppSettings) { mutate { $0 = updated } }
 
     public func reload() {

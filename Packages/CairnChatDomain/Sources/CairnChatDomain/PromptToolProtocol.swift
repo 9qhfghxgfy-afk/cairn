@@ -61,7 +61,7 @@ public enum PromptToolProtocol {
         let window = String(text.prefix(scanCharacterLimit))
         let located = tagCalls(in: window) + jsonCalls(in: window)
         return located
-            .sorted { $0.startOffset < $1.startOffset }
+            .sorted { $0.start < $1.start }
             .prefix(callLimit)
             .map(\.request)
     }
@@ -71,11 +71,11 @@ public enum PromptToolProtocol {
     public static func strippedText(_ text: String) -> String {
         let window = String(text.prefix(scanCharacterLimit))
         let located = (tagCalls(in: window) + jsonCalls(in: window))
-            .sorted { $0.startOffset < $1.startOffset }
+            .sorted { $0.start < $1.start }
             .prefix(callLimit)
         guard !located.isEmpty else { return text }
         var kept = window
-        for found in located.sorted(by: { $0.startOffset > $1.startOffset }) {
+        for found in located.sorted(by: { $0.start > $1.start }) {
             kept.removeSubrange(found.start..<found.end)
         }
         return Self.collapseBlankLines(kept)
@@ -93,11 +93,12 @@ public enum PromptToolProtocol {
     }
 
     /// One located call, with the exact range it occupied so it can be removed from the answer.
+    ///
+    /// Ordering is by `String.Index`, which is only meaningful because every `Located` in a batch is
+    /// found by scanning the *same* string — the two scanners in `Parsing` share one scan window.
     struct Located {
         var start: String.Index
         var end: String.Index
         var request: ToolCallRequest
-
-        var startOffset: Int { start.utf16Offset }
     }
 }

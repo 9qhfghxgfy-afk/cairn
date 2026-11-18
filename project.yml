@@ -115,6 +115,10 @@ targets:
       # promises (the factory that turns a registry into the gate every session gets) and has no @main
       # and no app-only imports, so the simulator suite can prove that factory instead of trusting it.
       - App/HybridWiring.swift
+      # The second app-layer file, for the same reason: P3b's tool assembly is the one place a registry
+      # can be built (a window, a Keychain, and the two Settings switches meet only here), and it has no
+      # @main either. Testing it here is what proves a chat really gets the web tools the switches allow.
+      - App/ToolWiring.swift
     dependencies:
       - package: CairnChatDomain
       - package: CairnPersistence

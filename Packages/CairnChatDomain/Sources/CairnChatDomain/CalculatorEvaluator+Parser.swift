@@ -75,7 +75,7 @@ extension CalculatorEvaluator {
             let base = try parsePrimary()
             guard match("^") else { return base }
             let exponent = try parseUnary()
-            return try Self.raise(base, to: exponent)
+            return try CalculatorEvaluator.raise(base, to: exponent)
         }
 
         private mutating func parsePrimary() throws -> Double {
@@ -100,7 +100,7 @@ extension CalculatorEvaluator {
         }
 
         private mutating func parseCallOrConstant(_ identifier: String) throws -> Double {
-            guard match("(") else { return try Self.constant(identifier) }
+            guard match("(") else { return try CalculatorEvaluator.constant(identifier) }
             try enter()
             var arguments: [Double] = []
             if !match(")") {
@@ -112,7 +112,7 @@ extension CalculatorEvaluator {
                 }
             }
             leave()
-            return try Self.apply(identifier, to: arguments)
+            return try CalculatorEvaluator.apply(identifier, to: arguments)
         }
     }
 

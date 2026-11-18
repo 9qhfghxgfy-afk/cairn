@@ -43,6 +43,8 @@ enum RemoteChatPipeline {
         var finishReason: FinishReason = .unknown
         var promptTokens: Int?
         var completionTokens: Int?
+        /// Fragments of streamed calls, stitched in arrival order and handed over whole.
+        var stitcher = RemoteToolCallStitcher()
 
         func handle(_ event: RemoteEvent) throws {
             switch event {
@@ -54,11 +56,20 @@ enum RemoteChatPipeline {
                     firstContentSeconds = elapsed(from: started, to: clock.now)
                 }
                 continuation.yield(.content(text))
+            case .toolCall(let call):
+                // A dialect that hands over the complete arguments needs no stitching; the call is
+                // already whole, so the loop can run it as soon as it sees it.
+                continuation.yield(.toolCall(call))
+            case .toolCallDelta(let index, let id, let name, let arguments):
+                stitcher.feed(index: index, id: id, name: name, arguments: arguments)
             case .usage(let prompt, let completion):
                 if let prompt { promptTokens = prompt }
                 if let completion { completionTokens = completion }
             case .finished(let reason):
                 finishReason = reason
+                // The choice is over, so every fragment of its calls has arrived: this is the earliest
+                // point at which a call can honestly be called complete.
+                for call in stitcher.flush() { continuation.yield(.toolCall(call)) }
             case .streamDone:
                 break
             case .error(let message):
@@ -77,6 +88,10 @@ enum RemoteChatPipeline {
         if let tail = parser.takeTrailingPartialLine(), !tail.isEmpty {
             for event in try wire.decodeLine(tail + [0x0A]) { try handle(event) }
         }
+
+        // A server that closed the stream without ever naming a finish reason still owes its calls:
+        // dropping a stitched call here would leave the model waiting for a result it was never given.
+        for call in stitcher.flush() { continuation.yield(.toolCall(call)) }
 
         if let metrics = RemoteMetrics.make(
             promptTokens: promptTokens,

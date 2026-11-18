@@ -14,7 +14,8 @@ extension ChatSessionModel {
         ToolRouting(
             toolToggle: conversation.config.toolToggle,
             capabilities: provider.capabilities,
-            registry: toolRegistry
+            registry: toolRegistry,
+            outboundWebAllowed: outboundWebAllowed
         )
     }
 
@@ -27,10 +28,10 @@ extension ChatSessionModel {
     func toolSelection(for provider: any InferenceProvider) -> ToolSelection {
         let routing = toolRouting(for: provider)
         guard routing.offersTools, !conversation.mode.isHybrid else { return ToolSelection() }
-        let enabled = Set(routing.toolToggle.enabledToolNames)
-        let full = routing.registry.definitions(allowed: enabled)
+        // With no configured window there is nothing to fit against, so the whole offerable set
+        // travels — `offerableNames` has already removed anything this turn may not run.
         guard let window = conversation.config.sampling.contextWindow, window > 0 else {
-            return ToolSelection(definitions: full)
+            return routing.selection(withinWordBudget: .max, wordBudget: Self.wordCount)
         }
         // Words, not tokens: there is no tokenizer in this module, and an estimate shown as a token
         // count is a number the user reads as exact. A quarter of the window is what the block may
@@ -51,13 +52,27 @@ extension ChatSessionModel {
     ) -> String {
         let base = conversation.config.systemPrompt(
             in: contextEnvironment,
-            turn: turnContext(for: provider, selection: selection, format: format)
+            turn: turnContext(for: provider)
         )
         let block = selection.instruction(format: format)
         if block.isEmpty { return base }
         if base.isEmpty { return block }
         return base + "\n\n" + block
     }
+
+    /// True once any turn in this conversation has had a tool reach the public internet.
+    ///
+    /// Read off the stored nodes rather than a session-scoped flag, so the badge survives a reopen and
+    /// describes what actually happened in *this* conversation. That is the whole point of it: a user
+    /// who armed tools and then stopped should still be able to see that a query left the phone.
+    public var hasUsedWebTools: Bool {
+        nodes.contains { $0.toolRun?.usedWebTools == true }
+    }
+
+    /// The tools this chat's chip would offer, for the composer's switch list — including the ones the
+    /// outbound acknowledgement currently holds back, so the list explains itself instead of showing
+    /// three tools that vanished.
+    public var chipToolNames: [String] { conversation.config.toolToggle.enabledToolNames }
 
     /// Arms or disarms this chat's tools, and persists the chat so the chip survives a relaunch.
     public func setTools(_ toggle: ToolToggleSet) {

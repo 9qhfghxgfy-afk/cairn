@@ -13,14 +13,29 @@ extension OpenAICodec {
 
     struct WireChunk: Decodable {
         struct Choice: Decodable {
+            /// One streamed call fragment. `arguments` is the piece of a JSON blob this chunk
+            /// carried — the whole blob is only complete when the choice finishes, which is why the
+            /// fragments are stitched in the pipeline rather than decoded here.
+            struct CallFragment: Decodable {
+                struct Function: Decodable {
+                    let name: String?
+                    let arguments: String?
+                }
+                let index: Int?
+                let id: String?
+                let type: String?
+                let function: Function?
+            }
             struct Delta: Decodable {
                 let content: String?
                 let reasoningContent: String?
                 let reasoning: String?
+                let toolCalls: [CallFragment]?
                 enum CodingKeys: String, CodingKey {
                     case content
                     case reasoningContent = "reasoning_content"
                     case reasoning
+                    case toolCalls = "tool_calls"
                 }
             }
             let delta: Delta?
@@ -50,6 +65,10 @@ extension OpenAICodec {
         case "stop": return .stop
         case "length": return .length
         case "content_filter": return .contentFilter
+        // A reply that stopped in order to call a tool stopped on purpose. The loop decides what
+        // happens next; recording it as `.unknown` would tell the user the server ended for a reason
+        // nobody could name.
+        case "tool_calls", "function_call": return .stop
         default: return .unknown
         }
     }
@@ -77,6 +96,19 @@ extension OpenAICodec {
             }
             if let content = choice.delta?.content, !content.isEmpty {
                 events.append(.content(content))
+            }
+            // Fragments, not calls: the id and name arrive in one chunk and the arguments are split
+            // across the ones after it, so nothing here can know a call is finished.
+            for (position, fragment) in (choice.delta?.toolCalls ?? []).enumerated() {
+                let name = fragment.function?.name ?? ""
+                let arguments = fragment.function?.arguments ?? ""
+                guard !name.isEmpty || !arguments.isEmpty else { continue }
+                events.append(.toolCallDelta(
+                    index: fragment.index ?? position,
+                    id: fragment.id,
+                    name: name.isEmpty ? nil : name,
+                    arguments: arguments
+                ))
             }
             if let reason = choice.finishReason {
                 events.append(.finished(finishReason(from: reason)))

@@ -10,6 +10,10 @@ public enum OpenAICodec: Sendable {
     public enum Event: Sendable, Equatable {
         case thinking(String)
         case content(String)
+        /// One fragment of a call: this dialect streams `tool_calls` as pieces — the id and name in
+        /// one chunk, the arguments split across the next ones. They are stitched back into a whole
+        /// call by `RemoteChatPipeline`, which is the only place that knows a call has ended.
+        case toolCallDelta(index: Int, id: String?, name: String?, arguments: String)
         case usage(promptTokens: Int?, completionTokens: Int?)
         case finished(FinishReason)
         case streamDone
@@ -17,6 +21,25 @@ public enum OpenAICodec: Sendable {
     }
 
     // MARK: - Request encoding
+
+    /// A call this assistant turn made, sent back the way this dialect publishes it: `arguments` as a
+    /// JSON **string**, which is the opposite of Ollama's object form. An object here is how a strict
+    /// server rejects the whole turn rather than one call.
+    private struct WireToolCall: Encodable {
+        struct Function: Encodable { let name: String; let arguments: String }
+        let id: String?
+        let type: String
+        let function: Function
+
+        init(_ call: ToolCallRequest) {
+            id = call.id.isEmpty ? nil : call.id
+            type = "function"
+            function = Function(
+                name: call.name,
+                arguments: WireToolArguments.text(call.argumentsJSON)
+            )
+        }
+    }
 
     private struct WireContentPart: Encodable {
         let type: String
@@ -38,18 +61,36 @@ public enum OpenAICodec: Sendable {
         let text: String?
         let parts: [WireContentPart]?
         let images: [String]? // unused; kept simple via parts
+        /// The calls of an assistant turn that asked for them, and the id a tool result answers.
+        /// Both are absent on every message written before P3, which is what keeps an old
+        /// conversation byte-identical on the wire.
+        let toolCalls: [WireToolCall]?
+        let toolCallID: String?
 
         enum CodingKeys: String, CodingKey {
             case role, content
+            case toolCalls = "tool_calls"
+            case toolCallID = "tool_call_id"
         }
 
         func encode(to encoder: Encoder) throws {
             var container = encoder.container(keyedBy: CodingKeys.self)
-            try container.encode(role, forKey: .role)
+            // A tool result carries the dialect's `tool` role plus the id it answers; Cairn's stored
+            // role stays `.user`, because a wire role for one message is not a fact about the
+            // conversation and a new `ChatRole` case would put a wire concern into every stored node.
+            try container.encode(
+                toolCallID == nil ? role : "tool", forKey: .role
+            )
             if let parts {
                 try container.encode(parts, forKey: .content)
             } else {
                 try container.encode(text ?? "", forKey: .content)
+            }
+            if let toolCalls, !toolCalls.isEmpty {
+                try container.encode(toolCalls, forKey: .toolCalls)
+            }
+            if let toolCallID {
+                try container.encode(toolCallID, forKey: .toolCallID)
             }
         }
     }
@@ -61,6 +102,9 @@ public enum OpenAICodec: Sendable {
         let streamOptions: StreamOptions?
         /// Sampling at the top level of the request, already filtered to what this server documents.
         let sampling: SamplingFieldList
+        /// The tool schemas, present only on a turn that really offers them — the same rule as the
+        /// sampling keys, so a tools-off request carries no `tools` key at all.
+        let tools: [WireToolSchema]?
 
         struct StreamOptions: Encodable {
             let includeUsage: Bool
@@ -86,6 +130,9 @@ public enum OpenAICodec: Sendable {
                     streamOptions, forKey: DynamicCodingKey(stringValue: "stream_options")
                 )
             }
+            if let tools, !tools.isEmpty {
+                try container.encode(tools, forKey: DynamicCodingKey(stringValue: "tools"))
+            }
             try sampling.encode(into: &container)
         }
     }
@@ -108,6 +155,8 @@ public enum OpenAICodec: Sendable {
     ) throws -> Data {
         var messages: [WireMessage] = []
         for payload in request.messages {
+            let calls = payload.toolCalls.isEmpty
+                ? nil : payload.toolCalls.map(WireToolCall.init)
             if modelSupportsVision && !payload.imageData.isEmpty {
                 var parts: [WireContentPart] = []
                 if !payload.text.isEmpty {
@@ -120,10 +169,14 @@ public enum OpenAICodec: Sendable {
                                         imageURL: .init(url: url))
                     )
                 }
-                messages.append(WireMessage(role: payload.role.rawValue, text: nil, parts: parts, images: nil))
+                messages.append(
+                    WireMessage(role: payload.role.rawValue, text: nil, parts: parts, images: nil,
+                                toolCalls: calls, toolCallID: payload.toolCallID)
+                )
             } else {
                 messages.append(
-                    WireMessage(role: payload.role.rawValue, text: payload.text, parts: nil, images: nil)
+                    WireMessage(role: payload.role.rawValue, text: payload.text, parts: nil,
+                                images: nil, toolCalls: calls, toolCallID: payload.toolCallID)
                 )
             }
         }
@@ -136,7 +189,12 @@ public enum OpenAICodec: Sendable {
                 sampling: request.config.sampling,
                 support: support,
                 dialect: .openAI
-            )
+            ),
+            // A prompt-protocol turn was told the call shapes in its system block instead; sending a
+            // `tools` array to a server that was declared unable to use them is the claim this guard
+            // exists to stop.
+            tools: request.toolProtocol == .native && !request.tools.isEmpty
+                ? WireToolSchema.schemas(request.tools) : nil
         )
         return try JSONEncoder().encode(wire)
     }

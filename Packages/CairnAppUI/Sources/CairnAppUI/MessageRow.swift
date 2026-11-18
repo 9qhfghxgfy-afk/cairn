@@ -32,6 +32,10 @@ public struct MessageRow: View {
             // so the card for a side can never drift from the text above it.
             hybridDrafts
 
+            // The calls this answer was built from, beside the answer — including the ones still
+            // running, which is how a multi-step turn reads as work in progress rather than a hang.
+            toolRunCards
+
             if node.role == .assistant { metricsFooter }
             provenanceFooter
             controls

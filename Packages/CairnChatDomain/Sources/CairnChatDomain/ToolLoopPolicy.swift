@@ -28,7 +28,7 @@ public struct ToolLoopPolicy: Sendable, Equatable {
 
     /// `stepsTaken` is how many model calls have already finished this turn.
     public func mayRunAnotherStep(stepsTaken: Int) -> Bool {
-        stepsTaken < sanitize(stepLimit)
+        stepsTaken < ToolLoopPolicy.sanitize(stepLimit)
     }
 
     /// Whether a call is worth a further step at all: a failure the model cannot fix by re-calling

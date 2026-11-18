@@ -48,6 +48,15 @@ public final class ChatSessionModel {
     /// The calls of the turn in flight, as they finish, so the transcript shows a card per call while
     /// the turn runs instead of one block appearing at the end. `nil` for a turn with no tools.
     public internal(set) var liveToolRun: ToolRun?
+    /// Whether this device may send a web tool's query to a public service — the app-wide
+    /// acknowledgement the `Tools` chip's first-use disclosure obtains. Injected by the app from
+    /// Settings, and `false` by construction: a session built in a test, or a chat the user never
+    /// armed, cannot reach the internet through a tool.
+    public var outboundWebAllowed: Bool = false
+    /// The `Generation Statistics` switch, injected from app-wide settings so a chat shows the metrics
+    /// footer only when the user asked for it. The measurements themselves stay on the node either
+    /// way — this switch decides what is drawn, not what was recorded.
+    public var showsGenerationStats: Bool = true
 
     /// The clock and device facts the injected context is built from. Held on the session rather
     /// than read at the moment of assembly so the sheet's live preview and the turn that preview

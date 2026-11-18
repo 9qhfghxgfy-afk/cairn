@@ -124,6 +124,10 @@ public struct ModelInfo: Sendable, Equatable, Identifiable {
     public var contextLength: Int?
     public var supportsVision: Bool
     public var supportsThinking: Bool
+    /// Published by the server, never inferred from a model's name or size. A catalog entry that
+    /// states nothing keeps `false`, which is why a tool turn's format comes from the server kind's
+    /// declared capabilities and this flag only ever **adds** a badge the server itself claimed.
+    public var supportsTools: Bool
 
     public init(
         id: String,
@@ -133,7 +137,8 @@ public struct ModelInfo: Sendable, Equatable, Identifiable {
         quantization: String? = nil,
         contextLength: Int? = nil,
         supportsVision: Bool = false,
-        supportsThinking: Bool = false
+        supportsThinking: Bool = false,
+        supportsTools: Bool = false
     ) {
         self.id = id
         self.displayName = displayName
@@ -143,6 +148,7 @@ public struct ModelInfo: Sendable, Equatable, Identifiable {
         self.contextLength = contextLength
         self.supportsVision = supportsVision
         self.supportsThinking = supportsThinking
+        self.supportsTools = supportsTools
     }
 }
 

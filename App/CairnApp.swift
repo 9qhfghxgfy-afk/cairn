@@ -23,6 +23,9 @@ struct CairnLaunchView: View {
     @State private var startupFailure: String?
     /// The memory-pressure watch, kept alive for the life of the app process.
     @State private var onDeviceWatch: Task<Void, Never>?
+    /// The tool assembly, kept alive for the life of the app: it holds the mail composer and reads
+    /// Settings and the Keychain on behalf of the tools every chat gets.
+    @State private var toolWiring: ToolWiring?
 
     var body: some View {
         Group {
@@ -108,6 +111,15 @@ struct CairnLaunchView: View {
                 // watch is not deallocated the moment this closure returns.
                 onDeviceWatch = OnDeviceWiring.startMemoryWatch(onDeviceRegistry)
 
+                // The tools a chat may reach. Built here because only this layer can hold a window (the
+                // mail composer), app-wide Settings, and the Keychain at once — and the domain must not
+                // reach for any of them. The calculator and the mail draft are always offered; the three
+                // web tools join only once the outbound acknowledgement is up, which is a Settings value
+                // and not something a chat can grant itself.
+                let wiring = ToolWiring(settings: builtTheme, secrets: secrets, servers: builtServers)
+                wiring.install(on: builtWorkspace)
+                toolWiring = wiring
+
                 workspace = builtWorkspace
                 servers = builtServers
                 theme = builtTheme
@@ -115,6 +127,16 @@ struct CairnLaunchView: View {
                 // Typed metadata only: never log prompt content, URLs, or paths.
                 startupFailure = error.localizedDescription
             }
+        }
+        .onChange(of: theme?.settings.outboundWebAllowed ?? false) { _, _ in
+            // Re-assemble the registry when the acknowledgement moves. Without this, arming a chat
+            // straight after saying "yes, web tools may go out" would offer the calculator only, and the
+            // web tools would look broken until the app were relaunched.
+            if let workspace, let toolWiring { toolWiring.install(on: workspace) }
+        }
+        .onChange(of: theme?.settings.showsGenerationStats ?? true) { _, _ in
+            // The statistics switch decides what is drawn, so it travels to the sessions the same way.
+            if let workspace, let toolWiring { toolWiring.install(on: workspace) }
         }
     }
 }

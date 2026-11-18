@@ -30,6 +30,8 @@ struct OllamaWire: RemoteWire {
                 events.append(.thinking(text))
             case .content(let text):
                 events.append(.content(text))
+            case .toolCall(let call):
+                events.append(.toolCall(call))
             case .error(let message):
                 events.append(.error(message))
             case .finished(let info):

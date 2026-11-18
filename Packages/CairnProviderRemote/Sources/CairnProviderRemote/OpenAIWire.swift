@@ -30,6 +30,8 @@ struct OpenAIWire: RemoteWire {
             switch event {
             case .thinking(let text): return .thinking(text)
             case .content(let text): return .content(text)
+            case .toolCallDelta(let index, let id, let name, let arguments):
+                return .toolCallDelta(index: index, id: id, name: name, arguments: arguments)
             case .usage(let promptTokens, let completionTokens):
                 return .usage(promptTokens: promptTokens, completionTokens: completionTokens)
             case .finished(let reason): return .finished(reason)

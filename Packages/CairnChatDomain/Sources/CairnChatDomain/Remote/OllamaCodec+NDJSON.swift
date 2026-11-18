@@ -4,10 +4,28 @@ extension OllamaCodec {
     // MARK: - NDJSON decoding
 
     struct WireChunk: Decodable {
+        /// `message.tool_calls`: `arguments` is a JSON object on the documented wire, and a JSON
+        /// string on some builds. Both are read, and neither is parsed here — the domain parses a
+        /// call's arguments when it runs it, which is what keeps one odd blob one declined call.
+        struct WireCall: Decodable {
+            struct Function: Decodable {
+                let name: String?
+                let arguments: JSONValue?
+            }
+            let id: String?
+            let function: Function?
+        }
+
         struct Message: Decodable {
             let role: String?
             let content: String?
             let thinking: String?
+            let toolCalls: [WireCall]?
+
+            enum CodingKeys: String, CodingKey {
+                case role, content, thinking
+                case toolCalls = "tool_calls"
+            }
         }
         let model: String?
         let message: Message?
@@ -50,6 +68,16 @@ extension OllamaCodec {
         }
         if let content = chunk.message?.content ?? chunk.response, !content.isEmpty {
             events.append(.content(content))
+        }
+        // Calls after content: a model that writes "let me check" and then calls a tool says the
+        // sentence first, and the loop has to see the text before it runs anything.
+        for (offset, call) in (chunk.message?.toolCalls ?? []).enumerated() {
+            guard let name = call.function?.name, !name.isEmpty else { continue }
+            events.append(.toolCall(ToolCallRequest(
+                id: call.id ?? "ollama-call-\(offset + 1)",
+                name: name,
+                argumentsJSON: WireToolArguments.wireText(call.function?.arguments)
+            )))
         }
         if chunk.done == true {
             events.append(.finished(

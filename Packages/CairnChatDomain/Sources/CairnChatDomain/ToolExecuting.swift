@@ -71,10 +71,18 @@ public struct ToolExecutionContext: Sendable, Equatable {
     public static let `default` = ToolExecutionContext()
 
     /// The context one chat turn runs its tools under.
-    public static func forTurn(toolsEnabled: Bool) -> ToolExecutionContext {
+    ///
+    /// The two switches stay separate on purpose: the chat's `Tools` chip arms the loop, and the
+    /// outbound acknowledgement is what lets a search query leave the phone. A chat with the chip up
+    /// and the acknowledgement down still runs the calculator and still drafts mail; it simply gets no
+    /// networked tool, which is the same rule `ToolRegistry` enforces before a handler is built.
+    public static func forTurn(
+        toolsEnabled: Bool,
+        outboundWebAllowed: Bool = false
+    ) -> ToolExecutionContext {
         ToolExecutionContext(
             toolsEnabled: toolsEnabled,
-            outboundWebAllowed: toolsEnabled
+            outboundWebAllowed: outboundWebAllowed
         )
     }
 

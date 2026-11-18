@@ -39,7 +39,10 @@ extension ChatSessionModel {
                     registry: toolRegistry,
                     format: format,
                     policy: toolPolicy,
-                    context: .forTurn(toolsEnabled: true)
+                    context: .forTurn(
+                        toolsEnabled: true,
+                        outboundWebAllowed: outboundWebAllowed
+                    )
                 )
                 for try await event in events {
                     try Task.checkCancellation()

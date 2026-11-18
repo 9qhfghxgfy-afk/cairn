@@ -40,6 +40,13 @@ public struct ToolToggleSet: Sendable, Equatable, Codable {
     /// Nothing offered, which is what a chat with the chip off resolves to on every turn.
     public static let off = ToolToggleSet(isEnabled: false)
 
+    /// The chip up with the web tools left down: what a user gets when the disclosure is offered and
+    /// they choose the on-device half. Arithmetic and mail drafts need no acknowledgement, so the
+    /// answer to "no, not the internet" is a working chip, not a refused one.
+    public static let localOnly = ToolToggleSet(
+        isEnabled: true, webSearch: false, webFetch: false, wikiSearch: false
+    )
+
     public func isOn(_ name: String) -> Bool {
         guard isEnabled else { return false }
         switch name {

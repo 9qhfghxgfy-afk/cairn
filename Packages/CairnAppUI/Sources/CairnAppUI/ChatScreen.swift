@@ -63,6 +63,10 @@ public struct ChatScreen: View {
                             Text(provider.displayName)
                             NetworkBadge(networkClass: provider.networkClass)
                         }
+                        // Stays up for the rest of this conversation: one search two turns ago is
+                        // something the user can only be told about afterwards, which is exactly when a
+                        // badge that vanished would be useless.
+                        ToolsOutboundBadge(usedWebTools: session?.hasUsedWebTools == true)
                     }
                     .font(.caption)
                     .foregroundStyle(CairnTheme.stoneLight)
@@ -190,6 +194,9 @@ public struct ChatScreen: View {
 
     var composer: some View {
         VStack(spacing: 6) {
+            if let session {
+                ComposerChips(session: session, theme: settings)
+            }
             if let error = workspace.lastError ?? session?.lastError {
                 Text(error)
                     .font(.caption)

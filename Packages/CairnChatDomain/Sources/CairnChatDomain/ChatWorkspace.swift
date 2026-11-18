@@ -34,6 +34,15 @@ public final class ChatWorkspace {
     /// workspace makes already carries it.
     public var residency: (any HybridResidencyGating)?
 
+    /// The tools every session this workspace creates may reach, and the two switches that decide
+    /// what a tool turn is allowed to do. Injected by the app: a workspace wired without them leaves
+    /// every chat with no registry, no outbound acknowledgement and the metrics footer left on, which
+    /// is what a test or an unwired build should get — tools that are never live just because the code
+    /// to run them is compiled in.
+    public var toolRegistry: ToolRegistry = .empty
+    public var outboundWebAllowed: Bool = false
+    public var showsGenerationStats: Bool = true
+
     /// Points the baseline at a new Default Configuration. Existing chats keep what they were seeded
     /// with — only chats created from here on take it.
     public func apply(defaults: ChatConfig) {
@@ -178,6 +187,26 @@ public final class ChatWorkspace {
         }
     }
 
+    /// Re-points the workspace and its live session at a new tool surface.
+    ///
+    /// The app calls this at launch and again when the outbound acknowledgement changes. That second
+    /// call is not decoration: a registry assembled before the user said "yes, web tools may go out"
+    /// holds no web tools at all, so the chat they armed one second later would be left with a chip that
+    /// offers arithmetic and nothing else — a switch that appears to work and does not.
+    public func apply(
+        tools registry: ToolRegistry,
+        outboundWebAllowed: Bool,
+        showsGenerationStats: Bool
+    ) {
+        toolRegistry = registry
+        self.outboundWebAllowed = outboundWebAllowed
+        self.showsGenerationStats = showsGenerationStats
+        guard let session else { return }
+        session.toolRegistry = registry
+        session.outboundWebAllowed = outboundWebAllowed
+        session.showsGenerationStats = showsGenerationStats
+    }
+
     private func makeSession(
         conversation: Conversation,
         store: any ChatStore
@@ -189,6 +218,12 @@ public final class ChatWorkspace {
             session = ChatSessionModel(conversation: conversation, store: store, providers: providerList)
         }
         session.selection = selection
+        // The tool surface travels with the session, for the same reason the memory gate does: the
+        // app owns the registry and the two switches, and a chat opened before Settings was read must
+        // still get the same answer as one opened after.
+        session.toolRegistry = toolRegistry
+        session.outboundWebAllowed = outboundWebAllowed
+        session.showsGenerationStats = showsGenerationStats
         // The memory gate travels with the session, so a hybrid turn in this chat asks the real
         // device question rather than the domain default. Nil keeps the strict default in place.
         if let residency { session.residency = residency }

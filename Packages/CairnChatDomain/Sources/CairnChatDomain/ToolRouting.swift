@@ -11,15 +11,22 @@ public struct ToolRouting: Sendable {
     public var toolToggle: ToolToggleSet
     public var capabilities: ProviderCapabilities
     public var registry: ToolRegistry
+    /// Whether a tool on this turn may send its argument to a public service — the app-wide outbound
+    /// acknowledgement the `Tools` chip's disclosure obtains. Without it a web tool is **not offered
+    /// at all** rather than offered and then declined: a model told it has a tool it cannot run writes
+    /// an answer from a call it never made.
+    public var outboundWebAllowed: Bool
 
     public init(
         toolToggle: ToolToggleSet,
         capabilities: ProviderCapabilities,
-        registry: ToolRegistry
+        registry: ToolRegistry,
+        outboundWebAllowed: Bool = false
     ) {
         self.toolToggle = toolToggle
         self.capabilities = capabilities
         self.registry = registry
+        self.outboundWebAllowed = outboundWebAllowed
     }
 
     /// Whether this turn is a tool turn at all.
@@ -28,6 +35,17 @@ public struct ToolRouting: Sendable {
     public var format: ToolCallingProtocol {
         guard offersTools else { return .none }
         return capabilities.toolCalling ? .native : .prompt
+    }
+
+    /// The tools this turn could actually run: switched on, registered, and — for a tool that would
+    /// reach the public internet — covered by the outbound acknowledgement. One list feeds both the
+    /// offer and the refusal in `ToolRegistry.execute`, so the set a model sees can never contain a
+    /// tool the registry would then decline.
+    public var offerableNames: [String] {
+        toolToggle.enabledToolNames.filter { name in
+            guard let definition = registry.definition(name) else { return false }
+            return outboundWebAllowed || !definition.requiresPublicInternet
+        }
     }
 
     /// The tools to offer, fitted to the remaining context budget.
@@ -39,7 +57,7 @@ public struct ToolRouting: Sendable {
     /// which tools were left out rather than let a tool quietly vanish.
     public func selection(withinWordBudget budget: Int, wordBudget: (String) -> Int) -> ToolSelection {
         guard offersTools else { return ToolSelection() }
-        let enabled = toolToggle.enabledToolNames.compactMap { name in
+        let enabled = offerableNames.compactMap { name in
             registry.definition(name)
         }
         var kept: [ToolDefinition] = []

@@ -30,16 +30,43 @@ public enum OllamaCodec: Sendable {
     public enum Event: Sendable, Equatable {
         case thinking(String)
         case content(String)
+        case toolCall(ToolCallRequest)
         case finished(FinalInfo)
         case error(String)
     }
 
     // MARK: - Request encoding
 
+    /// A call this assistant turn already made, sent back the way Ollama publishes it: `arguments` as
+    /// an **object**, not as the JSON string the OpenAI dialect asks for. An unparseable blob goes out
+    /// as `{}` rather than being dropped, because a call the server cannot see is a call the model
+    /// will not remember making, and it will answer from the result it never got.
+    private struct WireToolCall: Encodable {
+        struct Function: Encodable { let name: String; let arguments: JSONValue }
+        let id: String?
+        let function: Function
+
+        init(_ call: ToolCallRequest) {
+            id = call.id.isEmpty ? nil : call.id
+            function = Function(
+                name: call.name,
+                arguments: WireToolArguments.object(call.argumentsJSON)
+            )
+        }
+    }
+
     private struct WireMessage: Encodable {
         let role: String
         let content: String
         let images: [String]?
+        let toolCalls: [WireToolCall]?
+        let toolCallID: String?
+
+        enum CodingKeys: String, CodingKey {
+            case role, content, images
+            case toolCalls = "tool_calls"
+            case toolCallID = "tool_call_id"
+        }
     }
 
     private struct WireRequest: Encodable {
@@ -50,6 +77,10 @@ public enum OllamaCodec: Sendable {
         /// nil when the user configured no knob this server accepts: an empty `options` object would
         /// be a claim that something was asked for.
         let options: SamplingFieldList?
+        /// The tool schemas, present only on a turn that really offers them. The same rule as
+        /// `options`: an empty `tools` array is a claim that the model was given something, so a
+        /// tools-off request carries no `tools` key and no tool vocabulary at all.
+        let tools: [WireToolSchema]?
     }
 
     /// Body for `POST /api/chat`. `think` is only sent for models whose metadata said they support
@@ -74,9 +105,19 @@ public enum OllamaCodec: Sendable {
             if modelSupportsVision && !payload.imageData.isEmpty {
                 images = payload.imageData.map { $0.base64EncodedString() }
             }
-            messages.append(
-                WireMessage(role: payload.role.rawValue, content: payload.text, images: images)
-            )
+            // A tool result is sent with the dialect's `tool` role while Cairn's own stored role
+            // stays `.user`: the dialect's role is a wire detail about one message, not a fact about
+            // the conversation, and inventing a `ChatRole` case would push a wire concern into every
+            // stored node.
+            let role = payload.isToolResult ? "tool" : payload.role.rawValue
+            messages.append(WireMessage(
+                role: role,
+                content: payload.text,
+                images: images,
+                toolCalls: payload.toolCalls.isEmpty
+                    ? nil : payload.toolCalls.map(WireToolCall.init),
+                toolCallID: payload.toolCallID
+            ))
         }
         let options = SamplingFieldList(
             sampling: request.config.sampling,
@@ -88,7 +129,11 @@ public enum OllamaCodec: Sendable {
             messages: messages,
             stream: true,
             think: thinking ? true : nil,
-            options: options.isEmpty ? nil : options
+            options: options.isEmpty ? nil : options,
+            // Only a native turn carries schemas; a prompt-protocol turn was told the shapes in its
+            // system block instead, and sending both is how a model emits a call twice.
+            tools: request.toolProtocol == .native && !request.tools.isEmpty
+                ? WireToolSchema.schemas(request.tools) : nil
         )
         return try JSONEncoder().encode(wire)
     }

@@ -48,13 +48,17 @@ public struct WebSearchRouting: Sendable, Equatable {
 
     /// The route for the server this turn is running against.
     ///
-    /// Order matters, and it is a privacy order: a self-hosted instance beats the cloud's key-gated
-    /// endpoint, and the cloud's endpoint beats sending a query to a service the user never chose.
-    /// A cloud profile **without** a key falls back to the keyless default rather than failing —
-    /// the tool still works, and the UI says which route ran so the fallback is not hidden.
+    /// The order, and the reason for it: **the server you are already talking to goes first.** An
+    /// Ollama Cloud profile holding a Keychain-backed key is a service the user chose for this
+    /// conversation, so its own search endpoint is the one place a query goes that the user has
+    /// already agreed to. Next comes a self-hosted SearXNG instance — the user's own machine, with no
+    /// third party in the request at all — and last the keyless built-in default, which is the only
+    /// route that sends a query to a service the user never picked. A cloud profile **without** a key
+    /// falls through to the built-in default rather than failing, and the route that ran is named to
+    /// the UI and to the model, so a fallback is never hidden.
     public func route(forServerKind kind: ServerProfileKind?) -> WebSearchRoute {
-        if searxngURL != nil { return .searxng }
         if kind == .ollamaCloud && hasOllamaCloudKey { return .ollamaCloud }
+        if searxngURL != nil { return .searxng }
         return .keyless
     }
 

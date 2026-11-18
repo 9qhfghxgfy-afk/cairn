@@ -26,7 +26,12 @@ extension CalculatorEvaluator {
             let value = try single()
             if value < 0 { throw CalculatorError.notFinite }
             return value.squareRoot()
-        case "cbrt": return try single().cubeRoot()
+        case "cbrt":
+            // The standard library's cube root, not a `Double` method — and unlike `sqrt` it is
+            // defined for a negative argument, so no domain guard belongs here.
+            let root = Foundation.cbrt(try single())
+            if !root.isFinite { throw CalculatorError.notFinite }
+            return root
         case "abs": return abs(try single())
         case "negate": return -(try single())
         case "exp":

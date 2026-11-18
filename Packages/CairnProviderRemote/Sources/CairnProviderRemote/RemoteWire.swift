@@ -6,6 +6,11 @@ import CairnChatDomain
 enum RemoteEvent: Sendable, Equatable {
     case thinking(String)
     case content(String)
+    /// A whole call, as a dialect that hands over the complete arguments delivers it (Ollama).
+    case toolCall(ToolCallRequest)
+    /// A fragment of a call, as the SSE dialect streams it; `RemoteChatPipeline` stitches these by
+    /// index and yields one `.toolCall` once the arguments are whole.
+    case toolCallDelta(index: Int, id: String?, name: String?, arguments: String)
     case usage(promptTokens: Int?, completionTokens: Int?)
     case finished(FinishReason)
     case streamDone
