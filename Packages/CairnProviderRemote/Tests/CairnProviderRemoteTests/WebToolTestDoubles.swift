@@ -27,14 +27,20 @@ final class RecordingWebTransport: WebRequesting, @unchecked Sendable {
         byteLimit: Int,
         redirectAllowed: @escaping @Sendable (URL?) -> Bool
     ) async throws -> WebHTTPResponse {
-        lock.lock()
-        sent.append(request)
-        limits.append(byteLimit)
-        let answer = canned
-        let failure = issue
-        lock.unlock()
+        // The lock is taken in a synchronous helper, because `NSLock` cannot be held across an await.
+        let (answer, failure) = record(request, byteLimit: byteLimit)
         if let failure { throw failure }
         return answer
+    }
+
+    /// The recording half. Kept synchronous on purpose: it is what the async `send` hands the locked
+    /// part to, so nothing is ever held while the task is suspended.
+    private func record(_ request: URLRequest, byteLimit: Int) -> (WebHTTPResponse, (any Error)?) {
+        lock.lock()
+        defer { lock.unlock() }
+        sent.append(request)
+        limits.append(byteLimit)
+        return (canned, issue)
     }
 }
 

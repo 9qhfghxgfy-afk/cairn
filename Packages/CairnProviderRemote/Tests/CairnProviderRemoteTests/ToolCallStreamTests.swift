@@ -16,10 +16,24 @@ final class ToolCallStreamTests: XCTestCase {
     }
 
     private func call(in events: [OllamaCodec.Event], at index: Int = 1) throws -> ToolCallRequest {
-        guard case .toolCall(let request)? = events[index] else {
+        guard case .toolCall(let request) = events[index] else {
             return try XCTUnwrap(nil, "no call at \(index): \(events)")
         }
         return request
+    }
+
+    /// One NDJSON line, built by the serialiser rather than written by hand. The fixtures here are
+    /// nested three levels deep and one of them carries a JSON blob inside a JSON string; a hand-typed
+    /// version of that is a quoting trap that fails in the fixture rather than in the decoder, which is
+    /// the worst possible place for a test to be wrong.
+    private func ndjsonLine(_ message: [String: Any], done: Bool = false, evalCount: Int? = nil) throws -> Data {
+        var payload: [String: Any] = ["model": "qwen3:8b", "message": message]
+        if done {
+            payload["done"] = true
+            payload["done_reason"] = "stop"
+        }
+        if let evalCount { payload["eval_count"] = evalCount }
+        return try XCTUnwrap(JSONSerialization.data(withJSONObject: payload))
     }
 
     // MARK: - Calls going back out
@@ -83,29 +97,39 @@ final class ToolCallStreamTests: XCTestCase {
     /// A model that says "let me look" and then calls a tool says the sentence first, and the loop has
     /// to see the text before it runs anything. This dialect answers with one complete call per line.
     func testOllamaReadsAWholeStructuredCallAfterTheSentenceThatIntroducedIt() throws {
-        let line = Data(
-            #"{"model":"qwen3:8b","message":{"role":"assistant","content":"Let me look.","tool_calls":"#
-            + #"[{"id":"call-1","function":{"name":"web_search","arguments":{"query":"rain"}}}]}}"#.utf8
-        )
+        let line = try ndjsonLine([
+            "role": "assistant",
+            "content": "Let me look.",
+            "tool_calls": [
+                ["id": "call-1", "function": ["name": BuiltInTool.webSearch, "arguments": ["query": "rain"]]],
+            ],
+        ])
         let events = try OllamaCodec.decodeNDJSONLine(line)
-        XCTAssertEqual(events.first, .content("Let me look."))
+        XCTAssertEqual(events.first, .content("Let me look."), "the sentence arrives before the call")
         let request = try call(in: events)
         XCTAssertEqual(request.id, "call-1")
         XCTAssertEqual(request.name, BuiltInTool.webSearch)
         XCTAssertEqual(arguments(request.argumentsJSON), "rain")
     }
 
-    /// Both spellings of `arguments` are in the wild: the documented object, and the string some builds
-    /// emit. A missing id is filled rather than dropped, a fragment with no name is dropped rather than
-    /// guessed at, and the finished chunk keeps the counts the server reported.
+    /// Both spellings of `arguments` are in the wild: the documented object, and the same blob inside a
+    /// JSON string, which is what some builds emit. A missing id is filled rather than dropped, a
+    /// fragment with no name is dropped rather than guessed at, and the finished chunk keeps the counts.
     func testOllamaReadsBothArgumentSpellingsAndSkipsACallWithNoName() throws {
         let blob = try XCTUnwrap(
             String(data: JSONSerialization.data(withJSONObject: ["query": "rain"]), encoding: .utf8)
         )
-        let json = #"{"message":{"role":"assistant","tool_calls":[{"function":{"name":"wiki_search","arguments":#
-            + stringForm(blob)
-            + #"},{"function":{"arguments":"{}"}}]},"done":true,"done_reason":"stop","eval_count":12}"#
-        let events = try OllamaCodec.decodeNDJSONLine(Data(json.utf8))
+        let line = try ndjsonLine(
+            [
+                "role": "assistant",
+                "tool_calls": [
+                    ["function": ["name": BuiltInTool.wikiSearch, "arguments": blob]],
+                    ["function": ["arguments": "{}"]],
+                ],
+            ],
+            done: true, evalCount: 12
+        )
+        let events = try OllamaCodec.decodeNDJSONLine(line)
         let calls = events.compactMap { event -> ToolCallRequest? in
             if case .toolCall(let request) = event { return request }
             return nil
@@ -113,17 +137,11 @@ final class ToolCallStreamTests: XCTestCase {
         XCTAssertEqual(calls.count, 1, "a fragment with no name is not a call")
         XCTAssertEqual(calls.first?.id, "ollama-call-1", "a missing id is filled, not dropped")
         XCTAssertEqual(calls.first?.name, BuiltInTool.wikiSearch)
-        XCTAssertEqual(arguments(try XCTUnwrap(calls.first?.argumentsJSON)), "rain")
+        XCTAssertEqual(calls.first.flatMap { arguments($0.argumentsJSON) }, "rain", "unwrapped from a string")
         XCTAssertEqual(
             events.last,
             .finished(OllamaCodec.FinalInfo(evalCount: 12, doneReason: "stop")),
             "the counts the server reported survive the call line"
         )
-    }
-
-    /// A JSON blob the way a server writes it inside a JSON **string** value: quoted, with its own
-    /// quotes escaped. The second published spelling of `arguments`.
-    private func stringForm(_ blob: String) -> String {
-        #"""# + blob.replacingOccurrences(of: #"""#, with: #"\""#) + #"""#
     }
 }
