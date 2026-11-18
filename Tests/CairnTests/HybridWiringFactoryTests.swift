@@ -58,6 +58,7 @@ final class HybridWiringFactoryTests: XCTestCase {
         await HybridWiring.residencyGate(held).evictResidentModel()
 
         XCTAssertEqual(calls.recorded, ["mlx-3b"])
-        XCTAssertTrue(await held.residentModels().isEmpty)
+        let stillHeld = await held.residentModels()
+        XCTAssertTrue(stillHeld.isEmpty, "the registry no longer owns the model")
     }
 }

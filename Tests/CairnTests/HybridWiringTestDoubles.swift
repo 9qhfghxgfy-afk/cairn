@@ -18,13 +18,13 @@ final class ResidencyRecorder: @unchecked Sendable {
 
 /// A gate whose verdict is chosen by the test and whose releases are counted.
 ///
-/// `@unchecked Sendable` because every access goes through the lock: the verdict is read from a turn's
-/// task while the release count is read from the test. It exists to prove *injection* — that the gate a
-/// workspace is handed is the gate a session answers with — which no verdict-only stub can show.
+/// `@unchecked Sendable` because its only mutable state is the release counter, and that counter is
+/// main-actor work in both directions: `evictResidentModel` is `@MainActor`, and every test reads the
+/// count from the main actor too. `NSLock.lock()` is unavailable inside an async function, so the
+/// count is kept without a lock rather than pretending a lock is what makes it safe.
 final class SpyResidencyGate: HybridResidencyGating, @unchecked Sendable {
-    private let lock = NSLock()
-    private var releases = 0
     private let verdict: Bool
+    private var releases = 0
 
     init(allowsTwoOnDeviceModelsResident verdict: Bool = false) {
         self.verdict = verdict
@@ -34,10 +34,8 @@ final class SpyResidencyGate: HybridResidencyGating, @unchecked Sendable {
 
     @MainActor
     func evictResidentModel() async {
-        lock.lock(); releases += 1; lock.unlock()
+        releases += 1
     }
 
-    var releaseCount: Int {
-        lock.lock(); defer { lock.unlock() }; return releases
-    }
+    @MainActor var releaseCount: Int { releases }
 }

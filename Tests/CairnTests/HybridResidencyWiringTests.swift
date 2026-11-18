@@ -73,12 +73,16 @@ final class HybridResidencyWiringTests: XCTestCase {
             ResidentModel(modelID: "mlx-8b", runtime: .mlx, weightsBytes: footprint,
                           footprintBytes: footprint, contextLength: 4096)
         )
-        XCTAssertTrue(await held.isResident("mlx-8b"))
+        // `await` cannot sit inside an XCTAssert autoclosure, so the actor's answer is taken into a
+        // name first — which also says what is being claimed: it was held, then it was not.
+        let wasHeld = await held.isResident("mlx-8b")
+        XCTAssertTrue(wasHeld, "the registry says it owns this model")
 
         await gate.evictResidentModel()
 
         XCTAssertEqual(calls.recorded, ["mlx-8b"], "the runtime was told, not just the bookkeeping")
-        XCTAssertTrue(await held.residentModels().isEmpty, "nothing is left held")
+        let stillHeld = await held.residentModels()
+        XCTAssertTrue(stillHeld.isEmpty, "nothing is left held")
     }
 
     /// The scheduling decision a hybrid turn really takes, driven by the gate object instead of a bool
