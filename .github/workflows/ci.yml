@@ -89,7 +89,11 @@ jobs:
     name: Build + test on simulator
     needs: domain
     runs-on: macos-26
-    timeout-minutes: 30
+    # A green lane takes about five minutes here. It was 30, and two runs spent the whole 30 sitting in the
+    # test step before GitHub killed the job (44379381555, 44384383553) — the cost of a hang, paid in runner
+    # time and in wall-clock by whoever is waiting on a milestone. 20 leaves four times the headroom a slow
+    # runner could plausibly need and halves what a hang costs.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
 
@@ -123,7 +127,13 @@ jobs:
 
       - name: Test on ${{ env.SIMULATOR_NAME }} / iOS ${{ env.SIMULATOR_OS }}
         run: |
-          set -o pipefail
+          # No `| xcbeautify` on this step, deliberately. xcbeautify buffers its own output whenever stdout
+          # is a pipe instead of a terminal, so a lane's whole log arrives in one burst when the process
+          # exits — which means nothing at all arrives when the process never exits. Two lanes were killed at
+          # their job timeout having printed not one line about where they were stuck (44379381555 and
+          # 44384383553, both with the build green and the test step silent for half an hour). Raw xcodebuild
+          # writes straight through, the way the Build step above streams live, so a hang now names the test
+          # it is sitting in instead of hiding it.
           xcodebuild \
             -project Cairn.xcodeproj \
             -scheme Cairn \
@@ -132,7 +142,7 @@ jobs:
             -derivedDataPath DerivedData \
             -resultBundlePath ResultBundles/Cairn.xcresult \
             CODE_SIGNING_ALLOWED=NO \
-            test 2>&1 | xcbeautify
+            test 2>&1
 
       - name: Upload test results on failure
         if: failure()

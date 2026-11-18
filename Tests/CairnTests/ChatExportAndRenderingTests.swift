@@ -8,12 +8,22 @@ import CairnChatDomain
 /// What the M5 screens promise, checked where the promise lives: an exported file really is the chat it
 /// came from, and a highlighted code line keeps every character it was given.
 ///
-/// The pixels are not asserted, and no view is put on screen here. The first attempt at this file hosted the
-/// new screens in a `UIWindow` with no window scene to measure that they built a layout; that hung CI's
-/// simulator test lane for twenty minutes, and what it would have proved — a hosted view has a height — was
-/// not worth the lane it held up. The screens are proved on the device checklist instead; what is proved here
-/// is the part a person depends on and cannot see: the bytes handed to the share sheet are the whole chat,
-/// and colour never edits the source.
+/// The pixels are not asserted, and no view is put on screen here. Two claims were taken out of this file,
+/// and both left for the same reason: they asked a system service to answer to a process that is not a
+/// running app, and the lane paid for it. The first hosted the new screens in a `UIWindow` with no window
+/// scene to measure that they built a layout (removed in `011c1b8`). The second wrote text to
+/// `UIPasteboard.general` and read it back — the only call in this whole suite that reaches a system daemon,
+/// and a pasteboard read from a test process with no app in the foreground is a call that can wait forever
+/// for an answer that will not come. Both runs that carried it, `44379381555` and `44384383553`, ended with
+/// the simulator lane killed by its own job timeout with the build green and not one test finished. Whether
+/// the pasteboard was the blocker is not proven from this machine — it is the only candidate left standing,
+/// and it is the only thing here that is not pure computation or plain file writing.
+///
+/// Neither claim is dropped without a home: what a copy hands back is checked here as far as the code that
+/// decides it goes (`testCopyingProseGivesWhatWasReadRatherThanWhatWasMarkedUp`), and that the text really
+/// reaches the pasteboard and reads back on a phone is line 6 of the M5 device checklist in `ROADMAP.md`.
+/// What is proved here is the part a person depends on and cannot see: the bytes handed to the share sheet
+/// are the whole chat, and colour never edits the source.
 @MainActor
 final class ChatExportAndRenderingTests: XCTestCase {
     /// The mock streams on its own clock, so a turn is waited for rather than assumed. The helper lives
@@ -81,14 +91,13 @@ final class ChatExportAndRenderingTests: XCTestCase {
         )
     }
 
-    func testCopyPutsExactlyTheRequestedTextOnThePasteboard() {
-        let wanted = "the answer, as prose"
-        XCTAssertTrue(Pasteboard.copy(wanted))
-        XCTAssertEqual(UIPasteboard.general.string, wanted)
-    }
-
     /// Copying the prose of an answer must not hand back markup, and must not lose text either. That is a
     /// claim about the renderer's own file, so it is checked here rather than only in the domain suite.
+    ///
+    /// This is as much of the copy claim as can be proved without a phone. `Pasteboard.copy` is one line that
+    /// hands a string to `UIPasteboard.general`, and asking that pasteboard for text from a test process with
+    /// no running app is what held up two simulator lanes; the write-and-read-back round-trip is line 6 of the
+    /// device checklist, where there is a foreground app and a real pasteboard to ask.
     func testCopyingProseGivesWhatWasReadRatherThanWhatWasMarkedUp() {
         let answer = "## Cairns\n\nA **cairn** is a stack of stones. Use `stones`.\n"
         let blocks = MarkdownParser.blocks(from: answer)
