@@ -11,6 +11,13 @@ struct HybridDraftCard: View {
     let draft: CandidateDraft
     @State private var isExpanded = false
 
+    /// Written out because a private `@State` makes the synthesized memberwise initializer private,
+    /// and this card is built from `MessageRow+Hybrid` — another file in the same module.
+    init(draft: CandidateDraft) {
+        self.draft = draft
+        _isExpanded = State(initialValue: false)
+    }
+
     var body: some View {
         DisclosureGroup(isExpanded: $isExpanded) {
             VStack(alignment: .leading, spacing: 6) {
