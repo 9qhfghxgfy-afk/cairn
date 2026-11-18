@@ -16,7 +16,7 @@ Gate for every milestone (from `.clinerules`):
 | 2 | Remote providers | **CI-verified only** — all gates green on `a5466dd`; re-verified on `b58a916` after the networking reversal and on `450f602` after the Mac build-loop change. The 10-line device checklist under M2 is what closes it | [43764696840](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/43764696840), [43771679253](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/43771679253), [43795195812](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/43795195812) |
 | 3 | On-device inference + memory guardrails | todo | |
 | 4 | Hybrid Parallel & Synthesized engine | todo | |
-| 5 | Advanced controls, interruption recovery, export/import | todo | |
+| 5 | Advanced controls, interruption recovery, export/import | **closed** — code + every suite green on `0ecd1d4`; the 14-line device checklist and three named gaps stay open (see `## M5`) | [44396176219](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/44396176219) |
 | 6 | Local RAG, vision, web search, voice | todo | |
 | 7 | Parity backlog | todo (per-item approval) | |
 | P0 | Zero-paywall guard + parity ledger | **done** — all gates green on `c4f58aa` | [44001146864](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/44001146864) |
@@ -753,7 +753,7 @@ needs both.
 | P2 | Per-chat + default configuration with `configured` vs `unset`, capability-filtered payloads, injected context, themes | §3.2, §3.3, §3.10 | **done** — CI-verified `44144881214` on `823bd86`; local-Mac-verified 121 domain + 59 remote host tests, guards 53/53, 65 `CairnTests` on `iPhone 15 Pro`. Full record below; known gaps stay listed there |
 | M4 | Hybrid Parallel + Synthesized engine | preserved core | **Closed** — engine, session path, provenance storage, hybrid picker, live panels, draft cards, and the measured residency gate. **CI-verified `44209524177`** on `9bbd82b` (guards 53/53; 159 domain + 69 remote + 60 on-device host tests; simulator build + 95 `CairnTests`, 0 failures). **Not** on-device-verified, **not** real-network-verified. Record at the end of this file |
 | P3 | Tool runtime + built-ins + search routing (keyless default, SearXNG optional, cloud key-gated) | §3.7 | **Closed** — the loop (native wire **and** prompt-protocol fallback), the five built-ins, the three search routes with the F4 resolution, per-chat arming with the outbound badge and disclosure, the tool run on the one assistant node with its cards, and the deferred Statistics toggle. **CI-verified `44242238211`** on `0b3e3fc` (guards 53/53; host suites 184 domain + 93 remote + 60 on-device + 17 native, 0 failures; simulator build **SUCCEEDED** + 104 `CairnTests`, 0 failures on iPhone 17 / iOS 26.5). **Not** on-device-verified, **not** real-network-verified. Record at the end of this file |
-| M5 | Chat list, Markdown + code copy, Continue Generation, duplicate chat, temp banner, background processing, `.cairn`/`.md` | §3.1, §3.9 | **in progress** — the domain half and the screen half are both written: chat list with search, rename, duplicate, delete and open; Markdown answers with highlighted code and copy-as-prose / copy-the-source; Continue on a stopped, interrupted or token-cut answer; the temporary-chat line with keep-a-copy; `.md` and `.cairn` export through the system share sheet; `.cairn` import from the file picker and by opening a file from another app; a backgrounded turn really is stopped and offered for continuation. 268 domain host tests green, guards 53/53 local. **Not built locally — this machine has no Xcode, so `CairnAppUI` and `CairnTests` are unverified until a CI run says otherwise.** Still owed before this row can read done: a green CI run, `BGContinuedProcessingTask` for a turn that outlives the app, and the on-device checklist |
+| M5 | Chat list, Markdown + code copy, Continue Generation, duplicate chat, temp banner, background processing, `.cairn`/`.md` | §3.1, §3.9 | **Closed** — the domain half and the screen half are both written: chat list with search, rename, duplicate, delete and open; Markdown answers with highlighted code and copy-as-prose / copy-the-source; Continue on a stopped, interrupted or token-cut answer; the temporary-chat line with keep-a-copy; `.md` and `.cairn` export through the system share sheet; `.cairn` import from the file picker and by opening a file from another app; a backgrounded turn really is stopped and offered for continuation. 268 domain host tests green, guards 53/53 local. **CI-verified `44396176219`** on `0ecd1d4` (guards 53/53; host suites 268 domain + 93 remote + 60 on-device + 17 native, 0 failures; simulator build **SUCCEEDED** + 108 `CairnTests`, 0 failures on iPhone 17 / iOS 26.5). **Not** on-device-verified, **not** real-network-verified: the 14-line M5 device checklist has never been run on a phone, and three named gaps stay open — `BGContinuedProcessingTask` for a turn that outlives the app, an all-chats export, and an editable title in the top bar. Record at the end of this file |
 | M6 | File + image attachments, chunked retrieval with citations, vision gating | §3.8 | todo |
 | P4 | On-device model sharing server over LAN (`NWListener`, both dialects) | §3.6 | todo |
 | P5 | Accessibility, AppIcon, licenses/privacy/issues, doc refresh | §3.10 | todo |
@@ -1281,7 +1281,7 @@ shipped and how far the checks actually reached.
    P1-era test-hygiene nit in a file this milestone does not own; named here so it is not mistaken for a
    P3 regression, and left for whoever touches that suite next.
 
-## M5 — chat list, Markdown, export/import, Continue, temporary chats (**in progress**, started 2026-11-18)
+## M5 — chat list, Markdown, export/import, Continue, temporary chats (**closed 2026-11-18**, CI-verified; started 2026-11-18)
 
 The screens the domain was built for. Nothing here is a new capability in the store: a chat is still a tree,
 an edit is still a sibling, and a temporary chat still never reaches disk. What landed is the ability to see
@@ -1322,24 +1322,76 @@ for the rest of a stopped answer.
 - **Backgrounding ends a turn** — `CairnRootView` interrupts an active turn when the scene leaves the
   foreground, which is what makes the paused marker and the Continue offer true rather than decorative.
 
-### Verification so far
+### Verification, by tier — the tiers do not substitute for each other
 
-- **Host-verified locally:** 268 `CairnChatDomain` tests green (ordering, filtering, safe names, duplication,
-  continuation, Markdown, highlighting, export/import round-trips), guards 53/53.
-- **Not built locally.** This machine has no Xcode, so `CairnAppUI`, the app target and `CairnTests` are only
-  ever compiled by CI. What is checked here before pushing: `swift test` in the domain package, the guards, and
-  `Scripts/parse-check.sh` — a `swiftc -parse` pass over every app, package and test source, which loads no
-  modules and therefore runs on Windows. It is syntax only, and it earns its place: the first M5 push left an
-  unbalanced `struct` in `MessageRow` and a `guard case … , let …` that the parser rejects, and both were
-  visible locally the moment that check existed.
-- **CI-verified:** pending. Two runs went red on the first cut of this code — `44374999843` (the two parse
-  errors above) and `44377313988` (`private` members that sibling files of the same type could not see, and an
-  `underline()` call that does not exist on `AttributedString`) — and both are fixed. The row stays in
-  progress until a green run number is cited here.
-- **On-device-verified:** no. The checklist below is the sign-off.
-- **Real-network-verified:** no, and nothing in this milestone needs the network — except that importing a
+- **local-Windows-Swift-verified** (Swift 6.4.2 on Windows — a *newer* compiler than CI's Xcode Swift, which is
+  how the two `CairnChatDomain` errors in `MarkdownFence.swift` and `ChatImport.swift` were caught here and not
+  on CI): `swift test --package-path Packages/CairnChatDomain` → **268 tests, 0 failures** (ordering, title
+  filtering, safe file names, duplication, continuation, Markdown, highlighting, export/import round-trips).
+  `bash Scripts/parse-check.sh` → **330 files parse clean**: a `swiftc -parse` pass over every app, package and
+  test source, the only local check that sees `CairnAppUI`, `App` and `Tests/CairnTests` at all, and syntax
+  only. It earns its place — the first M5 push left an unbalanced `struct` in `MessageRow` and a
+  `guard case … , let …` the parser rejects, and both were visible locally the moment it existed. The other
+  three host suites are **not** checked here: `CairnProviderRemote` and `CairnInferenceLocal` need Apple-only
+  frameworks and `CairnInferenceNative` runs under `CAIRN_SKIP_MLX=1`, so they are CI's to run.
+- **local-guards-verified:** `bash Scripts/ci.sh guards` → **53 ok, 0 failed** (logging, ATS, hostname and
+  private-address, signing, zero-paywall, and the guards' own self-test), and `Scripts/check-no-paywall.sh`
+  clean on the same tree.
+- **CI-verified:** green run [44396176219](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/44396176219) on
+  `0ecd1d4` — `Privacy guards`, `Host unit tests (macOS)` and `Build + test on simulator` all pass. Counts read
+  off that run's own log: **268** `CairnChatDomain` + **93** `CairnProviderRemote` + **60**
+  `CairnInferenceLocal` + **17** `CairnInferenceNative` (runtime excluded, as always) on the host, and **108**
+  `CairnTests` on iPhone 17 / iOS 26.5 — **0 failures in every suite**, and not one failure line anywhere in
+  either job's log. `CairnAppUI`, the app target and `CairnTests` are compiled only by CI; this machine has no
+  Xcode, so nothing about them is verified any other way. Four runs came before that one and each is worth its
+  record: `44374999843` (the two parse errors `parse-check.sh` was written to catch), `44377313988` (`private`
+  members a sibling file of the same type could not see, and an `underline()` call that does not exist on
+  `AttributedString`), then **two hangs**, `44379381555` and `44384383553`, which are a different kind of
+  failure entirely and are recorded in the next section.
+- **on-device-verified:** **no.** Not one line of the 14-item checklist below has been run on a phone, so every
+  M5 screen here is build-verified and not observed: the drawer and its rows, the swipe actions, Markdown
+  rendering against a real answer, the copy buttons reaching the pasteboard, the share sheet, opening a chat
+  file handed over by Files, the Local Network prompt's interaction with a LAN server, and what a force-quit
+  really does to a temporary chat.
+- **real-network-verified:** **no**, and nothing in this milestone needs the network — except that importing a
   chat exported from another device is the one cross-device path worth walking once by hand.
 
+### The hung simulator lane — what actually happened (2026-11-18)
+
+Recorded in full, because two simulator jobs were spent finding this and the next reader should not have to
+re-litigate it.
+
+- The run the previous session was waiting on, `44378756616`, **does not exist** — `HTTP 404` from the API. The
+  two that really hung are `44379381555` (on `251c387`) and `44384383553` (on `011c1b8`).
+- Both died identically: **`Build` green**, then the `Test on iPhone 17 / iOS 26.5` step produced **not one
+  line** until the job's own `timeout-minutes` killed it (`##[error]The operation was canceled.`, 20:34:03 on
+  the later one). A hung lane is not a failing lane: no test ever reported anything, and a red run would have
+  been cheaper than this.
+- The lane was silent because that step piped through `xcbeautify`, which buffers its stdout when stdout is not
+  a terminal. Proof from the logs rather than from belief: green run `44242238211` emitted its entire 269-line
+  test log in one burst at 05:16:28, while the **Build** step of that same job, piping through nothing,
+  streamed 4,594 lines live across 20:04 / 20:05 / 20:06. A lane that never exits therefore prints nothing, and
+  nothing is the worst possible answer to "where is it stuck". `0ecd1d4` removed the pipe; on that run the test
+  step streamed 733 lines inside its first minute and finished in 3m03s.
+- The hang itself: `011c1b8` took the scene-less `UIWindow` hosting out of `ChatExportAndRenderingTests` and the
+  lane hung anyway, so the window was never the cause. What survived in **every** version of that file, and in
+  both hung runs, was `testCopyPutsExactlyTheRequestedTextOnThePasteboard` — a write to `UIPasteboard.general`
+  followed by a **read** of it. It is the only call in the whole simulator suite that asks a system daemon for
+  anything, and a unit-test bundle with no running app has no foreground process to ask on behalf of. Everything
+  else in the file is pure computation or plain file writing, and the identical workspace recipe
+  (`SwiftDataStore(inMemory:)` + `MockStreamingProvider.instant` + `.onDeviceOnly`) already passes in
+  `ChatConfigSheetTests`. Taking it out of the lane is what made it finish: `44396176219` runs 108 `CairnTests`
+  in about two seconds. **That is strong evidence and not proof** — there is no Xcode on this machine, so the
+  pasteboard call was never observed hanging, and this is the last candidate standing rather than a demonstrated
+  culprit. If the lane hangs again, the log now streams and will name the test it is sitting in.
+- Two claims left the suite with it, and neither went without a home: prose-versus-markup is still asserted in
+  `ChatExportAndRenderingTests`, and the copy round-trip is line 6 of the device checklist below, where there is
+  a real foreground app and a real pasteboard to ask.
+- That job's timeout went **30 → 20 minutes.** A green lane spends 3m03s testing inside a job of about five, so
+  20 still leaves four times the headroom a slow runner could plausibly need, and a hang now costs 20 minutes
+  instead of 30.
+
+### M5 device checklist — run this on the iPhone to close M5 honestly
 ### M5 device checklist — run this on the iPhone to close M5 honestly
 
 Each line states what it proves. A pass on one line is not evidence for the next.
@@ -1375,8 +1427,10 @@ Each line states what it proves. A pass on one line is not evidence for the next
 14. **Force-quit and relaunch with a chat open.** The chat and its tree come back, and export wrote nothing to
     disk on the way out.
 
-Any line that fails is a real defect, and its fix belongs in this milestone. Until 1–14 are checked on the
-device and a CI run is green on the same commit, M5 stays in progress.
+Any line that fails is a real defect, and its fix belongs in this milestone. The **code-and-CI half of that gate
+is met** — green run `44396176219` on `0ecd1d4` — and M5 is closed at that gate. **The checklist is the other
+half and it stays owed:** none of 1–14 has ever been run on a phone, so nothing in this milestone is
+on-device-verified, and a line that fails on a real device reopens M5 as a defect rather than as scope.
 
 ### Gaps carried forward, not hidden
 
@@ -1393,13 +1447,20 @@ device and a CI run is green on the same commit, M5 stays in progress.
   guessed.
 - **Inline images are not rendered.** An image line shows its alt text, because fetching a remote image is a
   network decision the app has to make visibly, not one a text renderer makes alone.
-- **No view-hosting tests.** The M5 screens are proved by the device checklist above, not by a test. The first
-  attempt at `ChatExportAndRenderingTests` hosted them in a `UIWindow` with no window scene to check that they
-  build a layout; CI's simulator test lane then ran for twenty minutes without finishing, and the assertion —
-  a hosted view has a height — was near-tautological. A UI-test target with a real scene is the right home for
-  that claim and none exists here. Whether the window was truly the cause is unproven: nothing else in that
-  lane was new, and the build step of the same run was green.
+- **No view-hosting tests.** The M5 screens are proved by the device checklist above, not by a test. Two claims
+  were tried in `ChatExportAndRenderingTests` and both came out: hosting the screens in a `UIWindow` with no
+  window scene, because the assertion — a hosted view has a height — is near-tautological; and writing to then
+  reading back `UIPasteboard.general`, because it asks a system daemon what a process with no running app should
+  not be asking, and it is the last candidate standing for the two hung lanes (corrected account in the section
+  above, which also supersedes the earlier guess that the window was what hung the lane). A UI-test target with
+  a real window scene is the right home for both claims, and none exists in this project.
 - **The list is one screen, not paginated.** `ChatStore.conversations()` returns every chat — fine for the
   hundreds of chats this app is for. If it ever is not, paging belongs in `ChatListQuery`, where the ordering
   already lives.
+- **No all-chats export.** `ChatExport.data(conversations:nodes:)` and `ChatTranscript` both take many chats with
+  every branch, and the domain is tested for exactly that; what does not exist is a screen that asks for the
+  whole set. A user with a hundred chats can only carry them to the share sheet one at a time.
+- **No editable title in the top bar.** A chat is renameable from the drawer — swipe a row, then the rename
+  dialog — and the top bar shows the title it has, but that title is a `Text`, not a field, so renaming means
+  leaving the chat to go and find it.
 
