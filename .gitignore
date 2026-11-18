@@ -13,6 +13,8 @@ ResultBundles/
 
 .DS_Store
 *.log
+# The editor's own workspace settings are not part of the project.
+.vscode/
 
 # Local-only secrets must never be tracked (tokens live in Keychain at runtime).
 .env

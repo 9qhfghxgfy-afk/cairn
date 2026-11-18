@@ -120,7 +120,10 @@ extension CalculatorEvaluator {
         switch identifier {
         case "pi": return Double.pi
         case "tau": return Double.pi * 2
-        case "e": return M_E
+        /// `e` is computed rather than read from C's `M_E`: that symbol lives in the platform's math
+        /// module, which Apple's SDK ships and the Windows toolchain does not, and this parser has to
+        /// build on both. `Foundation.exp` is available on every toolchain this file builds against.
+        case "e": return Foundation.exp(1)
         default: throw CalculatorError.unknownName
         }
     }
