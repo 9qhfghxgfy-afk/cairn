@@ -750,7 +750,7 @@ needs both.
 | P1 | Multi-server management, instant switching with per-server last model, `lmStudio` + `ollamaCloud` kinds, setup guide, user-initiated LAN scan | brief §3.4 | **done** — code landed and all five owed suites written (switching through `ChatSessionModel`, `LANDiscoveryService` on a fake transport, LM Studio + Ollama Cloud wire/codec, `ServerSelection` SwiftData round-trip, `ServersModel` selection + discovery); green on CI run `44015633614` (`de0ec5a`) |
 | M3 | On-device inference (`mlx-swift-lm` + Foundation Models) + model manager with progress, cancel, unload, `/api/show` | §3.5 | **closed (code + CI)** — green run `44182366343` on `c03168f`, which carries `31162c7` + `38d5ed3` + `84cf613` + `7882498`; earlier runs `44171820190`, `44177831990`, `44179719494` also green; 65 `CairnTests` on `iPhone 15 Pro` locally. **On-device and real-network verification are still owed** — the checklist at the end of this milestone is the sign-off, and the MLX runtime has never been linked or run |
 | P2 | Per-chat + default configuration with `configured` vs `unset`, capability-filtered payloads, injected context, themes | §3.2, §3.3, §3.10 | **done** — CI-verified `44144881214` on `823bd86`; local-Mac-verified 121 domain + 59 remote host tests, guards 53/53, 65 `CairnTests` on `iPhone 15 Pro`. Full record below; known gaps stay listed there |
-| M4 | Hybrid Parallel + Synthesized engine | preserved core | **in progress** — engine, session path, and provenance storage landed and **CI-verified `44195224728`** on `4689d42` (159 host tests, guards, simulator build + test); picker, progress panels, draft cards, and the real residency gate owed. Record at the end of this file |
+| M4 | Hybrid Parallel + Synthesized engine | preserved core | **Closed** — engine, session path, provenance storage, hybrid picker, live panels, draft cards, and the measured residency gate. **CI-verified `44209524177`** on `9bbd82b` (guards 53/53; 159 domain + 69 remote + 60 on-device host tests; simulator build + 95 `CairnTests`, 0 failures). **Not** on-device-verified, **not** real-network-verified. Record at the end of this file |
 | P3 | Tool runtime + built-ins + search routing (keyless default, SearXNG optional, cloud key-gated) | §3.7 | todo |
 | M5 | Chat list, Markdown + code copy, Continue Generation, duplicate chat, temp banner, background processing, `.cairn`/`.md` | §3.1, §3.9 | todo |
 | M6 | File + image attachments, chunked retrieval with citations, vision gating | §3.8 | todo |
@@ -1066,10 +1066,11 @@ every hardware-dependent claim in this milestone stays unverified.
 
 
 
-## M4 — Hybrid Parallel + Synthesized engine (**in progress**, started 2026-11-17)
+## M4 — Hybrid Parallel + Synthesized engine (**closed 2026-11-18**, started 2026-11-17)
 
-**Landed: the hybrid engine, the session path that runs it, and the storage that keeps its
-provenance. The picker, the progress panels, and the app-level residency gate are owed.**
+**Landed: the hybrid engine, the session path that runs it, the storage that keeps its provenance,
+the picker and panels that make a hybrid turn legible, and the residency gate that answers the memory
+question by measuring instead of assuming. What is owed now is a phone and a real server, not code.**
 
 ### What landed, and what each piece decides
 
@@ -1082,6 +1083,14 @@ provenance. The picker, the progress panels, and the app-level residency gate ar
 | `HybridSynthesisPrompt` | The writer gets the question and the drafts and **nothing else** — no transcript. A side that failed or stopped is labelled as one even when it got part-way, so an unfinished answer cannot be unified as if it were finished. |
 | `HybridTurnOutcome` | Decides once what the one node says and how it is credited: unified answer when the writer finished, otherwise the primary side's answer, otherwise the first side that answered. |
 | `ChatSessionModel+Hybrid*` | Drains the turn into **one** assistant node, writing each side's partial text as it lands. `send`/`regenerate` route on `mode.isHybrid`; `cancelStreaming` reaches every side through the stream's `onTermination`. |
+| `ChatRecord.provenanceJSON` | Provenance is one JSON column, not a column per field. `saveNode`'s update path now writes `providerID` too, so a synthesized node is credited to the engine that wrote its text instead of the first candidate. |
+| `TwoResidentBudget` (M4b) | The two-resident answer as a pure function in the module that owns the reading: both sides may be resident only when two footprints fit inside the usable four-fifths of a **positive** reading. Unknown, zero, tight and overflowing readings all say no; overflow saturates to no rather than wrapping into yes. |
+| `OnDeviceResidencyGate` (M4b) | The seam answered for real. Headroom is re-read on every question, so a cached "yes" cannot outlive the budget that justified it, and a release goes through `OnDeviceModelRegistry.releaseAll`, which calls the runtime unloader per model rather than only clearing bookkeeping. |
+| `App/HybridWiring.swift` (M4b) | Where the real gate is built and handed down, reading from the same registry the memory-pressure watch already uses — one owner for what is resident. `CairnChatDomain` cannot import `CairnInferenceLocal`, so this is the only place the two meet, and `project.yml` compiles it into the test bundle so the factory is proven rather than trusted. |
+| `HybridPlanSlots` (M4b) | What a tap does to a plan, as pure functions: two rows always exist, choosing an engine re-resolves its model because a name belongs to one engine only, and the writer may only be a side that is really in the plan. The sheet and its tests read one rule. |
+| `HybridConfigSection` (M4b) | The two engine+model rows, the writer picker, and the refusal text, mounted through a new `extra` slot on `ChatConfigEditor` so the Default Configuration editor — which has no engines in front of it — does not have to know hybrid exists. |
+| `HybridProgressView` + `HybridPanelRule` (M4b) | One row per candidate in plan order: phase, characters landed, and that side's own measured tok/s — counts, never text. The panel shows only for a hybrid mode with a turn in flight, so a finished turn cannot keep animating in a chat that moved on. |
+| `HybridDraftCard` + `MessageRow+Hybrid` (M4b) | The drafts are read off the one node that owns them, each collapsible, each with its own numbers and its own typed failure. A side's reasoning panel appears only when that side's `thinking` field is non-empty: no panel is written around an answer with no reasoning, and none borrows the other side's. |
 | `ChatRecord.provenanceJSON` | Provenance is one JSON column, not a column per field. `saveNode`'s update path now writes `providerID` too, so a synthesized node is credited to the engine that wrote its text instead of the first candidate. |
 
 ### Bugs the M4 tests found and fixed
@@ -1099,21 +1108,46 @@ provenance. The picker, the progress panels, and the app-level residency gate ar
   behaviour, regenerate-as-sibling). `bash Scripts/ci.sh hosts` green across all four suites.
 * **local-Mac-verified**: `bash Scripts/ci.sh guards` — 53/53; `xcodegen generate` +
   `Scripts/ci.sh build` — ** BUILD SUCCEEDED ** on the simulator.
-* **CI-verified**: green run **`44195224728`** on `4689d42` — privacy guards, host unit tests
-  (159 domain tests, four host suites), and build + test on the simulator all passed. The two red
-  runs on this slice are recorded below, because each one taught a rule worth keeping.
-* **on-device-verified / real-network-verified**: owed. The residency rule is only proven against
-  a fake gate until the real `os_proc_available_memory()` gate is wired and run on a phone.
+* **CI-verified** (engine slice): green run **`44195224728`** on `4689d42` — privacy guards, host unit
+  tests (159 domain tests, four host suites), and build + test on the simulator all passed.
+* **CI-verified** (M4b, the closure): green run **`44209524177`** on `9bbd82b` — guards 53/53; host
+  suites **159 domain + 69 remote + 60 on-device** (Swift Testing), 0 failures; simulator build plus
+  `CairnTests.xctest` **95 tests, 0 failures** on iPhone 17 / iOS 26.5. What that run proves and the
+  host suites cannot: the hybrid views compile into the app, `App/HybridWiring.swift` links into the
+  test bundle and its gate agrees with `TwoResidentBudget` on whatever the platform reports, the gate
+  a workspace is handed is the gate the assembled turn runs with (asserted by identity), and a hybrid
+  node round-trips through a real SwiftData runtime while a pre-M4 row still opens.
+* **on-device-verified**: **owed**. No phone has run this. A host build has no
+  `os_proc_available_memory()`, so the gate reads `nil` and answers no — the honest answer, but not a
+  measurement from the device the feature exists for. The first real "yes" is still ahead of us.
+* **real-network-verified**: **owed**. Every hybrid turn in CI speaks to mocks. A phone against a real
+  Ollama or LM Studio server — with one side failing mid-stream and a release between two on-device
+  sides — has never been observed.
+* The red runs on this milestone are recorded below, because each one taught a rule worth keeping.
 
-### Owed before M4 can be claimed
-1. `HybridConfigSection` (two engine+model rows, the synthesizer picker, the refusal text),
-   `HybridProgressView` (live per-side phase, chars, tok/s), `MessageRow+Hybrid` (collapsible
-   draft cards + the one-line provenance), and the menu rows that let a chat enter a hybrid mode.
-2. `HybridWiring` in `App/` — the real residency gate built from `OnDeviceModelRegistry` +
-   `os_proc_available_memory()`, injected into every session; `evictResidentModel` must actually
-   unload, not just answer no.
-3. `CairnTests` hybrid cases on a simulator, then `docs/PARITY.md` §0d + §3.11.
-4. A green CI run number on the commit that lands this — no milestone is claimed without one.
+### Rules the two M4b red runs taught — each is a rule, not a taste
+* CI run **`44207149883`** — `ChatConfigEditor+Persona.swift:39:16: static stored properties not
+  supported in generic types`. Mounting the hybrid section through `extra` made `ChatConfigEditor`
+  generic over that section, and a generic type has no single storage for a static property — there is
+  one type per `Extra`. The wording became a computed static property, which reads the same at the
+  call site. The rule: **before making a type generic, search its extensions for `static let`**; the
+  error surfaces in a file nowhere near the change that caused it.
+* CI run **`44208121121`** — two rules the test bundle would not bend around. `await` cannot sit inside
+  an `XCTAssert` autoclosure, so an actor's answer is taken into a name first (which also reads
+  better: it was held, then it was not). And `NSLock.lock()` is unavailable from an asynchronous
+  context, so a counter kept by a `@MainActor async` method needs no lock — say in the comment what
+  serialises it instead of keeping a lock that can never be taken.
+
+### Closed — and what M4 still owes after closing
+1. **A phone.** Whether a hybrid turn with two on-device candidates is ever admitted on measured
+   headroom, and whether the release between sequential sides actually lowers the footprint. Both are
+   device measurements; neither can be answered from this machine or from CI.
+2. **A real server.** One hybrid turn against Ollama and one against LM Studio on the LAN, with one
+   side stopped or failed, and the provenance line read back after a relaunch.
+3. **Unload depth.** `OnDeviceModelRegistry.releaseAll` is only as strong as the unloader a runtime
+   registers with it. Apple's system-managed model has no per-model unload and MLX does not yet expose
+   one, so a "release" today is bookkeeping plus whatever the runtime genuinely gives up — stated here
+   so no later reader mistakes it for a measured unload.
 
 ### Process note — why CI run `44193388503` went red and `25ddcb9`'s guard looked green locally
 `Scripts/ci.sh guards` runs the guard self-test, which plants values in a throwaway tree and then

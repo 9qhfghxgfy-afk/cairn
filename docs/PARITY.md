@@ -110,7 +110,13 @@ verification label. `CI-verified` is not `on-device-verified`.
 | Privacy statement, issues link, licenses view | 3.10 | P5 | Missing | unverified |
 | Dynamic Type, VoiceOver, Reduce Motion | 3.10 | P5 | Partial — a few labels | unverified |
 | AppIcon asset pipeline | 3.10 | P5 | Missing — mark drawn in code | unverified |
-| Hybrid engine preserved (schema now, engine in M4) | 3.11 | M4 | Partial — schema + modes stored, engine absent | CI-verified (schema) |
+| Hybrid engine preserved (schema, and the engine now) | 3.11 | M4 | **Done** — one `AsyncThrowingStream<HybridEvent>` over the same `InferenceProvider.stream` every other turn uses. Candidate failures are values, never thrown away; only cancellation ends a turn early. | **CI-verified** (`44195224728`, `44209524177`) |
+| Hybrid Parallel — two answers side by side | 3.11 | M4 | **Done** — a live panel per candidate in plan order (phase, characters landed, that side's own measured tok/s, its own typed failure) plus collapsible draft cards read off the one node. The panel shows only for a hybrid mode with a turn in flight, so a finished turn cannot keep animating. | **CI-verified** (`44209524177`) — simulator build + `HybridUIWiringTests` |
+| Synthesized — one writer over both drafts | 3.11 | M4 | **Done** — the writer gets the question and the drafts and no transcript; a side that failed or stopped is labelled as one; the node is credited to the engine that wrote its text and carries a one-line provenance. | **CI-verified** (`44195224728`, `44209524177`) — provenance asserted identical across a SwiftData round-trip |
+| Hybrid candidate picker | 3.11 | M4 | **Done** — two engine+model **pair** rows and a writer picker that may only name a side really in the plan. A half-built plan is refused in the words the refusing turn itself uses, in the sheet, in the chat header, and on the send. | **CI-verified** (`44209524177`) — `HybridPlanSlots` + `HybridUIWiringTests` |
+| Two on-device models resident at once | 3.11 | M4 | **Done** — measured, never assumed: both are admitted only on a positive reading with room for two footprints inside the usable four-fifths; unknown, zero, tight and overflowing all say no. A release goes through `OnDeviceModelRegistry.releaseAll` to the runtime unloader. | **CI-verified** (`44209524177`); **on-device-verified owed** — a host build reads `nil`, so no device has yet answered yes |
+| Reasoning shown only for a side that emitted it | 3.11 | M4 | **Done** — each draft card's panel is gated on that side's own non-empty `thinking` field; nothing is paraphrased and the other side's reasoning is never borrowed to fill a panel. | **CI-verified** (`44209524177`) |
+| Hybrid storage, and a store written before M4 | 3.11 | M4 | **Done** — one node keeps both drafts in plan order with per-side numbers, plus one provenance JSON column; a row with neither column reads back as the plain node it is, and a config blob with no `hybrid` key keeps its knobs and claims no plan. | **CI-verified** (`44209524177`) — `HybridPersistenceTests`, `HybridLegacyRowTests` on the simulator |
 | Keychain secrets, network class, privacy guards kept | 3.11 | M0–M2 | Done | CI-verified |
 | Zero paywall, zero limits, guard-enforced | §0 | P0 | **Done** — `Scripts/check-no-paywall.sh`, wired into `ci.sh guards` and the CI guards job | **CI-verified** (`44001146864`) |
 | No in-app billing, no tracking hook anywhere | §0 | P0 | **Done** — none present, and now machine-enforced | **CI-verified** (`44001146864`) |
@@ -136,6 +142,29 @@ MLX runtime has never been linked into a build on this machine. Each row names w
 | Model Manager UI (Running / Installed / Download) | `Done` (simulator build + host-tested model) | `ModelManagerView` + `ModelManagerModel` in `CairnAppUI`, which imports neither URLSession nor a runtime. Stop cancels the stream task, which closes the socket. An indeterminate bar appears when the server named no total, rather than a fake 0%. |
 | Ollama + LM Studio lifecycle endpoints | `Wired` | `ModelLifecycleManaging` (a second boundary; `RemoteModelManaging` is untouched). Ollama `/api/ps`, `/api/show`, streamed `/api/pull` with the in-band error line surfaced despite HTTP 200, and `keep_alive: 0` unload. LM Studio native load / unload / download with tolerant decoding. **The LM Studio payload shapes are pending a real server** — flipping `lifecycleWired` means the calls are issued, not that they are proven. |
 | App wiring (`project.yml` packages, on-device provider row) | `Done` | `project.yml` links `CairnInferenceLocal` + `CairnInferenceNative`; both engines join the provider registry and `baseEngines`; `OnDeviceWiring` builds the On-Device report and starts the memory-pressure watch that releases the resident model when iOS warns. The shipped binary is no longer unchanged. iOS floor moved to 18 in both packages, which Xcode enforces across the dependency graph. |
+
+## 0f. Ledger — the hybrid turn (M4)
+
+**M4 closed on code + CI: green run `44209524177` (on `9bbd82b`, which carries `65446b3`, `a108fb7`,
+`5fcf320`, `489399c`, `c7658a6`).** The engine slice closed earlier on `44195224728` (on `4689d42`).
+Nothing in this ledger is on-device-verified or real-network-verified: no phone has run a hybrid turn,
+and every turn in CI speaks to a mock. Each row names which category is owed.
+
+| Item | Status | Notes |
+|---|---|---|
+| `HybridCandidate` is engine **+ model** | `Done` | Identity is the pair. One server answering with two models is two legitimate sides; the same pair twice is a refusal the picker reports rather than sends. |
+| `HybridPlan` on the chat | `Done` | One optional field inside the chat's own configuration blob, so a chat written before M4 decodes with `hybrid == nil` and the session chooses from what is registered now. |
+| `HybridEngine` | `Done` | A task group for concurrent sides, a sequential loop with a release between on-device groups, then the writer. Candidate failures are values; only cancellation ends a turn early. |
+| Synthesis prompt | `Done` | The writer gets the question and the drafts and no transcript. A side that failed or stopped is labelled as one even when it got part-way, so an unfinished answer cannot be unified as if it were finished. |
+| One node, not two | `Done` | A hybrid turn writes **one** assistant node carrying its drafts, so it replays, exports and imports as one message; regenerate appends a sibling and repoints the leaf. |
+| Residency answer | `Done` (measured) — **on-device-verified owed** | `TwoResidentBudget` (pure) + `OnDeviceResidencyGate` (re-reads headroom on every question) + `App/HybridWiring.swift` (built on the same `OnDeviceModelRegistry` the memory-pressure watch uses). A host build reads `nil`, so CI proves the rule and never the yes. |
+| Release between sequential sides | `Done` (wired) — **on-device-verified owed** | `evictResidentModel` → `OnDeviceModelRegistry.releaseAll` → the runtime unloader per model. How much a runtime really gives up is the runtime's answer: Apple's system-managed model has no per-model unload and MLX does not yet expose one. |
+| Hybrid picker in the per-chat sheet | `Done` | Two pair rows plus a writer picker, mounted through a new `extra` slot on `ChatConfigEditor`, so the Default Configuration editor — which has no engines in front of it — still does not have to know hybrid exists. |
+| Live hybrid panel in the chat header | `Done` | `HybridPanelRule` holds it up only for a hybrid mode with a turn really in flight. Counts and rates only, never text. |
+| Draft cards and the provenance line | `Done` | Each side collapsible with its own numbers and typed failure; a reasoning panel appears only for a side whose `thinking` field is non-empty. The line is `HybridProvenance`'s own summary, so a bubble cannot claim more than the turn produced. |
+| Both hybrid modes selectable | `Done` | The disabled placeholder rows are gone. A chat whose plan is not built is switched to and then told what is missing — in the header, in the sheet, and on the refusing turn, in one wording taken from `HybridPlan.issue`. |
+| Storage round-trip and pre-M4 rows | `Done` (simulator) | `HybridPersistenceTests`, `HybridLegacyRowTests`: plan order, per-side metrics, the absence of reasoning, a typed failure, and a provenance line asserted identical before and after; an old row gains nothing it never had. |
+| Hybrid turn on a phone, and against a real server | **Owed** | On-device-verified and real-network-verified: two on-device candidates on one device, and a LAN side that fails mid-stream. |
 
 ## 1. Findings that change the spec (verified 2026-11-16)
 
