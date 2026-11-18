@@ -1280,11 +1280,6 @@ shipped and how far the checks actually reached.
    `createConversation(title:mode:config:isTemporary:)`, which CI surfaces as an annotation. It is a
    P1-era test-hygiene nit in a file this milestone does not own; named here so it is not mistaken for a
    P3 regression, and left for whoever touches that suite next.
-5. **One warning that predates P3 and is not folded into this diff:**
-   `Tests/CairnTests/ServerSelectionTests.swift:120` discards the result of
-   `createConversation(title:mode:isTemporary:)`, which CI surfaces as an annotation. It is a
-   P1-era test-hygiene nit in a file this milestone does not own; named here so it is not mistaken for a
-   P3 regression, and left for whoever touches that suite next.
 
 ## M5 — chat list, Markdown, export/import, Continue, temporary chats (**in progress**, started 2026-11-18)
 
