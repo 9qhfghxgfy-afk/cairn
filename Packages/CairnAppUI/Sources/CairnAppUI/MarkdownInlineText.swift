@@ -43,8 +43,11 @@ struct MarkdownInlineText: View {
                 piece.foregroundColor = tokens.onCanvasMuted
             case .link:
                 piece.foregroundColor = tokens.accent
-                piece.underline()
                 if let destination = run.url, let url = URL(string: destination) {
+                    // The link attribute is what makes the run tappable: SwiftUI routes it through the
+                    // environment's `openURL`, which is the door MessageRow guards with a warning. The accent
+                    // is set here because a link that is only distinguished by an underline can read as
+                    // ordinary prose at a glance; SwiftUI draws the underline itself.
                     piece.link = url
                 }
             }

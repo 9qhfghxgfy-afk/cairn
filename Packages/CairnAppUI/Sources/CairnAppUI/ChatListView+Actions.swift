@@ -17,8 +17,17 @@ extension ChatListView {
         // do: pull left, pick one.
         .swipeActions(edge: .trailing) {
             Button("Delete", role: .destructive) { deleteTarget = chat }
-            Button("Duplicate") { workspace.duplicate(conversationID: chat.id) }
-                .tint(CairnTheme.moss)
+            // The copy's own title comes back from the workspace, so the list can say what it made rather
+            // than leaving the user to spot which row is new.
+            Button("Duplicate") {
+                if let copy = workspace.duplicate(conversationID: chat.id) {
+                    notice = "Duplicated as \u{201c}\(ChatListQuery.visibleTitle(copy))\u{201d}."
+                } else {
+                    notice = workspace.lastError ?? "That chat could not be duplicated."
+                    workspace.lastError = nil
+                }
+            }
+            .tint(CairnTheme.moss)
             Button("Rename") {
                 renameText = ChatListQuery.visibleTitle(chat)
                 renameTarget = chat

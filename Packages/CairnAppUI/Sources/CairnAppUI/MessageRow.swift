@@ -12,7 +12,10 @@ public struct MessageRow: View {
     /// The row's own way out, read from the environment the app provides. The Markdown underneath replaces
     /// `openURL` for its own subtree so a link tap can be caught; this stays the real one, which is what
     /// the "Open" button in that warning is allowed to call.
-    @Environment(\.openURL) private var openExternalURL
+    ///
+    /// Internal, not `private`: the link handling lives in MessageRow+Links.swift, and `private` here would
+    /// mean "MessageRow.swift only".
+    @Environment(\.openURL) var openExternalURL
 
     @State var isEditing = false
     @State var draftText = ""

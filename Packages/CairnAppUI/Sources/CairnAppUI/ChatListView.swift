@@ -21,7 +21,9 @@ struct ChatListView: View {
     @State var showingExport = false
     @State var notice: String?
     let workspace: ChatWorkspace
-    @Environment(\.dismiss) private var dismiss
+    // Internal, not `private`: the rows, buttons and dialogs live in sibling files of this same type, and
+    // `private` in Swift means "this file only" — which is exactly the mistake CI caught.
+    @Environment(\.dismiss) var dismiss
 
     var body: some View {
         List {
