@@ -19,14 +19,14 @@ verification label. `CI-verified` is not `on-device-verified`.
 | Stop mid-stream keeps partial text, marks `.cancelled` | 3.1 | M1 | Done | CI-verified |
 | Temporary chat is memory-only; disk store refuses it | 3.1 | M1 | Done | CI-verified |
 | Reasoning panel gated on real thinking only | 3.1 | M1 | Done | CI-verified |
-| Generation stats (tok, tok/s) on a reply | 3.1 | P2 | Partial — always shown, no toggle, no elapsed; the Statistics toggle itself is deferred to P3 | CI-verified |
+| Generation stats (elapsed, tok, tok/s) on a reply | 3.1 | P2 + P3 | Done — elapsed seconds joined the token and tok/s line, and the Settings toggle hides the numbers on every row without stopping the measurement | CI-verified (`44242238211`) — `MessageRow+Controls` gates that line on `session.showsGenerationStats`, and `ToolWiringTests` shows the switch travelling to a live session |
 | Remote streaming with real usage metrics | 3.1 | M2 | Done | CI-verified (`43764696840`); device list open |
 | Chat-history sidebar / drawer with chat list | 3.1 | M5 | Missing | unverified |
 | Editable chat title in the top bar | 3.1 | M5 | Missing | unverified |
 | Quick server/model switcher in the top bar | 3.1 | P1 | Done — server section (with "public internet" spelled out) + model section, one tap each | CI-verified (`44015633614`) — the switching rule itself is `ChatSessionServerSwitchTests` |
 | Empty state that routes to "configure a server" | 3.1 | P1 | Done — picks a kind, opens the guide, or scans the LAN | CI-verified build (`44015633614`); the kind draft is covered by `ServersModelSelectionTests` |
 | Composer `+` menu (Photos, Camera, Files) | 3.1, 3.8 | M6 | Missing | unverified |
-| `Thinking` / `Tools` composer chips | 3.1, 3.2 | P3 (deferred out of P2) | Missing | unverified |
+| `Thinking` / `Tools` composer chips | 3.1, 3.2 | P3 (deferred out of P2) | Done — both sit above the composer. `Thinking` says out loud when a server has never been seen to emit reasoning, so an "on" chip cannot read as a broken panel. `Tools` ships down, arms one chat, and the first raise while the acknowledgement is down asks first with both ways out: web tools, or the on-device tools alone. Beside it, a per-tool switch menu where a web switch stays disabled until the acknowledgement is up | CI-verified (`44242238211`) — the states the chips write are asserted (`ToolToggleSet` `.off` / `.default` / `.localOnly`, `ToolWiringTests` for what a chat is actually handed); the chip views themselves are build-verified on the simulator lane, not observed on a phone |
 | Markdown + syntax-highlighted code + copy button | 3.1 | M5 | Missing (plain `Text`) | unverified |
 | Continue Generation after a cut-off reply | 3.1 | M5 | Missing (`interrupted` reserved) | unverified |
 | Duplicate chat up to the current branch | 3.1 | M5 | Missing | unverified |
@@ -51,7 +51,7 @@ verification label. `CI-verified` is not `on-device-verified`.
 | Live monospace assembled-context preview | 3.3 | P2 | Done — same call the stream uses, so preview and wire are byte-identical, with the byte count beside it | CI-verified (`44144881214`) — `ChatConfigSheetTests.testPreviewIsTheWireByteForByte` |
 | Always-injected toggles (date / time+tz / platform / language) | 3.3 | P2 | Done | CI-verified (`44144881214`) — `ContextAssemblyTests` |
 | 3 added injections (region, capability summary, format pref) | 3.3 | P2 | Done — `localeRegion`, `capabilitySummary`, `responseFormat` are toggles in the same set | CI-verified (`44144881214`) — `ContextAssemblyTests` |
-| Conditional injections (tools / force fetch / file / image) | 3.3 | P2 → P3, M6 | Partial — `toolGuidance` and `imageContext` are written only when the turn really has tools or images; `fileContext` waits for M6, `forceWebFetch` for P3 | CI-verified (`44144881214`) — `ChatConfigSheetTests.testConditionalBlocksAppearOnlyWhenTheFeatureIsLive` |
+| Conditional injections (tools / force fetch / file / image) | 3.3 | P2 → P3, M6 | Partial — `toolGuidance` is written only when the turn really has tools, which is now a live state since P3, and `imageContext` only when a turn has images; `fileContext` waits for M6, and `forceWebFetch` **still never activates** — `TurnContext.webFetchActive` is written `false` everywhere, so that key stays reserved even though the web tools are live | CI-verified (`44144881214`) — `ChatConfigSheetTests.testConditionalBlocksAppearOnlyWhenTheFeatureIsLive`; the tool half also rides on `ToolRoutingTests` (`44242238211`) |
 
 ## 0c. Ledger — servers (3.4) and model management (3.5)
 
@@ -91,13 +91,13 @@ verification label. `CI-verified` is not `on-device-verified`.
 | Sharing off by default, per-session opt-in, Keychain token | 3.6 | P4 | Missing | unverified |
 | Sharing status: IP, port, client count, persistent badge | 3.6 | P4 | Missing | unverified |
 | LAN bind only; documented background-suspension limits | 3.6 | P4 | Missing | unverified |
-| `ToolRegistry` loop + step limit + cancel + call cards | 3.7 | P3 | Partial — `.toolCall` chunk only | CI-verified (chunk) |
-| Native tool calling + documented prompt-protocol fallback | 3.7 | P3 | Missing | unverified |
-| web_search, web_fetch, wiki_search, calculator, compose_mail | 3.7 | P3 | Missing | unverified |
-| Keyless default search + optional SearXNG URL | 3.7 | P3 | Missing — Finding F4 | unverified |
-| Ollama Cloud search route when that profile is active | 3.7 | P3 | Missing — Finding F4 | unverified |
-| Tools off by default, per-chat opt-in, badge, disclosure | 3.7 | P3 | Missing | unverified |
-| Send only the query/URL, never conversation history | 3.7 | P3 | Missing | unverified |
+| `ToolRegistry` loop + step limit + cancel + call cards | 3.7 | P3 | Done — `ToolLoopEngine` runs the multi-step loop under `ToolLoopPolicy`'s step bound, honours cancellation mid-loop, and settles every call into one `ToolRun` on the **one** assistant node; each call renders as a collapsible card with its arguments, the exact text the tool returned, its measured duration and its typed failure | CI-verified (`44242238211`) — `ToolLoopTests`; `ToolCallStitcherTests` / `ToolCallStreamTests`; `ToolRunPersistenceTests` proves the run survives a real SwiftData round-trip |
+| Native tool calling + documented prompt-protocol fallback | 3.7 | P3 | Done — a backend that supports `tools` gets the schemas on the wire (`ToolWireSchema` for both dialects); one that does not gets an instruction block and Cairn parses the calls out of its prose under a bound. `ToolRouting` decides which ran and the card says so — parsed is never drawn as native | CI-verified (`44242238211`) — `ToolRoutingTests`, `PromptToolProtocolTests`, `ToolWireTests`; never observed against a real model's prose |
+| web_search, web_fetch, wiki_search, calculator, compose_mail | 3.7 | P3 | Done — five built-ins. The calculator is Cairn's own parser (no `NSExpression`, no `eval`), refusing hostile input with a typed `CalculatorError`; `compose_mail` opens Apple's own composer and answers "offered for review", never "sent" | CI-verified (`44242238211`) — `CalculatorEvaluatorTests`, the mail tool's refusal and "offered" wording; **the composer has never opened on a phone** |
+| Keyless default search + optional SearXNG URL | 3.7 | P3 | Done — finding F4 resolved as proposed: the user's own SearXNG address wins when one is set (plain `http://` allowed for it, because that server is on their own network), otherwise the keyless public endpoint; the route that ran is named in the result | CI-verified (`44242238211`) — `WebSearchToolTests`, `WebSearchRouting`; **no real endpoint has been reached** |
+| Ollama Cloud search route when that profile is active | 3.7 | P3 | Done — key-gated: Ollama's own search is used only when the active profile is `ollamaCloud` **and** its Keychain key is present. A LAN server's bearer token can never become a search key | CI-verified (`44242238211`) — `testTheCloudKeyIsReadOnlyForAServerOfTheCloudKind`; never exercised against the real endpoint |
+| Tools off by default, per-chat opt-in, badge, disclosure | 3.7 | P3 | Done — `ToolToggleSet` ships off; the composer's `Tools` chip arms one chat, the first raise while the acknowledgement is down asks first and offers both ways out (web tools, or on-device tools only), the per-tool switches ride beside it, and the outbound badge is read back off stored nodes so it stays up for the rest of the conversation | CI-verified (`44242238211`) — toggle and registry assertions in `ToolWiringTests` (what reaches a live session and a later one); the chip and badge views themselves are build-verified on the simulator lane, not observed on a phone |
+| Send only the query/URL, never conversation history | 3.7 | P3 | Done — a web request is *built* before it is sent, and the assertion lands on the built request: query or URL only, no cookie, no credential, no conversation text. A private or plain-`http` target is refused with its reason named, and a redirect onto one is refused on the far side of the hop | CI-verified (`44242238211`) — `testEachRouteSendsTheQueryAndNothingElse`, `testAFetchCarriesNoCookieAndNoCredential`, `testARedirectOntoAPrivateAddressIsRefusedOnTheFarSideOfTheHop` |
 | File attachments: PDF/CSV/TXT/MD/code + size check | 3.8 | M6 | Missing | unverified |
 | Full-text vs chunk-retrieve by context budget + citations | 3.8 | M6 | Missing | unverified |
 | Image attachments, downscale, multimodal payloads | 3.8 | M6 | Partial — `imageData` field only | CI-verified (field) |
@@ -106,7 +106,7 @@ verification label. `CI-verified` is not `on-device-verified`.
 | Import `.cairn` with version check + duplicate-ID handling | 3.9 | M5 | Missing | unverified |
 | Themes: original palettes, swatches, live bubble preview | 3.10 | P2 | Done — 4 original palettes, each with a light and a dark half resolved against the device appearance, 3-role swatches, and a preview card showing both bubble roles | CI-verified (`44144881214`) — `ThemeAndAppearanceTests` |
 | Background Processing toggle (`BGContinuedProcessingTask`) | 3.10 | M5 | Missing | unverified |
-| Generation Statistics toggle | 3.10 | P3 (deferred out of P2) | Missing — stats render, but there is no toggle to hide them | unverified |
+| Generation Statistics toggle | 3.10 | P3 (deferred out of P2) | Done — the toggle sits under "Turns" in Settings and hides the numbers on every reply; the measurement keeps running, so a turn's record still says how long it took when the chat is opened next month. Moving the switch re-installs the tool surface, so the sessions that already exist get the change without a relaunch | CI-verified (`44242238211`) — `MessageRow+Controls` reads the flag; `ToolWiringTests` asserts the flag reaches a live session and a chat opened later |
 | Privacy statement, issues link, licenses view | 3.10 | P5 | Missing | unverified |
 | Dynamic Type, VoiceOver, Reduce Motion | 3.10 | P5 | Partial — a few labels | unverified |
 | AppIcon asset pipeline | 3.10 | P5 | Missing — mark drawn in code | unverified |
@@ -189,7 +189,11 @@ and every turn in CI speaks to a mock. Each row names which category is owed.
   `results[].title|url|content`) and **requires an API key plus a free Ollama account**. The spec's
   "cloud models search automatically with no key" is not achievable as written. Proposed: the keyless
   provider is the default for every local and standard server; the Ollama Cloud route becomes a
-  key-gated provider that only turns on when the user supplies an Ollama Cloud key. Needs approval.
+  key-gated provider that only turns on when the user supplies an Ollama Cloud key. **Approved, and
+  shipped in P3** (`WebSearchRouting`, `WebToolSettings`, `WebSearchProviders`): own
+  SearXNG address first when set, keyless public endpoint otherwise, Ollama's own search only when the
+  active profile is `ollamaCloud` **and** its Keychain key is present. The route that ran is named in
+  the tool result; no real endpoint has been reached, so the row's verification stays honest.
 - **F5 — Apple Foundation Models are system-managed.** Nothing is downloaded through that path, so
   "Download more on-device models" is MLX-only. Availability is read at runtime behind
   `canImport(FoundationModels)` + `#available`, and the exact unstructured-output call shape is
@@ -219,7 +223,7 @@ that needs both. `P*` rows are parity work folded into the existing `M3`–`M7` 
 | **M3** | On-device inference: `CairnInferenceNative` (Swift 5, `mlx-swift-lm`) + `CairnInferenceLocal` (Foundation Models, memory budget, downloads), model manager tabs with progress + cancel + unload, `/api/show` details, LM Studio lifecycle, On-Device row | 3.5, 3.4 (row) | `project.yml`, `Packages/CairnInferenceNative` (new), `Packages/CairnInferenceLocal` (new), `RemoteModelService.swift`, `RemoteModelManaging.swift`, new `ModelManagerView+.swift`, `ChatModels.swift` | host unit tests for codec + budget math; CI green; then the iPhone checklist (Metal, memory, resume, SHA-256) |
 | **P2** | Per-chat + default configuration with `configured` vs `unset` semantics, capability-filtered payloads, injected-context builder with live preview, themes, statistics + thinking chips | 3.2, 3.3, 3.10 (themes) | `ChatModels.swift` (params → optional overrides), `Persistence/Mapping.swift`, new `ChatDomain/SamplingPayload.swift`, new `ChatDomain/ContextAssembly.swift`, new `CairnAppUI/ChatConfigSheet.swift`, new `CairnAppUI/SettingsView.swift`, `CairnIdentity.swift` (themes) | pure-function tests: unset keys are omitted per backend; defaults propagate to new chats; assembly order is deterministic — **met on `823bd86`, CI `44144881214`**; the statistics toggle and the `Thinking`/`Tools` chips moved to P3, and finding #21 (which keys a real engine reads) still needs a real-server probe |
 | **M4** | Hybrid Parallel + Synthesized engine, both live, synthesizer as one node carrying drafts | 3.11 | `ChatSessionModel+.swift`, new `HybridEngine.swift`, `StreamAccumulator.swift` | task-group tests with two mocks; synthesized node round-trips export |
-| **P3** | Tool runtime + built-ins + search routing (keyless default, SearXNG optional, Ollama Cloud key-gated) | 3.7 | new `CairnChatDomain/ToolRegistry.swift`, `ToolProtocol.swift`, new `CairnProviderRemote/Tools/*.swift`, `ChatSessionModel+Tools.swift`, `MessageRow+ToolCard.swift` | calculator rejects malformed/hostile input with no `NSExpression`; loop honours step limit + cancel; only the query leaves the device (asserted in tests) |
+| **P3** | Tool runtime + built-ins + search routing (keyless default, SearXNG optional, Ollama Cloud key-gated) | 3.7 | new `CairnChatDomain/ToolRegistry.swift`, `ToolProtocol.swift`, new `CairnProviderRemote/Tools/*.swift`, `ChatSessionModel+Tools.swift`, `MessageRow+ToolCard.swift` | calculator rejects malformed/hostile input with no `NSExpression`; loop honours step limit + cancel; only the query leaves the device (asserted in tests) — **met on `0b3e3fc`, CI `44242238211`**: 184 domain + 93 remote + 60 on-device + 17 native host tests and 104 `CairnTests`, 0 failures; the file names drifted (`ToolProtocol.swift` became `PromptToolProtocol*.swift`, `MessageRow+ToolCard.swift` became `MessageRow+ToolCards.swift` + `ToolCallCard.swift`), and the phone plus the real endpoints stay owed |
 | **M5** | Chat list + sidebar, rename/duplicate/delete/search, Markdown + code copy, Continue Generation, temp-chat banner, background processing, `.cairn` + `.md` export/import | 3.1, 3.9, 3.10 (background) | new `ChatListView.swift`, `ChatDomain/ExportBundle.swift`, `ChatDomain/ImportBundle.swift`, `ChatSessionModel+Continue.swift`, `App/CairnApp.swift` (BG tasks), `MessageRow+Markdown.swift` | export→import round-trip preserves every branch; temp chat writes nothing to disk (store refusal test) |
 | **M6** | Attachments: PDF/CSV/text/code with size checks, full-text vs chunked retrieval with citations, images with downscale + vision gating | 3.8 | new `CairnChatDomain/AttachmentModels.swift`, `Chunker.swift`, `Retriever.swift`, new `CairnAppUI/AttachmentMenu.swift`, `ChatMessagePayload` use | chunking + budget choice is pure and unit-tested; a non-vision model cannot send image bytes |
 | **P4** | LAN model-sharing server over `NWListener`, Ollama + OpenAI surfaces, per-session opt-in, token in Keychain, LAN-only bind | 3.6 | new `Packages/CairnSharing` (`ShareServer.swift`, `ShareCodec.swift`), `ServersView` sheet, `App/CairnApp.swift` | loopback integration tests in CI for both dialects; on-device proof on the iPhone 15 Pro |
@@ -234,7 +238,9 @@ Recorded so the next session does not re-litigate them; answered inline in `ROAD
 user replies.
 
 1. Sequencing vs the open M2 device checklist (10 items, never run on the iPhone).
-2. The F4 web-search resolution: keyless default + key-gated Ollama Cloud route.
+2. The F4 web-search resolution: keyless default + key-gated Ollama Cloud route. — **answered and
+   shipped in P3** (green `44242238211`); the route order is asserted by
+   `testTheRouteOrderIsCloudWithAKeyThenOwnInstanceThenKeyless`, and the real endpoints stay owed.
 3. Whether the local test lane runs on the installed iOS 27.2 runtime while CI stays pinned to 26.5.
 4. Whether voice stays in M6 or moves to the M7 backlog.
 5. Whether the LM Studio `lmStudio` kind is added in P1 (schema) with its lifecycle calls landing in M3.

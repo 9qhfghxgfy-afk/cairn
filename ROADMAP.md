@@ -22,7 +22,8 @@ Gate for every milestone (from `.clinerules`):
 | P0 | Zero-paywall guard + parity ledger | **done** — all gates green on `c4f58aa` | [44001146864](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/44001146864) |
 | P1 | Servers parity: active-server selection, one-tap switching with per-server last model, `lmStudio`/`ollamaCloud` kinds, guide sheet, user-initiated LAN scan | **done** — code + all five required suites green on `de0ec5a` | [44015633614](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/44015633614) |
 | P2 | Per-chat + default configuration, `configured` vs `unset`, capability-filtered payloads, injected context, themes | **done** — code + both new simulator suites and the domain suite green on `823bd86` | [44144881214](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/44144881214) |
-| P3–P5 | Parity milestones, ledger in `docs/PARITY.md` | todo (plan approved 2026-11-16) | |
+| P3 | Tool runtime + five built-ins + search routing (keyless / own SearXNG / Ollama Cloud key-gated) + `Thinking`/`Tools` chips + Statistics toggle | **done** — code + every tool suite green on `0b3e3fc` | [44242238211](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/44242238211) |
+| P4–P5 | Parity milestones, ledger in `docs/PARITY.md` | todo (plan approved 2026-11-16) | |
 
 ## Decisions (durable — update here, not in chat)
 
@@ -751,7 +752,7 @@ needs both.
 | M3 | On-device inference (`mlx-swift-lm` + Foundation Models) + model manager with progress, cancel, unload, `/api/show` | §3.5 | **closed (code + CI)** — green run `44182366343` on `c03168f`, which carries `31162c7` + `38d5ed3` + `84cf613` + `7882498`; earlier runs `44171820190`, `44177831990`, `44179719494` also green; 65 `CairnTests` on `iPhone 15 Pro` locally. **On-device and real-network verification are still owed** — the checklist at the end of this milestone is the sign-off, and the MLX runtime has never been linked or run |
 | P2 | Per-chat + default configuration with `configured` vs `unset`, capability-filtered payloads, injected context, themes | §3.2, §3.3, §3.10 | **done** — CI-verified `44144881214` on `823bd86`; local-Mac-verified 121 domain + 59 remote host tests, guards 53/53, 65 `CairnTests` on `iPhone 15 Pro`. Full record below; known gaps stay listed there |
 | M4 | Hybrid Parallel + Synthesized engine | preserved core | **Closed** — engine, session path, provenance storage, hybrid picker, live panels, draft cards, and the measured residency gate. **CI-verified `44209524177`** on `9bbd82b` (guards 53/53; 159 domain + 69 remote + 60 on-device host tests; simulator build + 95 `CairnTests`, 0 failures). **Not** on-device-verified, **not** real-network-verified. Record at the end of this file |
-| P3 | Tool runtime + built-ins + search routing (keyless default, SearXNG optional, cloud key-gated) | §3.7 | todo |
+| P3 | Tool runtime + built-ins + search routing (keyless default, SearXNG optional, cloud key-gated) | §3.7 | **Closed** — the loop (native wire **and** prompt-protocol fallback), the five built-ins, the three search routes with the F4 resolution, per-chat arming with the outbound badge and disclosure, the tool run on the one assistant node with its cards, and the deferred Statistics toggle. **CI-verified `44242238211`** on `0b3e3fc` (guards 53/53; host suites 184 domain + 93 remote + 60 on-device + 17 native, 0 failures; simulator build **SUCCEEDED** + 104 `CairnTests`, 0 failures on iPhone 17 / iOS 26.5). **Not** on-device-verified, **not** real-network-verified. Record at the end of this file |
 | M5 | Chat list, Markdown + code copy, Continue Generation, duplicate chat, temp banner, background processing, `.cairn`/`.md` | §3.1, §3.9 | todo |
 | M6 | File + image attachments, chunked retrieval with citations, vision gating | §3.8 | todo |
 | P4 | On-device model sharing server over LAN (`NWListener`, both dialects) | §3.6 | todo |
@@ -933,7 +934,8 @@ Known gaps carried forward, stated plainly:
    sheet is the persona editor's growth limit (`.lineLimit(3...8)`), so a long persona scrolls to eight
    visible lines. Recorded so the next session does not chase a cap that was never written.
 4. **Deferred to P3:** the Generation Statistics toggle and the `Thinking` / `Tools` composer chips.
-   Stats render; they cannot be turned off, and there is no elapsed time.
+   Stats render; they cannot be turned off, and there is no elapsed time. *(Both landed in P3 — the
+   elapsed readout, the toggle, and both chips are green on `44242238211`; see the P3 record.)*
 5. Numeric knobs are slider/stepper controls with a readout; only the seed is a typed field, so the
    ledger row that asked for typed numeric entry per knob stays `Partial` for that reason.
 
@@ -1164,3 +1166,118 @@ state — wait for the state.** The drain now raises a `PartialAnswerFlag` the m
 something, the test stops the turn only after that flag is raised, and the drain calls
 `Task.checkCancellation()` between events exactly as the session drain does. Re-ran that suite 5×
 and the session-level hybrid suite 3× locally before pushing.
+
+## P3 — Tool runtime, built-ins, and search routing (**closed 2026-11-18**, started 2026-11-17)
+
+Two commits carried the code (`e84528c` — domain loop, registry, prompt protocol, routing, calculator,
+persistence; `74f1774` — the wire, the web tools, the UI, and the tests that prove them) and the runs
+below carried the fixes. The plan is §3.7 plus the `docs/PARITY.md` ledger; this is the record of what
+shipped and how far the checks actually reached.
+
+### What landed
+
+| Piece | The rule it holds |
+|---|---|
+| `ToolRegistry` / `ToolExecuting` / `ToolExecutionContext` | One name→tool map, and one value saying what a turn may do. The chat's `Tools` chip and the outbound acknowledgement are **separate** switches, so a tool that leaves the device is refused even when the chip is up — the check lives in the context, so no handler has to remember it. |
+| `ToolLoop` / `ToolLoopEngine` / `ToolLoopPolicy` | A step is one model call. Calls run, their text is fed back, the model answers; the bound is a sanitised policy value (`mayRunAnotherStep(stepsTaken:)`), cancellation is honoured between steps, and the turn ends with a stated `stoppedAtStepLimit` rather than the UI inferring it from a count. |
+| `ToolRun` / `ToolInvocation` on the node | A call belongs to the answer it fed, so the run lives on the **one** assistant node: it replays, branches, exports and imports with that answer, and a call can never be branched away from the turn it justified. A turn with no tools writes **no** blob at all, so a pre-P3 row reads "no tools ran", not "zero tools ran, somehow". |
+| `ToolRouting` + `PromptToolProtocol*` + `Remote/ToolWireSchema` | Two ways to reach a tool, never conflated: a backend with documented function calling gets schemas on the wire (both dialects), one without gets an instruction block and Cairn parses its prose under a bound. Which one ran is recorded on the node and printed on the card — parsed is never drawn as native. |
+| `CalculatorEvaluator*` + `CalculatorTool` + `CalculatorError` | Cairn's own hand-written, bounded parser. Nothing evaluates a string: no `NSExpression`, no format string off an untrusted input, no `value(forKey:)`, no symbol lookup by name. A hostile expression is a typed error the model can read. |
+| `MailDraft` + `ComposeMailTool` + `MailComposerPresentation` | The whole mail story, deliberately small: Apple's own composer opens with the draft filled in and **nothing in Cairn can send it**, so the tool says the draft was *offered for review* and the tool description tells the model never to state a send. A device or build with no composer gets no `compose_mail` rather than a tool that claims success and opens nothing. |
+| `WebSearchRouting` / `WebToolSettings` + `CairnProviderRemote/Tools/*` | The F4 resolution: the user's own SearXNG address wins when set — plain `http://` is allowed for it because that server is on their own network — otherwise the keyless public endpoint, and Ollama's own search only when the active profile is `ollamaCloud` **and** its Keychain key is present. A request is *built* before it is sent, which is the only way "only the query left" can be asserted rather than hoped. |
+| `ToolToggleSet` + `ComposerChips` + `ToolSwitchMenu` + `ToolsOutboundBadge` + `MessageRow+ToolCards` + `SettingsView+Tools` | Tools ship off. Arming is per chat, and the first raise while the acknowledgement is down asks first with **both** ways out: `.default` (web included) or `.localOnly` (arithmetic and mail drafts only) — a real state, not a refusal. The outbound badge is read back off stored nodes, so it survives the turn, the scroll, and a relaunch. |
+| `App/ToolWiring.swift` | The only place a registry can be assembled: a window, a Keychain and two Settings switches meet here and the domain reaches for none of them. `project.yml` compiles it into the test bundle so the factory is proven, not trusted; the registry is re-assembled when either switch moves, so arming a chat right after saying "yes" really works. |
+| `ChatConfig+Decoding` + `Mapping` + `Records` | The upgrade is additive in both directions: a pre-P3 configuration blob decodes with the chip **down** (an upgrade may not arm a chat the user never opted into), a pre-P3 node row has neither tool column, and a pre-P3 settings row keeps both shipped defaults — internet unacknowledged, statistics still shown. |
+
+### Verification — 2026-11-18
+
+* **CI-verified** (the closure): green run **`44242238211`** on `0b3e3fc`.
+  * **Privacy guards** — all five guards plus the guard self-test: **53 ok, 0 failed**.
+  * **Host suites, 0 failures** — **184** domain tests (XCTest), **93** remote tests (XCTest),
+    **60** on-device inference / memory / catalog tests (Swift Testing, 14 suites), **17**
+    native-runtime isolation + template-marker tests (Swift Testing, 2 suites, MLX runtime excluded
+    on purpose).
+  * **Simulator lane** — **BUILD SUCCEEDED** for the app against the iOS 26.5 SDK, then
+    `CairnTests.xctest` **104 tests, 0 failures** on iPhone 17 / iOS 26.5. Nine of those are new
+    since M4's 95: `ToolRunPersistenceTests` (3), `ToolLegacyRowTests` (3), `ToolWiringTests` (3).
+* **What only the simulator lane can prove** — and the host suites cannot, because `swift test` never
+  builds `CairnAppUI`, `App/`, or the test bundle at all. This is the lane where `MessageUI` is really
+  imported, where `App/ToolWiring.swift` is linked into the test bundle so the registry factory can run
+  against real stores instead of a double, where a `ToolRun` round-trips through a live SwiftData
+  runtime, and where a pre-P3 node row, a pre-P3 configuration blob and a pre-P3 settings row are read
+  back by the current reader. The wiring assertions are the ones that close the loop: the registry a
+  chat is handed is the registry the two switches describe — for the session that is live and for a chat
+  opened later — and a LAN server's own bearer token never becomes a search key.
+* **local-Mac-verified: nothing for this closure.** The closing change was made on the Windows fallback
+  machine, which has no Swift toolchain, so no build and no test was run locally. What was verified
+  here: `bash Scripts/ci.sh guards` — **53/53**, and `bash Scripts/check-no-paywall.sh` against the
+  working tree — clean. The build and the tests are CI's for this commit, and that split is stated
+  rather than blurred.
+* **on-device-verified: owed.** No phone has run any of it. `MFMailComposeViewController.canSendMail()`
+  has never been read on a device, the composer has never opened, the iPad popover anchoring has never
+  been exercised, no human has tapped the first-use disclosure, and the Local Network prompt that a
+  self-hosted SearXNG on the LAN will raise has never been seen — and a denial there genuinely breaks
+  the connection.
+* **real-network-verified: owed.** Every web-tool assertion runs against `RecordingWebTransport` or a
+  stub, so "only the query leaves" is proven about a *request that was built*, not about a socket. No
+  real keyless endpoint, no real SearXNG instance, and no real `POST /api/web_search` with a real
+  Ollama Cloud key has been exercised, and the redirect-onto-a-private-address refusal is a coded rule
+  rather than an observed hop.
+
+
+### Rules the P3 red runs taught — each is a rule, not a taste
+
+* CI run **`44235943573`** — the new domain suites did not compile: two switches over a newly added enum
+  case were not exhaustive, a recorded chunk list was captured as a `var` inside a `@Sendable` closure, and
+  an array literal was written where a `.content(...)` case was meant. The rule: **a milestone that adds a
+  case to an enum audits every switch over it in the same commit**, and a test double that accumulates
+  stream chunks is a value the compiler can check, not a mutable capture.
+* CI run **`44238447777`** — three assertions failed against the shipped code rather than against the
+  intent, and one of them was instructive. `http://192.168.1.20:8080/v1/models` came back `.notHTTPS`
+  where the test demanded `.privateTarget`. The guard was right and the test was wrong: that address is
+  both private **and** plaintext, and the tool's https rule is the plainer reason, consulted first. Cairn
+  *does* reach a private server over plain `http` — through `ServerProfile`, which is not this tool — and
+  the corrected test now says so in its comment. The rules from this run: **assert the reason the code
+  really reports, in the order it checks**; **a fragment-rejoin assertion is only worth what its fixture
+  is** — write the fragments the wire really sends, then read the rejoined value off the code; and **never
+  index a decoded list before its count has been asserted**, which is what turned a zero-result fixture
+  into a fatal index trap in front of a real assertion.
+* CI runs **`44239112595`** and **`44239762797`** — the Wikipedia excerpt assertions were written against
+  prose with collapsed spacing. What the extractor returns is **one trimmed line**: no markup, no newline
+  however the markup broke, the em dash Wikipedia wrote, and an ampersand kept rather than rewritten. The
+  rule: **read the reader before writing the assertion.** CI's own failure text is the cheapest source of
+  truth available, and it is the one that finally settled the fixture.
+* CI run **`44239762797`** — the last red, closed by `0b3e3fc`:
+  `conformance of 'MailComposerPresentation' to protocol 'MFMailComposeViewControllerDelegate' crosses
+  into main actor-isolated code and can cause data races`. Two rules came out of it. **A `@MainActor` type
+  conforming to a delegate protocol the SDK has not annotated carries `@preconcurrency` on the
+  conformance** — that is the compiler's own suggestion at the conformance site, and it records that Apple
+  delivers the callback on the main thread instead of pretending the protocol is callable from anywhere.
+  And **an iOS-only file is uncompiled, not tested, until the app lane builds it**: this file sits behind
+  `#if canImport(UIKit) && canImport(MessageUI)`, a macOS host build has no MessageUI, so four host
+  suites stayed green for six pushes while the app itself could not build. **A green `swift test` on the
+  Mac says nothing about the app target.**
+
+### Closed — and what P3 still owes after closing
+
+1. **A phone.** Whether `canSendMail()` is ever true on a device with an account configured; whether the
+   composer really appears above the sheet the chat left open (that is why the top-most controller is
+   walked, and it has never been watched); whether the disclosure's two arms read as two real choices;
+   whether the badge is still on screen after a relaunch; and whether the Local Network prompt a
+   self-hosted SearXNG raises is accepted — a denial there genuinely breaks the connection.
+2. **A real endpoint, one per search route.** The keyless redirector's HTML is the most fragile thing in
+   the milestone: it is parsed off a public page Cairn does not control, CI pins it with a fixture, and the
+   day that page changes the tool degrades to "no results" instead of failing loudly. A self-hosted
+   SearXNG on the LAN and Ollama's keyed `POST /api/web_search` have never been reached either.
+3. **A real model's prose for the prompt protocol.** The parser is tested against fixtures that were typed
+   to look like model output; no model has yet emitted the block for it, and `ToolRouting` has never had
+   to choose between native and prompt against a real backend's advertised capability.
+4. **`forceWebFetch` is still dead.** `TurnContext.webFetchActive` is written `false` everywhere, so that
+   conditional-context key stays reserved even though the web tools are live. Recorded in
+   `docs/PARITY.md` so nobody reads the row as finished.
+5. **One warning that predates P3 and is not folded into this diff:**
+   `Tests/CairnTests/ServerSelectionTests.swift:120` discards the result of
+   `createConversation(title:mode:config:isTemporary:)`, which CI surfaces as an annotation. It is a
+   P1-era test-hygiene nit in a file this milestone does not own; named here so it is not mistaken for a
+   P3 regression, and left for whoever touches that suite next.
+
