@@ -48,9 +48,11 @@ final class HybridResidencyWiringTests: XCTestCase {
         XCTAssertTrue(gate(footprint * 8).allowsTwoOnDeviceModelsResident())
     }
 
-    /// The reading describes the moment it was taken, so the gate is asked again each time and answers
-    /// differently when the device has changed its mind. A gate that cached its first verdict would go
-    /// on promising a second model after the headroom was withdrawn.
+    /// Every gate answers from the reading it is handed, asserted at the byte where the usable share
+    /// stops covering two footprints. That the *same* gate asks the reading again instead of caching
+    /// one verdict is proven where the reading is made — `TwoResidentBudgetTests` moves a reading
+    /// under the gate and counts the reads. A cached verdict would keep promising a second model
+    /// after the headroom had been withdrawn.
     func testTheAnswerFollowsTheReadingRatherThanACachedVerdict() {
         let room = gate(footprint * 8)
         let tight = gate(footprint)

@@ -36,7 +36,11 @@ extension ChatConfigEditor {
 
     /// Written here, not in the domain: this is about the sheet's contract with the user, and the
     /// persona has no wire encoding of its own to keep the wording next to.
-    static let personaExplainer = """
+    ///
+    /// A computed property, not a stored one: `ChatConfigEditor` is generic over the section its
+    /// mounting screen adds, and Swift does not allow a stored static property in a generic type.
+    static var personaExplainer: String {
+        """
         Your system prompt, sent as the first message of the conversation, word for word. Cairn puts \
         it ahead of its own injected facts, so instructions you write are never re-framed by a line \
         Cairn added.
@@ -44,4 +48,5 @@ extension ChatConfigEditor {
         Empty means no persona. If every injected-context toggle below is also off, this conversation \
         has no system message at all — your words reach the model with nothing in front of them.
         """
+    }
 }

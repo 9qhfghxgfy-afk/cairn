@@ -114,7 +114,9 @@ final class HybridPersistenceTests: XCTestCase {
         var node = ChatNode(
             conversationID: thread.id, parentID: nil, role: .assistant, kind: .synthesized,
             text: "first", drafts: [fastDraft(), failedDraft()],
-            provenance: HybridProvenance(candidateCount: 2, failedCandidateCount: 1)
+            provenance: HybridProvenance(
+                mode: .hybridSynthesized, candidateCount: 2, failedCandidateCount: 1
+            )
         )
         try store.saveNode(node)
 
