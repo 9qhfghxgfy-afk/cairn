@@ -1326,9 +1326,16 @@ for the rest of a stopped answer.
 
 - **Host-verified locally:** 268 `CairnChatDomain` tests green (ordering, filtering, safe names, duplication,
   continuation, Markdown, highlighting, export/import round-trips), guards 53/53.
-- **Not built locally.** This machine has no Xcode, so `CairnAppUI`, the app target and `CairnTests` have not
-  been compiled by anything yet. CI run 67 is the first compiler to see them.
-- **CI-verified:** pending — this row stays in progress until a green run number is cited here.
+- **Not built locally.** This machine has no Xcode, so `CairnAppUI`, the app target and `CairnTests` are only
+  ever compiled by CI. What is checked here before pushing: `swift test` in the domain package, the guards, and
+  `Scripts/parse-check.sh` — a `swiftc -parse` pass over every app, package and test source, which loads no
+  modules and therefore runs on Windows. It is syntax only, and it earns its place: the first M5 push left an
+  unbalanced `struct` in `MessageRow` and a `guard case … , let …` that the parser rejects, and both were
+  visible locally the moment that check existed.
+- **CI-verified:** pending. Two runs went red on the first cut of this code — `44374999843` (the two parse
+  errors above) and `44377313988` (`private` members that sibling files of the same type could not see, and an
+  `underline()` call that does not exist on `AttributedString`) — and both are fixed. The row stays in
+  progress until a green run number is cited here.
 - **On-device-verified:** no. The checklist below is the sign-off.
 - **Real-network-verified:** no, and nothing in this milestone needs the network — except that importing a
   chat exported from another device is the one cross-device path worth walking once by hand.
