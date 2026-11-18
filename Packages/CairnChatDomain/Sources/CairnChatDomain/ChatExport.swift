@@ -78,14 +78,30 @@ public enum ChatExport {
 
     static func encoder() -> JSONEncoder {
         let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
+        // `Date.fileStamp`, not Foundation's `.iso8601` strategy: that one has no fractional seconds, so a
+        // question and a fast answer written in the same second would leave the file with two messages at
+        // one instant and nothing saying which came first.
+        encoder.dateEncodingStrategy = .custom { date, encoder in
+            var box = encoder.singleValueContainer()
+            try box.encode(date.fileStamp)
+        }
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         return encoder
     }
 
     static func decoder() -> JSONDecoder {
         let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let box = try decoder.singleValueContainer()
+            let stamp = try box.decode(String.self)
+            guard let date = Date.fileStampValue(stamp) else {
+                throw DecodingError.dataCorruptedError(
+                    in: box,
+                    debugDescription: "a timestamp is not the shape this file format writes"
+                )
+            }
+            return date
+        }
         return decoder
     }
 }

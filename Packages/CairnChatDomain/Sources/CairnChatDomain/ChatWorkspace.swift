@@ -63,8 +63,11 @@ public final class ChatWorkspace {
         didSet { applyMode(mode) }
     }
 
-    private let persistentStore: any ChatStore
-    private let ephemeralStore: EphemeralStore
+    // Module-internal rather than `private` (which is file-scoped in Swift): the chat-list actions in
+    // ChatWorkspace+Chats.swift have to duplicate and copy between exactly these two stores and no
+    // others. Which store is in play is still decided here, in `activeStore`, and nowhere else.
+    let persistentStore: any ChatStore
+    let ephemeralStore: EphemeralStore
     private let providerList: [any InferenceProvider]
     /// Live registry when the app wires one (server profiles can change at
     /// runtime); the static list keeps tests and simple wiring working.

@@ -63,6 +63,10 @@ enum MarkdownInlineScanner {
     }
 
     /// `**strong**`, `__strong__`, and the tripled forms that mean strong-plus-emphasis.
+    ///
+    /// A delimiter run only opens when the character after it is not whitespace, and only closes when the
+    /// character before it is not whitespace. Without that rule `2 ** 3 ** 4` reads as strong around
+    /// `" 3 "`, the markers vanish, and the copy button hands back `2 3 4` — arithmetic quietly changed.
     static func strong(in chars: [Character], at index: Int) -> (text: String, triple: Bool, end: Int)? {
         let marker = chars[index]
         var length = 0
@@ -71,12 +75,13 @@ enum MarkdownInlineScanner {
         let triple = length >= 3
         let closeLength = triple ? 3 : 2
         let bodyStart = index + closeLength
+        guard bodyStart < chars.count, !chars[bodyStart].isWhitespace else { return nil }
         var cursor = bodyStart
         while cursor + closeLength - 1 < chars.count {
             if chars[cursor] == marker {
                 var run = 0
                 while cursor + run < chars.count, chars[cursor + run] == marker { run += 1 }
-                if run >= closeLength, cursor > bodyStart {
+                if run >= closeLength, cursor > bodyStart, !chars[cursor - 1].isWhitespace {
                     return (String(chars[bodyStart..<cursor]), triple, cursor + closeLength)
                 }
             }
@@ -87,17 +92,28 @@ enum MarkdownInlineScanner {
 
     /// `*text*` or `_text_`. A lone `_` inside a word is a snake_case letter, not emphasis, so an
     /// underscore only opens between non-word characters, and emphasis never crosses a line break.
+    ///
+    /// The whitespace rule is the same as `strong`'s and for the same reason: `2 * 3 * 4` is a model's
+    /// arithmetic, not italics, and every character of it has to survive into the copy.
     static func emphasis(in chars: [Character], at index: Int) -> (text: String, end: Int)? {
         let marker = chars[index]
         if marker == "_", wordCharacter(before: chars, index: index) { return nil }
-        var cursor = index + 1
+        // The delimiter **run** is the unit, not one character: `** ` is a run followed by a space, which
+        // opens nothing. Reading only the first star of the pair as an opener is what let `2 ** 3 ** 4`
+        // come back as `2 * 3 * 4` — arithmetic with a star eaten at each end.
+        var run = 0
+        while index + run < chars.count, chars[index + run] == marker { run += 1 }
+        guard index + run < chars.count, !chars[index + run].isWhitespace else { return nil }
+        var cursor = index + run
         var body = ""
         while cursor < chars.count {
             let ch = chars[cursor]
             if ch == "\n" { return nil }
             if ch == marker {
                 if marker == "_", wordCharacter(after: chars, index: cursor) { return nil }
-                if cursor > index + 1, !body.isEmpty { return (body, cursor + 1) }
+                if cursor > index + run, !body.isEmpty, let last = body.last, !last.isWhitespace {
+                    return (body, cursor + 1)
+                }
             }
             body.append(ch)
             cursor += 1

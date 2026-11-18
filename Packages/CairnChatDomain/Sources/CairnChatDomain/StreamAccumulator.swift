@@ -34,6 +34,17 @@ public struct StreamAccumulator: Sendable, Equatable {
         phase = .preparing
     }
 
+    /// Starts a turn that **carries** text already written.
+    ///
+    /// Continue Generation streams only what comes after the cut-off point, while the node it writes must
+    /// read as one answer rather than a second half. The carried text is therefore the accumulator's
+    /// starting content, so every partial write and the final one both carry the whole answer, and a
+    /// stop half-way through still leaves a complete, longer answer on the node.
+    public mutating func begin(carrying prefix: String) {
+        content = prefix
+        phase = .preparing
+    }
+
     public mutating func consume(_ chunk: StreamChunk) {
         switch chunk {
         case .thinking(let fragment):

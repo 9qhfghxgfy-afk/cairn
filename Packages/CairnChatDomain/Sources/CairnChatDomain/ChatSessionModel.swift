@@ -72,6 +72,11 @@ public final class ChatSessionModel {
     /// the static snapshot; the static path keeps tests and M1 wiring intact.
     let registry: ProviderRegistry?
     var streamTask: Task<Void, Never>?
+    /// Set when the **app** ended a turn by going to the background, as opposed to the user pressing
+    /// Stop. The two leave the same partial text behind and mean different things to the user, so the
+    /// node is written `.interrupted` rather than `.cancelled` — and Continue Generation offers itself on
+    /// one and not the other. Cleared when the drain finishes.
+    var interruptRequested = false
 
     public init(
         conversation: Conversation,

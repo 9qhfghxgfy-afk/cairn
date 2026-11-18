@@ -3,7 +3,12 @@ import Foundation
 /// The stream drain for `ChatSessionModel`.
 extension ChatSessionModel {
 
-    func beginStreaming(assistantNodeID: UUID, provider: any InferenceProvider) {
+    func beginStreaming(
+        assistantNodeID: UUID,
+        provider: any InferenceProvider,
+        history overrideHistory: [ChatNode]? = nil,
+        carrying prefix: String = ""
+    ) {
         // A turn with tools armed runs the multi-step loop instead of one stream: one stream cannot
         // carry "call, read the result, answer", and a model that is offered tools it cannot use would
         // report a result it never received.
@@ -11,14 +16,16 @@ extension ChatSessionModel {
             beginToolTurn(assistantNodeID: assistantNodeID, provider: provider)
             return
         }
-        let history = ChatTree.visiblePath(nodes: nodes, activeLeafID: assistantNodeID)
+        // A continuation names its own history: the message to continue from is the answer that was cut
+        // off, not the empty sibling this turn is writing into. Every other turn reads its own path.
+        let history = overrideHistory ?? ChatTree.visiblePath(nodes: nodes, activeLeafID: assistantNodeID)
         // One assembly, one system message. The same `systemPrompt(in:turn:)` call is what the
         // configuration sheet previews, so what the user saw is what goes on the wire, and the
         // hybrid path assembles a turn the identical way.
         let request = generationRequest(to: provider, modelID: selectedModelID, history: history)
 
         accumulator = StreamAccumulator()
-        accumulator.begin()
+        accumulator.begin(carrying: prefix)
         isBusy = true
         lastError = nil
 
@@ -34,14 +41,14 @@ extension ChatSessionModel {
                 // a truncated answer as a completed one. Check before declaring success.
                 if Task.isCancelled || accumulator.phase == .cancelling {
                     accumulator.finishCancelled()
-                    persist(assistantNodeID: assistantNodeID, state: .cancelled)
+                    persist(assistantNodeID: assistantNodeID, state: stoppedState)
                 } else {
                     accumulator.complete()
                     persist(assistantNodeID: assistantNodeID, state: .complete)
                 }
             } catch is CancellationError {
                 accumulator.finishCancelled()
-                persist(assistantNodeID: assistantNodeID, state: .cancelled)
+                persist(assistantNodeID: assistantNodeID, state: stoppedState)
             } catch {
                 accumulator.fail(error.localizedDescription)
                 persist(assistantNodeID: assistantNodeID, state: .failed)
@@ -75,6 +82,7 @@ extension ChatSessionModel {
     func finishStreaming() {
         isBusy = false
         streamTask = nil
+        interruptRequested = false
     }
 
     static func makeTitle(from text: String) -> String {
