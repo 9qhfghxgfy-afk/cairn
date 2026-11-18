@@ -1393,6 +1393,12 @@ device and a CI run is green on the same commit, M5 stays in progress.
   guessed.
 - **Inline images are not rendered.** An image line shows its alt text, because fetching a remote image is a
   network decision the app has to make visibly, not one a text renderer makes alone.
+- **No view-hosting tests.** The M5 screens are proved by the device checklist above, not by a test. The first
+  attempt at `ChatExportAndRenderingTests` hosted them in a `UIWindow` with no window scene to check that they
+  build a layout; CI's simulator test lane then ran for twenty minutes without finishing, and the assertion —
+  a hosted view has a height — was near-tautological. A UI-test target with a real scene is the right home for
+  that claim and none exists here. Whether the window was truly the cause is unproven: nothing else in that
+  lane was new, and the build step of the same run was green.
 - **The list is one screen, not paginated.** `ChatStore.conversations()` returns every chat — fine for the
   hundreds of chats this app is for. If it ever is not, paging belongs in `ChatListQuery`, where the ordering
   already lives.
