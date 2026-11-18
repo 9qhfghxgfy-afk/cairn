@@ -1280,4 +1280,117 @@ shipped and how far the checks actually reached.
    `createConversation(title:mode:config:isTemporary:)`, which CI surfaces as an annotation. It is a
    P1-era test-hygiene nit in a file this milestone does not own; named here so it is not mistaken for a
    P3 regression, and left for whoever touches that suite next.
+5. **One warning that predates P3 and is not folded into this diff:**
+   `Tests/CairnTests/ServerSelectionTests.swift:120` discards the result of
+   `createConversation(title:mode:isTemporary:)`, which CI surfaces as an annotation. It is a
+   P1-era test-hygiene nit in a file this milestone does not own; named here so it is not mistaken for a
+   P3 regression, and left for whoever touches that suite next.
+
+## M5 — chat list, Markdown, export/import, Continue, temporary chats (**in progress**, started 2026-11-18)
+
+The screens the domain was built for. Nothing here is a new capability in the store: a chat is still a tree,
+an edit is still a sibling, and a temporary chat still never reaches disk. What landed is the ability to see
+the list, read an answer as the Markdown the model wrote, move a chat across the edge of the device, and ask
+for the rest of a stopped answer.
+
+### What landed, and what each piece decides
+
+- **`ChatListView` + `ChatRowView`** — the drawer behind a leading toolbar slot. Rows come from the workspace
+  in the domain's order, filtered on title; the open chat is marked rather than absent; swiping a row gives
+  Delete, Duplicate, Rename; a file leaves through the share sheet and arrives through the file picker.
+  Acting goes through the workspace by id, never through the array on screen, which is a snapshot.
+- **`ChatListQuery`** (domain) — ordering and title filtering as pure functions, so what the list shows is
+  testable without a view, and a hidden chat cannot be invented by the view either.
+- **`MarkdownMessageView` / `MarkdownBlockView` / `MarkdownInlineText`** — a finished answer renders as the
+  Markdown the model wrote; a streaming answer stays plain text, because a fence typed half a sentence ago
+  draws a block that has not closed, and a bold marker mid-word is a `**` the model has not finished. Links
+  are tappable and say they leave the app.
+- **`CodeBlockView` + `CodeSpanStyle`** — colour from the domain's span table, wrapping instead of a hidden
+  horizontal scroller, and "Copy code" handing back the block's own lines rather than what is painted.
+
+
+- **`MessageRow+Controls`** — Stop stays while streaming; after a turn that was stopped, interrupted or cut
+  at the token limit, the row offers **Continue from where it stopped**, plus **Copy text** and
+  **Copy Markdown**. The three continuation cases are one domain rule (`ChatContinuation`), so the button
+  cannot disagree with the state.
+- **`TempChatBanner`** — a persistent line in the chat plus the badge already on the toggle: the chat is not
+  in the list, it is not written when the app closes, and "Keep a copy" writes a saved chat while leaving the
+  temporary one open.
+- **Export and import** — `.md` for reading, `.cairn` for restoring, both handed to the system share sheet
+  through a transient `fileURLWithContents`; nothing is cached on disk by the app. Import accepts either
+  shape, refuses what it does not recognise, and re-assigns fresh ids on a clash instead of writing over a
+  chat that is already here.
+- **`ChatFileNames`** — a name from the title, `Untitled 2026-11-18 14-32-05` otherwise, so two untitled
+  chats do not overwrite each other in a shared folder; anything that is not a letter or a digit becomes a
+  dash, so a title containing a slash cannot become a folder.
+- **Backgrounding ends a turn** — `CairnRootView` interrupts an active turn when the scene leaves the
+  foreground, which is what makes the paused marker and the Continue offer true rather than decorative.
+
+### Verification so far
+
+- **Host-verified locally:** 268 `CairnChatDomain` tests green (ordering, filtering, safe names, duplication,
+  continuation, Markdown, highlighting, export/import round-trips), guards 53/53.
+- **Not built locally.** This machine has no Xcode, so `CairnAppUI`, the app target and `CairnTests` have not
+  been compiled by anything yet. CI run 67 is the first compiler to see them.
+- **CI-verified:** pending — this row stays in progress until a green run number is cited here.
+- **On-device-verified:** no. The checklist below is the sign-off.
+- **Real-network-verified:** no, and nothing in this milestone needs the network — except that importing a
+  chat exported from another device is the one cross-device path worth walking once by hand.
+
+### M5 device checklist — run this on the iPhone to close M5 honestly
+
+Each line states what it proves. A pass on one line is not evidence for the next.
+
+1. **Build and run from Xcode on the iPhone** — proves the generated project picked up the new files and the
+   document-type keys without a hand-edit.
+2. **Open the chats drawer.** Rows newest-first, the open chat marked *Open*, the empty state saying so rather
+   than showing a blank list; a search that matches nothing says "No chat has that title."
+3. **Swipe a row: Rename, Duplicate, Delete.** Duplicate, then edit one copy — the other must not change, and
+   neither may touch the other's nodes. Delete asks first and leaves no ghost row.
+4. **Rename a chat to a name containing a slash, an asterisk and an emoji, then export it.** The file that
+   appears is dashes and one file — a title must not be able to become a folder or a path.
+5. **Ask for an answer with a heading, a bullet list, bold, and a code block.** They render; the code is
+   coloured and wraps; **while it is still streaming the text is plain**, and it becomes Markdown when the
+   turn ends.
+6. **Copy text / Copy Markdown / Copy code.** Prose without the markers; Markdown with them; the code block's
+   exact lines including comments. The first must equal what was read, not the syntax.
+7. **Tap a link in an answer.** It warns that it opens outside Cairn before it opens. A silent jump is a
+   defect, not a convenience.
+8. **Stop mid-answer → Continue from where it stopped**, twice. Each continuation extends the same answer
+   instead of answering the question again. Then **Start over** on that answer: a sibling is written, the leaf
+   moves, and the branch stepper still steps.
+9. **Background the app mid-stream and come back.** The answer is marked stopped and Continue is offered — it
+   must not look complete, and must not look like it is still streaming.
+10. **Export → share sheet → save the `.md` to Notes.** The whole conversation, readable. Then export the
+    `.cairn` and import that same file: a new chat, same messages, same order, nothing existing overwritten.
+11. **Import a file that is not a chat** — any other JSON. It refuses and says so; the list is unchanged.
+12. **Share a `.cairn` to Cairn from Files, then open one from Files twice in a row.** Both import — the
+    second must not quietly drop the file because the workspace had not finished starting.
+13. **Turn on temporary chat.** The banner and the badge say it; the chat is not in the list; **Keep a copy**
+    saves a copy and leaves the temporary chat open and still unsaved. Force-quit: the temporary chat is gone,
+    the saved copy is there.
+14. **Force-quit and relaunch with a chat open.** The chat and its tree come back, and export wrote nothing to
+    disk on the way out.
+
+Any line that fails is a real defect, and its fix belongs in this milestone. Until 1–14 are checked on the
+device and a CI run is green on the same commit, M5 stays in progress.
+
+### Gaps carried forward, not hidden
+
+- **`BGContinuedProcessingTask` is not implemented.** A turn that outlives the app is the one M5 item with no
+  code behind it. What ships is the honest smaller thing: leaving the foreground stops the turn, marks it
+  stopped, and offers Continue. A continued-processing task needs `BGTaskSchedulerPermittedIdentifiers` in
+  `Info.plist`, registration at launch, and a runtime check of `BGTaskScheduler.shared.supportedResources`
+  for `.gpu`, which the rules say to assume is absent on iPhone — so on iPhone it could only ever be a
+  CPU-bound finish, and must not be described as more than that.
+- **Markdown renders a whole block, not a diff.** A long answer re-renders when the turn ends: one repaint at
+  the end of a stream, not per token. If it is ever seen to stutter, the fix is to cache parsed blocks by text.
+- **No highlighting beyond the span table.** Strings, comments, numbers and a shared keyword set for Swift /
+  Python / JavaScript / Rust. Anything outside it is plain code, which is correct and uncoloured rather than
+  guessed.
+- **Inline images are not rendered.** An image line shows its alt text, because fetching a remote image is a
+  network decision the app has to make visibly, not one a text renderer makes alone.
+- **The list is one screen, not paginated.** `ChatStore.conversations()` returns every chat — fine for the
+  hundreds of chats this app is for. If it ever is not, paging belongs in `ChatListQuery`, where the ordering
+  already lives.
 
