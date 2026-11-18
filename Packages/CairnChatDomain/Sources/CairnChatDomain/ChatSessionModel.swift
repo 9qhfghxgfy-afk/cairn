@@ -39,6 +39,16 @@ public final class ChatSessionModel {
     /// selected — and say so when it read none.
     public internal(set) var modelsByEngine: [String: [ModelInfo]] = [:]
 
+    /// The tools this chat may reach, injected by the app. Empty by construction, so a session built
+    /// in a test or without tool wiring offers nothing — tools are never live just because the code
+    /// to run them is compiled in.
+    public var toolRegistry: ToolRegistry = .empty
+    /// How many model↔tool round trips one turn of this chat may take.
+    public var toolPolicy: ToolLoopPolicy = .default
+    /// The calls of the turn in flight, as they finish, so the transcript shows a card per call while
+    /// the turn runs instead of one block appearing at the end. `nil` for a turn with no tools.
+    public internal(set) var liveToolRun: ToolRun?
+
     /// The clock and device facts the injected context is built from. Held on the session rather
     /// than read at the moment of assembly so the sheet's live preview and the turn that preview
     /// describes cannot drift apart; a test pins it, the app sets it once at startup.

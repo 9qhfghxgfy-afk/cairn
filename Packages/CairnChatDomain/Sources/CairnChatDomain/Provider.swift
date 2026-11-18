@@ -151,13 +151,39 @@ public struct ChatMessagePayload: Sendable, Equatable {
     public var text: String
     /// Opaque attachment bytes; only ever handed to a vision-capable provider.
     public var imageData: [Data]
+    /// Calls this assistant turn asked for, so a native backend can be shown its own turn with the
+    /// calls still attached. Empty on every message written before P3, and on every turn with no
+    /// tools — the field's absence is what keeps an old conversation byte-identical on the wire.
+    public var toolCalls: [ToolCallRequest]
+    /// Set on a **tool result** payload: the call this text answers. The encoder sends such a payload
+    /// with the dialect's tool role rather than as ordinary user text, which is why the role stays a
+    /// plain `ChatRole` and no `tool` case is invented — a new role would ripple through every stored
+    /// message for something only one kind of message needs.
+    public var toolCallID: String?
 
-    public init(role: ChatRole, text: String, imageData: [Data] = []) {
+    public init(
+        role: ChatRole,
+        text: String,
+        imageData: [Data] = [],
+        toolCalls: [ToolCallRequest] = [],
+        toolCallID: String? = nil
+    ) {
         self.role = role
         self.text = text
         self.imageData = imageData
+        self.toolCalls = toolCalls
+        self.toolCallID = toolCallID
     }
+
+    /// A tool result, which is the only payload that carries an id to match against.
+    public static func toolResult(callID: String, text: String) -> ChatMessagePayload {
+        ChatMessagePayload(role: .user, text: text, toolCallID: callID)
+    }
+
+    /// Whether this payload is a tool result rather than something the user or the model said.
+    public var isToolResult: Bool { toolCallID != nil }
 }
+
 
 public struct GenerationRequest: Sendable, Equatable {
     public var modelID: String
@@ -168,11 +194,27 @@ public struct GenerationRequest: Sendable, Equatable {
     public var messages: [ChatMessagePayload]
     /// The chat's own configuration, so an encoder can apply the server's capability filter itself.
     public var config: ChatConfig
+    /// The tools this turn offers, already narrowed by the user's switches and the context budget.
+    /// Empty on every turn with the `Tools` chip down, which is what keeps a tools-off request free
+    /// of tool vocabulary on the wire as well as in the prompt.
+    public var tools: [ToolDefinition]
+    /// How a call would travel on this turn, so an encoder knows whether to emit a `tools` array and
+    /// read structured calls back, or to say nothing about tools at all and let the prompt protocol
+    /// do the work.
+    public var toolProtocol: ToolCallingProtocol
 
-    public init(modelID: String, messages: [ChatMessagePayload], config: ChatConfig) {
+    public init(
+        modelID: String,
+        messages: [ChatMessagePayload],
+        config: ChatConfig,
+        tools: [ToolDefinition] = [],
+        toolProtocol: ToolCallingProtocol = .none
+    ) {
         self.modelID = modelID
         self.messages = messages
         self.config = config
+        self.tools = tools
+        self.toolProtocol = toolProtocol
     }
 
     public var promptCharacterCount: Int {

@@ -133,13 +133,17 @@ extension ChatSessionModel {
         history: [ChatNode]
     ) -> GenerationRequest {
         let config = conversation.config
+        let selection = toolSelection(for: provider)
+        let format = toolRouting(for: provider).format
         return GenerationRequest(
             modelID: modelID,
             messages: ChatTree.messages(
                 for: history,
-                systemPrompt: config.systemPrompt(in: contextEnvironment, turn: turnContext(for: provider))
+                systemPrompt: systemPrompt(for: provider, selection: selection, format: format)
             ),
-            config: config
+            config: config,
+            tools: selection.definitions,
+            toolProtocol: format
         )
     }
 

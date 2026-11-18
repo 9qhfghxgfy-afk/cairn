@@ -79,7 +79,9 @@ extension ChatRecord {
             draftsJSON: JSONCodec.encodeIfNotEmpty(node.drafts),
             // nil stays nil rather than storing a "null" blob.
             metricsJSON: node.metrics.flatMap { JSONCodec.encode($0) },
-            provenanceJSON: node.provenance.flatMap { JSONCodec.encode($0) }
+            provenanceJSON: node.provenance.flatMap { JSONCodec.encode($0) },
+            toolRunJSON: node.toolRun.flatMap { JSONCodec.encode($0) },
+            toolsOfferedJSON: JSONCodec.encodeIfNotEmpty(node.toolsOffered)
         )
     }
 
@@ -101,7 +103,11 @@ extension ChatRecord {
             metrics: JSONCodec.decode(GenerationMetrics.self, from: metricsJSON),
             // A node written before M4 has no provenance column, and a non-hybrid node never
             // writes one: both read back as nil, which is what they are.
-            provenance: JSONCodec.decode(HybridProvenance.self, from: provenanceJSON)
+            provenance: JSONCodec.decode(HybridProvenance.self, from: provenanceJSON),
+            // A node with no tool column is a node from before P3, or a turn that ran no tool: both
+            // read as "no calls", never as an empty call record the UI would render as a card.
+            toolsOffered: JSONCodec.decode([String].self, from: toolsOfferedJSON) ?? [],
+            toolRun: JSONCodec.decode(ToolRun.self, from: toolRunJSON)
         )
     }
 }

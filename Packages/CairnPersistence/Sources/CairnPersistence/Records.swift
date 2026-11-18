@@ -70,6 +70,13 @@ public final class ChatRecord {
     /// one value read whole, and because a column per field would make every later field of
     /// provenance a schema migration. Counts and engine/model ids only: never prompt or answer text.
     public var provenanceJSON: Data?
+    /// One turn's tool calls — `ToolRun` as JSON. Its own column for the same reason provenance has
+    /// one: it is a single value read whole, and a column per call would make every added field of a
+    /// call record a schema migration. Names, arguments, outputs, durations and typed failures only.
+    public var toolRunJSON: Data?
+    /// The tool names this turn was offered, as JSON. Kept because "the model used a tool" is only
+    /// auditable if the record also says what it could have used.
+    public var toolsOfferedJSON: Data?
 
     public init(
         id: UUID,
@@ -86,7 +93,9 @@ public final class ChatRecord {
         createdAt: Date,
         draftsJSON: Data?,
         metricsJSON: Data?,
-        provenanceJSON: Data? = nil
+        provenanceJSON: Data? = nil,
+        toolRunJSON: Data? = nil,
+        toolsOfferedJSON: Data? = nil
     ) {
         self.id = id
         self.conversationID = conversationID
@@ -103,5 +112,7 @@ public final class ChatRecord {
         self.draftsJSON = draftsJSON
         self.metricsJSON = metricsJSON
         self.provenanceJSON = provenanceJSON
+        self.toolRunJSON = toolRunJSON
+        self.toolsOfferedJSON = toolsOfferedJSON
     }
 }

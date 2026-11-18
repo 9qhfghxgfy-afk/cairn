@@ -17,6 +17,11 @@ public struct ChatConfig: Sendable, Equatable, Codable {
     public var context: ContextToggleSet
     public var responseFormat: ResponseFormatPreference
     public var thinkingEnabled: Bool
+    /// Which tools this chat may use, and whether its `Tools` chip is up. The chip is per chat rather
+    /// than global because "arm this conversation for tools" is a decision about one conversation's
+    /// content: a chat holding a scanned document and a chat holding an arithmetic question are not
+    /// the same disclosure.
+    public var toolToggle: ToolToggleSet
     /// Which engines answer a hybrid turn and which one writes the unified answer.
     ///
     /// Optional on purpose: a chat written before M4 has no key for this and decodes to `nil`,
@@ -31,6 +36,8 @@ public struct ChatConfig: Sendable, Equatable, Codable {
         context: ContextToggleSet = .default,
         responseFormat: ResponseFormatPreference = .markdown,
         thinkingEnabled: Bool = false,
+        toolToggle: ToolToggleSet = .default,
+
         hybrid: HybridPlan? = nil
     ) {
         self.persona = persona
@@ -38,6 +45,7 @@ public struct ChatConfig: Sendable, Equatable, Codable {
         self.context = context
         self.responseFormat = responseFormat
         self.thinkingEnabled = thinkingEnabled
+        self.toolToggle = toolToggle
         self.hybrid = hybrid
     }
 

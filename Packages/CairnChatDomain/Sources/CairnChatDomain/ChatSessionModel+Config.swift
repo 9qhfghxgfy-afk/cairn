@@ -11,9 +11,14 @@ extension ChatSessionModel {
     /// The exact block this chat would inject on the current turn. The configuration sheet shows
     /// this live, character for character, as toggles move.
     public var injectedContextPreview: String {
-        conversation.config.systemPrompt(
-            in: contextEnvironment,
-            turn: currentTurnContext
+        guard let provider = activeProvider else {
+            return conversation.config.systemPrompt(in: contextEnvironment, turn: currentTurnContext)
+        }
+        // The same call the turn uses, tool block included: a preview that leaves the tool block out
+        // would show a prompt the request does not send.
+        let selection = toolSelection(for: provider)
+        return systemPrompt(
+            for: provider, selection: selection, format: toolRouting(for: provider).format
         )
     }
 
@@ -36,6 +41,7 @@ extension ChatSessionModel {
     func turnContext(for provider: any InferenceProvider) -> TurnContext {
         let capabilities = provider.capabilities
         let config = conversation.config
+        let offered = toolSelection(for: provider)
         return TurnContext(
             backendLabel: Self.backendLabel(for: provider),
             onDevice: provider.networkClass == .onDevice,
@@ -43,7 +49,12 @@ extension ChatSessionModel {
             // "On" only when the user asked for it and this backend really produces it; a reasoning
             // panel may not be promised to a backend that has not been seen to emit one.
             thinkingOn: config.thinkingEnabled && capabilities.thinking,
-            toolsActive: false,
+            // Tools are "active" only when something is actually offered to this engine: a chip that
+            // is up against a registry with no tools, or a hybrid turn that cannot run a call, gets no
+            // tool line — and a capability line claiming a tool the model was never given teaches it
+            // to invent one.
+            toolsActive: !offered.isEmpty,
+            toolNames: ToolPromptBlock.names(offered.definitions),
             webFetchActive: false,
             visionOn: capabilities.vision,
             contextTokens: config.sampling.contextWindow

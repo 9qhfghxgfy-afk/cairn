@@ -4,6 +4,13 @@ import Foundation
 extension ChatSessionModel {
 
     func beginStreaming(assistantNodeID: UUID, provider: any InferenceProvider) {
+        // A turn with tools armed runs the multi-step loop instead of one stream: one stream cannot
+        // carry "call, read the result, answer", and a model that is offered tools it cannot use would
+        // report a result it never received.
+        if toolRouting(for: provider).offersTools {
+            beginToolTurn(assistantNodeID: assistantNodeID, provider: provider)
+            return
+        }
         let history = ChatTree.visiblePath(nodes: nodes, activeLeafID: assistantNodeID)
         // One assembly, one system message. The same `systemPrompt(in:turn:)` call is what the
         // configuration sheet previews, so what the user saw is what goes on the wire, and the

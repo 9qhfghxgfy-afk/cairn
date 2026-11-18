@@ -125,6 +125,16 @@ public struct ChatNode: Sendable, Equatable, Identifiable {
     public var drafts: [CandidateDraft]
     /// Measured only when a provider emitted `.metrics`; never estimated.
     public var metrics: GenerationMetrics?
+    /// What this turn was offered, kept so a transcript can say which tools the model could reach
+    /// without re-deriving it from settings the user may have changed since. Empty for every message
+    /// written before P3.
+    public var toolsOffered: [String]
+    /// Every call this answer was built from, in the order they ran, plus how many round trips they
+    /// took and which protocol carried them. One value written whole, in its own column, for the same
+    /// reason `HybridProvenance` is: several related facts about one node that would otherwise make
+    /// every added field a schema migration. A node with no tools has no `ToolRun` at all — which is
+    /// how a pre-P3 row keeps reading as "no tools ran" rather than "zero tools ran, somehow".
+    public var toolRun: ToolRun?
     /// How a hybrid turn was produced: which engines were candidates, which one wrote the
     /// unified answer, and what failed. `nil` for every non-hybrid node and for every
     /// message written before M4.
@@ -145,7 +155,9 @@ public struct ChatNode: Sendable, Equatable, Identifiable {
         createdAt: Date = Date(),
         drafts: [CandidateDraft] = [],
         metrics: GenerationMetrics? = nil,
-        provenance: HybridProvenance? = nil
+        provenance: HybridProvenance? = nil,
+        toolsOffered: [String] = [],
+        toolRun: ToolRun? = nil
     ) {
         self.id = id
         self.conversationID = conversationID
@@ -162,6 +174,8 @@ public struct ChatNode: Sendable, Equatable, Identifiable {
         self.drafts = drafts
         self.metrics = metrics
         self.provenance = provenance
+        self.toolsOffered = toolsOffered
+        self.toolRun = toolRun
     }
 }
 
