@@ -8,6 +8,12 @@ import CairnChatDomain
 /// page never made, and a body read past its cap is a download the tool had already refused.
 final class HTMLTextExtractorTests: XCTestCase {
 
+    private func call(_ url: String) -> ToolCall {
+        ToolCall(id: "call-1", name: BuiltInTool.webFetch, arguments: ["url": .text(url)])
+    }
+
+    private let turn = ToolExecutionContext(toolsEnabled: true, outboundWebAllowed: true)
+
     /// The bound travels with the request instead of being applied to a body already read in full, and
     /// the real delegate stops one byte past it. "Too large" is reported as the reason, because
     /// "cancelled" would make it look as though the user had stopped the turn.
