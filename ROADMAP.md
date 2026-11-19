@@ -23,7 +23,7 @@ Gate for every milestone (from `.clinerules`):
 | P1 | Servers parity: active-server selection, one-tap switching with per-server last model, `lmStudio`/`ollamaCloud` kinds, guide sheet, user-initiated LAN scan | **done** — code + all five required suites green on `de0ec5a` | [44015633614](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/44015633614) |
 | P2 | Per-chat + default configuration, `configured` vs `unset`, capability-filtered payloads, injected context, themes | **done** — code + both new simulator suites and the domain suite green on `823bd86` | [44144881214](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/44144881214) |
 | P3 | Tool runtime + five built-ins + search routing (keyless / own SearXNG / Ollama Cloud key-gated) + `Thinking`/`Tools` chips + Statistics toggle | **done** — code + every tool suite green on `0b3e3fc` | [44242238211](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/44242238211) |
-| P3b | Task B — Web search providers: DuckDuckGo default, own SearXNG, Ollama Cloud; consent asked before the socket; the Web Search settings screen | **closed (code + CI)** — guards 53/53, host suites 492 domain + 170 remote + 60 on-device + 17 native, simulator build **SUCCEEDED** and 171 `CairnTests` green on `f7a4f77`; **not** on-device-verified, **not** real-network-verified | [44567976658](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/44567976658) |
+| P3b | Task B — Web search providers: DuckDuckGo default, own SearXNG, Ollama Cloud; consent asked before the socket; the Web Search settings screen | **closed (code + CI)** — guards 53/53, host suites 492 domain + 170 remote + 60 on-device + 17 native, simulator build **SUCCEEDED** and 171 `CairnTests` green on `f7a4f77`; **not** on-device-verified, **not** real-network-verified — the 16-line Task B device checklist stays open (see `## Task B`) | [44567976658](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/44567976658) |
 | P4 | LAN model sharing: `NWListener` surface answering Ollama's `/api/*` and OpenAI's `/v1/*`, per-session opt-in, generated key in its own Keychain service, foreground-only | **closed (code + CI)** — guards, all four host suites, simulator build and 147 `CairnTests` green on `b523ca9`; **not** on-device-verified, **not** real-network-verified | [44466484720](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/44466484720) |
 | P5 | Accessibility pass, AppIcon pipeline, licenses + privacy statement + issues link, doc refresh | todo | |
 
@@ -1394,7 +1394,6 @@ re-litigate it.
   instead of 30.
 
 ### M5 device checklist — run this on the iPhone to close M5 honestly
-### M5 device checklist — run this on the iPhone to close M5 honestly
 
 Each line states what it proves. A pass on one line is not evidence for the next.
 
@@ -1953,3 +1952,48 @@ scratch-tree host build accepts most of it, which is the point: the lesson is th
   server too. Away from home it is the tunnel, not a certificate, that protects the path — which is why the code
   classifies destinations instead of encrypting them, and why a plaintext row carries a visible badge rather than
   a silent ATS exception.
+
+### Task B device checklist — run this on the iPhone and on a real network
+
+A green simulator lane proves the logic and the build. It does not prove any line below. Each item says what it
+proves; a pass on one is not evidence for the next. Record what the phone actually did, not what was expected.
+
+1. **Build and run from Xcode on the iPhone.** Proves the generated project picked up the consent sheet, the
+   settings screen and `GuideBlock` with no hand-edit to `Cairn.xcodeproj`.
+2. **Arm a web tool and ask the built-in provider a question.** The sheet appears **before** any result, naming
+   the provider and saying the query leaves the device. A result that arrives with no sheet is the defect this
+   whole task exists to prevent.
+3. **Answer No.** The turn answers with the typed refusal rather than a spinner or a "tool broke" message, and a
+   second search in the same chat does not ask again.
+4. **Answer Yes, then search again.** No second sheet. The outbound badge appears and stays up for the rest of the
+   conversation, including after leaving the chat and reopening it from the list.
+5. **Ask something that needs a page read.** It is its own question. Answering it once covers reads to a
+   different host later; a search grant alone must **not** have answered it.
+6. **Close the sheet without answering.** Counts as No and is recorded, and the next turn does not ask. Walking
+   away cannot read as agreement.
+7. **Deny Local Network in iOS Settings, then search a LAN row.** Read out exactly what the app prints. The
+   labelled Local Network refusal only appears if the errno evidence is really there; if it prints `unreachable`
+   instead, that is the honest answer and the guess stays labelled. **This item decides whether the EPERM guess
+   is right — write down which one it printed.**
+8. **Add your own SearXNG row on the LAN over plain `http://`, then Test Connection.** It saves, the `Plaintext`
+   badge shows on the row, no ATS exception was needed, and the first request raises the iOS Local Network
+   prompt. If iOS blocks it, that is the denial-with-no-retry case, not a bug to code around.
+9. **Search through that row.** Results come from your instance, the result names the row that produced them, and
+   nothing goes to the public endpoint while that row is active.
+10. **Move that row's address to another host.** The permission returns to undecided and the next search asks
+    again — a grant must not travel with the row to somebody else's instance.
+11. **Delete the row.** Its key is gone from the Keychain (re-add the same row and it asks for a key again), and
+    the app says it reverted to the built-in provider rather than quietly searching somewhere else.
+12. **Away from home, over your own WireGuard tunnel.** The tunnel address reaches the same server over plain
+    `http://`, and the badge still tells private-network traffic and public-internet traffic apart honestly.
+13. **Hit a site that answers `403` or a bot check.** The tool says it was blocked — not "nothing found", not a
+    crash. A confident empty answer is the failure mode here.
+14. **With an Ollama Cloud row and a real key:** the query goes to Ollama's endpoint with that key and no other
+    row's credential, and a LAN server's bearer token is never used as a search key.
+15. **Kill the app mid-conversation, reopen it, and reboot the phone.** Consent records, provider rows, the active
+    row and the page-read answer all come back; the Keychain item survives a reboot and does not survive a device
+    wipe.
+16. **Airplane mode, then search.** It reads as offline — not as a refusal, not as a broken tool, not a hang.
+
+**What closing this list would mean:** on-device-verified and real-network-verified could be cited for Task B.
+Until then Task B is closed at the CI gate only, and that distinction is the whole point of the list.
