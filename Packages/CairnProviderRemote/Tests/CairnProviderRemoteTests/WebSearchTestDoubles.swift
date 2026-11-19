@@ -9,6 +9,10 @@ import CairnChatDomain
 /// A requester is a `@MainActor` closure because asking is a UI act. The recorder is the test's side of
 /// that: it answers, and it keeps the order. "Asked and refused" and "never asked" are different facts, and
 /// only the recorder can tell them apart afterwards.
+///
+/// A test that counts requests across two tools hands the recorder in. Each tool would otherwise build its
+/// own, and the second tool's requests would be counted by a recorder the test never looks at — which reads
+/// as "one request" no matter what the tool did.
 func searchTool(
     _ state: WebSearchState,
     reply: WebHTTPResponse = .json(
@@ -16,9 +20,10 @@ func searchTool(
     ),
     throws error: (any Error)? = nil,
     throttle: WebSearchThrottle? = nil,
-    consent: WebSearchConsentRequester? = nil
+    consent: WebSearchConsentRequester? = nil,
+    transport sharedTransport: RecordingWebTransport? = nil
 ) -> (WebSearchTool, RecordingWebTransport) {
-    let transport = RecordingWebTransport(reply: reply, throws: error)
+    let transport = sharedTransport ?? RecordingWebTransport(reply: reply, throws: error)
     let tool = WebSearchTool(
         state: { state }, transport: transport, throttle: throttle ?? WebSearchThrottle(),
         consent: consent
@@ -62,13 +67,15 @@ final class ConsentRecorder: @unchecked Sendable {
 }
 
 /// Asserts the typed failure a search throws, so a change of case cannot slip through as "still fails".
-func expectSearchFailure(_ error: ToolError, _ body: () async throws -> ToolOutcome) async {
+/// The expected value is named apart from `error`: inside the trailing `catch`, `error` is whatever the
+/// tool actually threw, and that has no `rawValue` to compare against.
+func expectSearchFailure(_ expected: ToolError, _ body: () async throws -> ToolOutcome) async {
     do {
         _ = try await body()
-        XCTFail("expected \(error.rawValue)")
+        XCTFail("expected \(expected.rawValue)")
     } catch let thrown as ToolFailure {
-        XCTAssertEqual(thrown.error, error)
+        XCTAssertEqual(thrown.error, expected)
     } catch {
-        XCTFail("expected \(error.rawValue), threw a different kind of error")
+        XCTFail("expected \(expected.rawValue), threw a different kind of error")
     }
 }

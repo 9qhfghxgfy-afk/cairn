@@ -24,6 +24,9 @@ enum DuckDuckGoHTML {
     /// walk a whole document.
     private static let attributeWindow = 400
 
+    /// How far back from an anchor to look for the sponsored marker, for the same reason.
+    private static let adLookback = 240
+
     /// What kind of page this endpoint sent back, told apart by its markers.
     ///
     /// The distinction is the whole point of this type: a page with no result markers may be an honest
@@ -51,10 +54,14 @@ enum DuckDuckGoHTML {
         var found: [WebSearchResult] = []
         var seen = Set<String>()
         var search = Substring(html)
+        /// The anchor already examined, which is where this result's own markup begins.
+        var previousAnchorEnd: String.Index?
         while found.count < max(1, limit), let mark = search.range(of: anchorMarker) {
             let tail = search[mark.upperBound...]
             search = tail
-            guard !isAd(mark, in: html),
+            let windowStart = previousAnchorEnd ?? html.startIndex
+            previousAnchorEnd = mark.upperBound
+            guard !isAd(mark.lowerBound, from: windowStart, in: html),
                   let href = attribute("href", in: tail),
                   let target = resolve(href),
                   !seen.contains(target)
@@ -73,10 +80,17 @@ enum DuckDuckGoHTML {
     ///
     /// A tool result is plain text handed to a model, which has no badge to read and every reason to cite
     /// whatever is in front of it. A paid link presented as a source is a source that was bought, so it is
-    /// not in the list at all. The class is looked for just before the anchor because that is where the
-    /// enclosing element carries it.
-    private static func isAd(_ mark: String.Index, in html: String) -> Bool {
-        html[html.startIndex...mark].suffix(240).contains(adMarker)
+    /// not in the list at all.
+    ///
+    /// The marker is read between the previous result's anchor and this one, because that stretch is this
+    /// result's own markup — the wrapper element carries `result--ad` there. Reading further back takes the
+    /// result before this one's marker for this one's, which would drop every organic link that follows an
+    /// ad, and an ad block is what this endpoint puts at the top of the page.
+    private static func isAd(
+        _ mark: String.Index, from windowStart: String.Index, in html: String
+    ) -> Bool {
+        guard windowStart <= mark else { return false }
+        return html[windowStart...mark].suffix(adLookback).contains(adMarker)
     }
 
     /// `name="value"`, read within the attribute window.

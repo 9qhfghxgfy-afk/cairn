@@ -26,7 +26,18 @@ public struct WebSearchTool: ToolExecuting {
     public init(
         state: @escaping WebSearchStateReader,
         transport: any WebRequesting = WebHTTPTransport(),
-        throttle: WebSearchThrottle = WebSearchThrottle(),
+        consent: WebSearchConsentRequester? = nil
+    ) {
+        // The throttle is internal on purpose: pacing and the short result cache are this tool's own
+        // conduct, not a knob a caller gets to turn. A test that needs to watch them builds the actor
+        // directly through the internal initializer below.
+        self.init(state: state, transport: transport, throttle: WebSearchThrottle(), consent: consent)
+    }
+
+    init(
+        state: @escaping WebSearchStateReader,
+        transport: any WebRequesting,
+        throttle: WebSearchThrottle,
         consent: WebSearchConsentRequester? = nil
     ) {
         self.state = state

@@ -26,7 +26,7 @@ final class WebSearchCourtesyAndCountTests: XCTestCase {
         let (first, transport) = searchTool(state, throttle: pace)
         _ = try await first.execute(searchCall("rain in Paris"), context: armedContext)
 
-        let (second, _) = searchTool(state, throttle: pace)
+        let (second, _) = searchTool(state, throttle: pace, transport: transport)
         let outcome = try await second.execute(searchCall("rain in Paris"), context: armedContext)
 
         XCTAssertTrue(outcome.succeeded)
@@ -42,7 +42,7 @@ final class WebSearchCourtesyAndCountTests: XCTestCase {
         let state = searchState(lanRow())
         let (first, transport) = searchTool(state, throttle: pace)
         _ = try await first.execute(searchCall("Rain  in Paris"), context: armedContext)
-        let (second, _) = searchTool(state, throttle: pace)
+        let (second, _) = searchTool(state, throttle: pace, transport: transport)
         _ = try await second.execute(searchCall("rain in paris"), context: armedContext)
         XCTAssertEqual(transport.requestCount, 1, "case and spacing are noise; the query is the query")
     }
@@ -55,7 +55,7 @@ final class WebSearchCourtesyAndCountTests: XCTestCase {
         let other = searchState(lanRow(name: "Other"))
         let (first, transport) = searchTool(box, throttle: pace)
         _ = try await first.execute(searchCall("rain in Paris"), context: armedContext)
-        let (second, _) = searchTool(other, throttle: pace)
+        let (second, _) = searchTool(other, throttle: pace, transport: transport)
         _ = try await second.execute(searchCall("rain in Paris"), context: armedContext)
         XCTAssertEqual(transport.requestCount, 2, "a different row asks again")
     }
@@ -69,7 +69,7 @@ final class WebSearchCourtesyAndCountTests: XCTestCase {
         let bounded = searchState(row, resultCount: 3)
         let (first, transport) = searchTool(plain, throttle: pace)
         _ = try await first.execute(searchCall("rain in Paris"), context: armedContext)
-        let (second, _) = searchTool(bounded, throttle: pace)
+        let (second, _) = searchTool(bounded, throttle: pace, transport: transport)
         _ = try await second.execute(searchCall("rain in Paris"), context: armedContext)
         XCTAssertEqual(transport.requestCount, 2, "a different count is a different answer")
     }
@@ -86,7 +86,7 @@ final class WebSearchCourtesyAndCountTests: XCTestCase {
         _ = try await first.execute(searchCall("rain in Paris"), context: armedContext)
 
         let started = Date()
-        let (second, _) = searchTool(state, throttle: pace)
+        let (second, _) = searchTool(state, throttle: pace, transport: transport)
         _ = try await second.execute(searchCall("snow in Oslo"), context: armedContext)
         let waited = Date().timeIntervalSince(started)
 
