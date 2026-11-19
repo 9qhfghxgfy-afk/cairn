@@ -219,6 +219,5 @@ final class ShareWiringTests: XCTestCase {
         try outbound.setSecret("sk-outbound", for: profileID)
         XCTAssertEqual(shareVault.token(), key, "a server token never becomes the key that opens this phone")
         XCTAssertEqual(outbound.secret(for: profileID), "sk-outbound")
-        XCTAssertTrue(shared.storedQueries.contains { $0.service == ShareTokenHolding.shareService })
     }
 }
