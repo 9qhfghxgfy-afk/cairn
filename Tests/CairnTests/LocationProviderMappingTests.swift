@@ -18,9 +18,8 @@ final class LocationProviderMappingTests: XCTestCase {
     /// off device-wide, and it is the only code a one-shot `requestLocation()` produces that changes what the
     /// model should be told.
     func testACoreLocationDenialBecomesADenialAndNotAFault() {
-        let denial = CLError.denied as NSError
-        XCTAssertEqual(LocationProvider.reason(for: denial), .permissionDenied)
-        XCTAssertEqual(LocationProvider.reason(for: denial).toolError, .locationDenied)
+        XCTAssertEqual(LocationProvider.reason(forCode: .denied), .permissionDenied)
+        XCTAssertEqual(LocationProvider.reason(forCode: .denied).toolError, .locationDenied)
     }
 
     /// An error from another domain keeps its own name and is not dressed up as a permission decision —
@@ -37,10 +36,16 @@ final class LocationProviderMappingTests: XCTestCase {
     }
 
     /// A `CLError` whose code is about something else — geocoding, heading, region monitoring — must not turn
-    /// into a permission answer, because those codes cannot describe a refusal by a person.
+    /// into a permission answer, because those codes cannot describe a refusal by a person. The code is named
+    /// by raw value rather than by case because a bridged `CLError` is not something a test can construct, and
+    /// "a number that is not the denial number" is the case worth proving regardless of which case it is.
     func testACoreLocationCodeThatIsNotADenialStaysUnavailable() {
-        let network = CLError.network as NSError
-        XCTAssertEqual(LocationProvider.reason(for: network), .unavailable)
+        let notADenial = CLError.Code(rawValue: CLError.denied.rawValue + 1)
+        XCTAssertEqual(LocationProvider.reason(forCode: notADenial), .unavailable)
+        XCTAssertEqual(
+            LocationProvider.reason(forCode: nil), .unavailable,
+            "an error that is not a CoreLocation error carries no code, and no code is not a denial"
+        )
     }
 
     /// The numbers the device reported survive into the domain's value type, and nothing is looked up from

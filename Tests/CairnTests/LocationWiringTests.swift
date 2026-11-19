@@ -91,7 +91,14 @@ final class LocationWiringTests: XCTestCase {
     func testTheToolStopsAtTheSheetWithTheRadioStillAsleep() async {
         let source = CountingLocationSource(fix: reading)
         let wiring = LocationWiring.install(source: source)
-        async let outcome = registry(wiring).execute(call(), context: turnOn)
+        // Everything the child task needs is bound here first. `async let` may run its body in a context that
+        // cannot be handed `self`, and a `XCTestCase` is non-Sendable — so naming an instance method or a
+        // computed property inside it means sending the test object across an isolation boundary, which CI
+        // rejected at 44629653191. The registry, the call and the context are all values; the test object is not.
+        let request = call()
+        let toolRegistry = registry(wiring)
+        let context = turnOn
+        async let outcome = toolRegistry.execute(request, context: context)
 
         let appeared = await waitUntil { wiring.consent.isAsking }
         XCTAssertTrue(appeared, "the tool must raise the sheet before it reads anything")
@@ -108,7 +115,7 @@ final class LocationWiringTests: XCTestCase {
         let callsAfter = source.calls
         XCTAssertEqual(callsAfter, 1, "the radio is reached exactly once, after the yes")
         let state = await wiring.gate.state
-        XCTAssertEqual(state, .allowed)
+        XCTAssertEqual(state, .granted)
 
         let again = await registry(wiring).execute(call(), context: turnOn)
         XCTAssertNil(again.error, "an allowed record answers without interrupting anyone twice")
@@ -124,7 +131,10 @@ final class LocationWiringTests: XCTestCase {
     func testWalkingAwayFromTheSheetIsARefusalThatNeverReachesTheRadio() async {
         let source = CountingLocationSource(fix: reading)
         let wiring = LocationWiring.install(source: source)
-        async let outcome = registry(wiring).execute(call(), context: turnOn)
+        let request = call()
+        let toolRegistry = registry(wiring)
+        let context = turnOn
+        async let outcome = toolRegistry.execute(request, context: context)
 
         let appeared = await waitUntil { wiring.consent.isAsking }
         XCTAssertTrue(appeared, "walking away only means something if there was a sheet to walk away from")
@@ -151,8 +161,11 @@ final class LocationWiringTests: XCTestCase {
     func testTwoTurnsThatAskAtOnceShareOneSheet() async {
         let source = CountingLocationSource(fix: reading)
         let wiring = LocationWiring.install(source: source)
-        async let first = registry(wiring).execute(call(), context: turnOn)
-        async let second = registry(wiring).execute(call(), context: turnOn)
+        let request = call()
+        let toolRegistry = registry(wiring)
+        let context = turnOn
+        async let first = toolRegistry.execute(request, context: context)
+        async let second = toolRegistry.execute(request, context: context)
 
         let appeared = await waitUntil { wiring.consent.isAsking }
         XCTAssertTrue(appeared)
@@ -184,7 +197,7 @@ final class LocationWiringTests: XCTestCase {
         XCTAssertEqual(calls, 1, "one attempt, no retry loop behind a refusal")
         XCTAssertFalse(wiring.consent.isAsking, "the record was already answered, so no sheet came up")
         let state = await wiring.gate.state
-        XCTAssertEqual(state, .allowed, "our record stands — the denial belongs to iOS")
+        XCTAssertEqual(state, .granted, "our record stands — the denial belongs to iOS")
     }
 
     /// A switched-off Location Service is a different fact from a refused permission, and it needs different

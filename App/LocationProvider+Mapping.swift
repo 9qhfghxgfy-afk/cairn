@@ -19,9 +19,18 @@ extension LocationProvider {
     /// `nonisolated` because the delegate runs it on CoreLocation's delivery thread **before** hopping to the
     /// main actor, so that the only thing crossing that boundary is a `Sendable` reason value. Members of an
     /// extension of a `@MainActor` type are main-actor-isolated by default, which would undo that.
-    nonisolated static func reason(for error: any Error) -> LocationFailureReason {
-        guard (error as? CLError)?.code == .denied else { return .unavailable }
+    ///
+    /// The decision is written against the code rather than the error so that it can be tested: a bridged
+    /// `CLError` is not a value a test can build — `CLError.denied as NSError` does not compile, which CI
+    /// found at 44629653191 — and a translation this consequential has to be proved, not eyeballed.
+    nonisolated static func reason(forCode code: CLError.Code?) -> LocationFailureReason {
+        guard code == .denied else { return .unavailable }
         return .permissionDenied
+    }
+
+    /// The one line that touches the bridged error type, kept separate from the decision it feeds.
+    nonisolated static func reason(for error: any Error) -> LocationFailureReason {
+        reason(forCode: (error as? CLError)?.code)
     }
 
 
