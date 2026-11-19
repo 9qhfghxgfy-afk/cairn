@@ -121,3 +121,15 @@ func cloudRow(name: String = "Cloud") -> WebSearchProviderProfile {
         credentialShape: .bearer, hasCredential: true
     )
 }
+
+/// A fetch tool whose consent question is already answered yes.
+///
+/// The gate is a separate claim with its own file (`WebFetchConsentTests`); every other test here is about
+/// the address guard, the redirect, the byte bound or the headers, and a nil seam would answer all of them
+/// with "Cairn has to ask first" before any of that code ran. Passing `true` here is not the same as the
+/// seam being absent — nil means nobody was asked, which the tool treats as denial.
+func openFetchTool(
+    _ transport: any WebRequesting, byteLimit: Int = 400_000
+) -> WebFetchTool {
+    WebFetchTool(transport: transport, byteLimit: byteLimit, consent: { _ in true })
+}

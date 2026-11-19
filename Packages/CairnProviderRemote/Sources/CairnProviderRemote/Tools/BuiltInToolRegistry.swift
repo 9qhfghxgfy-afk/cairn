@@ -18,12 +18,18 @@ public enum BuiltInToolRegistry {
     ///   - mailPresenter: the device's mail composer; nil on a build or device with none, which leaves
     ///     `compose_mail` out rather than offering a tool that can only fail.
     ///   - webToolsAllowed: the app-wide acknowledgement that a tool's query may reach a public service.
+    ///   - consent: asks a person whether the active provider may receive a query. nil means nobody is
+    ///     there to ask, which is denial rather than permission — see `WebSearchConsentGate`.
+    ///   - fetchConsent: the same question for `web_fetch`, so one decision covers both ways a web tool can
+    ///     leave the device. nil is the same denial. A page read is not a query to the selected provider, so
+    ///     it is asked about by host rather than by provider — but it is the same person's answer.
     public static func make(
         searchState: @escaping WebSearchStateReader,
         mailPresenter: (any MailDraftPresenting)? = nil,
         webToolsAllowed: Bool,
         transport: any WebRequesting = WebHTTPTransport(),
-        consent: WebSearchConsentRequester? = nil
+        consent: WebSearchConsentRequester? = nil,
+        fetchConsent: WebFetchConsentRequester? = nil
     ) -> ToolRegistry {
         var tools: [any ToolExecuting] = [CalculatorTool()]
         if let mailPresenter {
@@ -31,7 +37,7 @@ public enum BuiltInToolRegistry {
         }
         guard webToolsAllowed else { return ToolRegistry(tools: tools) }
         tools.append(WebSearchTool(state: searchState, transport: transport, consent: consent))
-        tools.append(WebFetchTool(transport: transport))
+        tools.append(WebFetchTool(transport: transport, consent: fetchConsent))
         tools.append(WikiSearchTool(transport: transport))
         return ToolRegistry(tools: tools)
     }

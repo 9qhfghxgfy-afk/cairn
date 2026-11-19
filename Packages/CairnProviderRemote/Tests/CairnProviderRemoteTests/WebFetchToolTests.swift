@@ -57,7 +57,7 @@ final class WebFetchToolTests: XCTestCase {
         ] {
             let transport = RecordingWebTransport(reply: .html("<html><body>read</body></html>"))
             do {
-                _ = try await WebFetchTool(transport: transport).execute(call(blocked), context: turn)
+                _ = try await openFetchTool(transport).execute(call(blocked), context: turn)
                 XCTFail("\(blocked) must never be fetched")
             } catch let failure as ToolFailure {
                 XCTAssertTrue(
@@ -77,7 +77,7 @@ final class WebFetchToolTests: XCTestCase {
             reply: .html("<html><body>read</body></html>", from: landing)
         )
         do {
-            _ = try await WebFetchTool(transport: transport)
+            _ = try await openFetchTool(transport)
                 .execute(call("https://example.com/redirect"), context: turn)
             XCTFail("a body that arrived from a private address is not a page to read")
         } catch let failure as ToolFailure {

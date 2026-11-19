@@ -13,6 +13,18 @@ public struct WebToolSettings: Sendable, Equatable, Codable {
     /// `WebSearchMigration` so an upgrade imports an address instead of losing it; the active provider row
     /// is what decides where a query goes now.
     public var searxngURL: String?
+    /// Whether a page may be read off this device, as one answer for the whole tool: nil means the question
+    /// has never been put, true means it was allowed, false means it was refused and is remembered.
+    ///
+    /// It is a single bit rather than one record per host because the destinations are unbounded — a tool
+    /// that asked afresh about every host would be asking all day, and a person who has answered "yes" to
+    /// reading pages has already answered the question that matters. Search keeps its per-provider record
+    /// because there the subject is a specific third party the user chose, and a grant given to one instance
+    /// must not travel to another.
+    ///
+    /// Held optional for the same reason the whole struct is optional: a synthesized decoder reads a missing
+    /// key as nil, so an upgrade from a build without this field still decodes.
+    public var fetchAllowed: Bool?
     /// The provider list, the active row, the result count and per-provider consent. nil means "this build's
     /// settings predate providers", which reads as `WebSearchSettings.default` — DuckDuckGo active, five
     /// results, nothing consented to. Held **optional** for the same reason the whole struct is: a
@@ -23,10 +35,12 @@ public struct WebToolSettings: Sendable, Equatable, Codable {
     public init(
         outboundAllowed: Bool = false,
         searxngURL: String? = nil,
+        fetchAllowed: Bool? = nil,
         search: WebSearchSettings? = nil
     ) {
         self.outboundAllowed = outboundAllowed
         self.searxngURL = searxngURL?.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.fetchAllowed = fetchAllowed
         self.search = search
     }
 
@@ -38,6 +52,16 @@ public extension AppSettings {
     var outboundWebAllowed: Bool { webTools?.outboundAllowed ?? false }
 
     var searxngURL: String? { webTools?.searxngURL }
+
+    /// The page-reading answer as one record: nil means the question has never been put, so the tool has to
+    /// ask rather than assume. Absent is not permission.
+    var webFetchAllowed: Bool? { webTools?.fetchAllowed }
+
+    mutating func setWebFetchAllowed(_ allowed: Bool?) {
+        var updated = webTools ?? .default
+        updated.fetchAllowed = allowed
+        webTools = updated
+    }
 
     mutating func setOutboundWebAllowed(_ allowed: Bool) {
         var updated = webTools ?? .default

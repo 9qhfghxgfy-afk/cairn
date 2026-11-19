@@ -19,7 +19,7 @@ final class HTMLTextExtractorTests: XCTestCase {
     /// "cancelled" would make it look as though the user had stopped the turn.
     func testTheByteBoundIsCarriedWithTheRequestAndEnforcedAsBytesArrive() async throws {
         let transport = RecordingWebTransport(reply: .html("<html><body>small</body></html>"))
-        let outcome = try await WebFetchTool(transport: transport, byteLimit: 4096)
+        let outcome = try await openFetchTool(transport, byteLimit: 4096)
             .execute(call("https://example.com/page"), context: turn)
         XCTAssertTrue(outcome.succeeded)
         XCTAssertEqual(transport.byteLimits, [4096], "the tool's own bound is what the transport caps at")

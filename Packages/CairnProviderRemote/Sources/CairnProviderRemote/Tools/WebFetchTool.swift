@@ -9,16 +9,23 @@ import CairnChatDomain
 /// readable text by `HTMLTextExtractor` so navigation and script do not arrive as though they were the
 /// article. No cookie is sent and none is kept, because a fetch tool that holds cookies turns a page
 /// read into a reader identified.
+///
+/// It shares the search tool's consent gate, and that is the point: one decision, asked once, covers both
+/// ways a web tool can leave the device. A sheet for each tool would be two interruptions for one answer.
 public struct WebFetchTool: ToolExecuting {
     private let transport: any WebRequesting
     private let byteLimit: Int
+    /// The one question this tool may not answer for the user: may a page be read off this device.
+    private let consent: WebFetchConsentRequester?
 
     public init(
         transport: any WebRequesting = WebHTTPTransport(),
-        byteLimit: Int = 400_000
+        byteLimit: Int = 400_000,
+        consent: WebFetchConsentRequester? = nil
     ) {
         self.transport = transport
         self.byteLimit = byteLimit
+        self.consent = consent
     }
 
     public var definition: ToolDefinition {
@@ -47,6 +54,17 @@ public struct WebFetchTool: ToolExecuting {
         _ call: ToolCall, context: ToolExecutionContext
     ) async throws -> ToolOutcome {
         let url = try WebFetchGuard.check(call.arguments["url"]?.coercedText ?? "")
+        // Consent before the socket, exactly as `web_search` does it. The address is checked first because
+        // a private or non-https target is refused on its own merits and must not spend a prompt; but no
+        // request is built until a person has answered, so a refusal costs no DNS lookup, no bytes, no
+        // latency. A build with nobody to ask gets the typed "Cairn has to ask first" refusal rather than a
+        // silent yes — the default is denial, because the alternative is consent the user never gave.
+        guard let consent else {
+            throw ToolFailure(.internetNotAllowed, detail: Self.refusalDetail(asked: false))
+        }
+        guard await consent(url) else {
+            throw ToolFailure(.internetNotAllowed, detail: Self.refusalDetail(asked: true))
+        }
         let response = try await transport.send(
             WebFetchGuard.request(for: url, accept: "text/html"),
             byteLimit: byteLimit,
@@ -68,6 +86,18 @@ public struct WebFetchTool: ToolExecuting {
             callID: call.id, toolName: call.name,
             output: "Read \(response.finalURL?.host ?? url.host ?? "")\n\n\(text)"
         )
+    }
+
+    /// The refusal a fetch returns when the page may not be read. Two sentences for two different facts,
+    /// as in `WebSearchTool`: a person who said no has closed this, and a build with nobody to ask has not
+    /// asked yet. The first tells the model to stop; the second says the question is still open, which is
+    /// the only case where allowing web search in Settings changes anything.
+    static func refusalDetail(asked: Bool) -> String {
+        guard asked else {
+            return "Cairn has to ask before a page is read off this device. Allow web search in Settings, "
+                + "then read the page again."
+        }
+        return "The user chose not to let pages be read off this device. Do not try another address."
     }
 
     /// HTML through the extractor, anything else as text if it decodes as text at all. A binary body

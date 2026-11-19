@@ -1,46 +1,19 @@
 import Foundation
 import CairnChatDomain
 
-/// What "Test Connection" answered.
-///
-/// The same taxonomy the tool reports during a turn, on purpose: a row that tests `blocked` must report
-/// `blocked` in a conversation. Two names for one condition is how a settings screen ends up disagreeing
-/// with a tool card, and then the user has to work out which one is lying.
-public enum WebSearchTestStatus: Sendable, Equatable {
-    case ok(results: Int, milliseconds: Int)
-    case empty
-    case failure(WebSearchFailure)
-
-    /// The line under the row. `format=json` is named only for SearXNG, because that is the one case where
-    /// the instance is fine and its configuration is the thing in the way — and it is by far the most common
-    /// reason a first test comes back `403` or unreadable.
-    public func detail(providerKind: WebSearchProviderKind) -> String {
-        switch self {
-        case .ok(let count, let milliseconds):
-            return "Reachable — \(count) result\(count == 1 ? "" : "s") in \(milliseconds) ms."
-        case .empty:
-            return "Reachable, but it returned nothing for the test query."
-        case .failure(let failure):
-            if failure == .unrecognizedResponse, providerKind == .searxng {
-                return "It answered, but not as JSON. A SearXNG instance has to allow format=json in "
-                    + "settings.yml before Cairn can read it."
-            }
-            if failure == .blocked, providerKind == .searxng {
-                return "The instance refused the request. The usual reason is that JSON output is not "
-                    + "enabled in settings.yml."
-            }
-            return failure.userText
-        }
-    }
-}
-
 /// One harmless query against one provider row, so a Settings screen can say whether a row works before a
 /// conversation has to find out the hard way.
 ///
+/// The answer it produces, `WebSearchTestStatus`, is a domain value — see that file for why the value and
+/// the asking live in different modules. The taxonomy is deliberately the same one the tool reports during
+/// a turn: a row that tests `blocked` must report `blocked` in a conversation.
+///
 /// Deliberately narrow: one fixed query, the row's own parameters, the row's own credential, nothing from
 /// any chat. A tester that searched the user's last message would be a privacy hole dressed as a button.
-public struct WebSearchConnectionTester: Sendable {
-    /// Fixed and boring. A test query should not become somebody's analytics signal.
+public struct WebSearchConnectionTester: WebSearchConnectionTesting {
+    /// Fixed and boring. A test query is Cairn's own words, so it must never become a signal somebody
+    /// else counts — a settings button that sends a different query each press is one way a user's
+    /// habits leak out of an app that claims otherwise.
     static let testQuery = "hello"
 
     private let transport: any WebRequesting
