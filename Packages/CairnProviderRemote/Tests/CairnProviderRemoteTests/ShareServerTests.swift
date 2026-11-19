@@ -20,28 +20,37 @@ final class ShareServerTests: XCTestCase {
     }
 
     func testEveryRefusalIsReturnedAsTheCodeThatStoppedIt() async {
+        // Each `start` is awaited into a name first: XCTest's assertions take autoclosures, and an
+        // autoclosure does not run concurrency, so `XCTAssertEqual(await …)` does not compile.
         let noKey = server()
-        XCTAssertEqual(await noKey.start(port: 11_434, token: "", engineIDs: ["cairn-mock"]), .refused(.needsToken))
+        let noKeyDecision = await noKey.start(port: 11_434, token: "", engineIDs: ["cairn-mock"])
+        XCTAssertEqual(noKeyDecision, .refused(.needsToken))
 
         let weakKey = server()
-        XCTAssertEqual(await weakKey.start(port: 11_434, token: "short", engineIDs: ["cairn-mock"]), .refused(.tokenTooWeak))
+        let weakKeyDecision = await weakKey.start(port: 11_434, token: "short", engineIDs: ["cairn-mock"])
+        XCTAssertEqual(weakKeyDecision, .refused(.tokenTooWeak))
 
         let nothingTicked = server()
-        XCTAssertEqual(await nothingTicked.start(port: 11_434, token: key, engineIDs: []), .refused(.needsModel))
+        let nothingTickedDecision = await nothingTicked.start(port: 11_434, token: key, engineIDs: [])
+        XCTAssertEqual(nothingTickedDecision, .refused(.needsModel))
 
         // A name that matches no live engine is dropped rather than served as a ghost, so the request
         // to share it is a request with nothing behind it.
         let ghostName = server()
-        XCTAssertEqual(await ghostName.start(port: 11_434, token: key, engineIDs: ["not-an-engine-here"]), .refused(.needsModel))
+        let ghostDecision = await ghostName.start(port: 11_434, token: key, engineIDs: ["not-an-engine-here"])
+        XCTAssertEqual(ghostDecision, .refused(.needsModel))
 
         let notLocal = server(address: "server.example.com")
-        XCTAssertEqual(await notLocal.start(port: 11_434, token: key, engineIDs: ["cairn-mock"]), .refused(.notLocalAddress))
+        let notLocalDecision = await notLocal.start(port: 11_434, token: key, engineIDs: ["cairn-mock"])
+        XCTAssertEqual(notLocalDecision, .refused(.notLocalAddress))
 
         let noAddress = server(address: nil)
-        XCTAssertEqual(await noAddress.start(port: 11_434, token: key, engineIDs: ["cairn-mock"]), .refused(.noAddress))
+        let noAddressDecision = await noAddress.start(port: 11_434, token: key, engineIDs: ["cairn-mock"])
+        XCTAssertEqual(noAddressDecision, .refused(.noAddress))
 
         let badPort = server()
-        XCTAssertEqual(await badPort.start(port: 80, token: key, engineIDs: ["cairn-mock"]), .refused(.portUnusable))
+        let badPortDecision = await badPort.start(port: 80, token: key, engineIDs: ["cairn-mock"])
+        XCTAssertEqual(badPortDecision, .refused(.portUnusable))
     }
 
     func testARefusedStartLeavesTheScreenAFailedStateAndTheReason() async {
@@ -92,6 +101,6 @@ final class ShareServerTests: XCTestCase {
             MockStreamingProvider(id: "cairn-second"),
         ])
 
-        XCTAssertEqual(surface.availableEngines().map(\\.id), ["cairn-mock", "cairn-second"])
+        XCTAssertEqual(surface.availableEngines().map(\.id), ["cairn-mock", "cairn-second"])
     }
 }

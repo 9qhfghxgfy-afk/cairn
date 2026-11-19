@@ -115,10 +115,11 @@ private final class DrawBox: @unchecked Sendable {
     }
 }
 
-/// A store whose Keychain write fails, which is the case the holder must not paper over. Isolated to
-/// the main actor for the same reason the real vault is: `SecretStoring` is a main-actor protocol.
+/// A store whose Keychain write fails, which is the case the holder must not paper over. A class,
+/// because `SecretStoring` is a class protocol; main-actor-isolated for the same reason the real vault
+/// is, since that is the isolation the protocol carries.
 @MainActor
-private struct RefusingSecretStore: SecretStoring {
+private final class RefusingSecretStore: SecretStoring {
     func setSecret(_ secret: String, for id: UUID) throws { throw KeychainFailure(operation: "add", status: -1) }
     func secret(for id: UUID) -> String? { nil }
     func removeSecret(for id: UUID) throws {}
