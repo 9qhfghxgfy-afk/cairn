@@ -14,8 +14,11 @@ extension CairnShareServer {
         let snapshot = table
         let key = token
         let task = Task.detached(priority: .userInitiated) { [weak self] in
-            await ShareSocketServicer.serve(socket, table: snapshot, token: key)
+            await ShareSocketServicer.serve(socket, table: snapshot, token: key) { busy in
+                await MainActor.run { [weak self] in self?.noteTurn(active: busy) }
+            }
             await MainActor.run { [weak self] in
+                self?.noteTurn(active: false)
                 self?.noteClient(opened: false)
             }
         }
@@ -28,8 +31,20 @@ extension CairnShareServer {
 /// Nothing here decides policy — the policy decided whether this socket could exist at all. This is
 /// the mechanical part: read, dispatch, write, close. A request that never finishes arriving is
 /// closed rather than answered, because half a request answered is a wrong answer.
+///
+/// `onTurn` is how the screen learns a port is busy: the servicer never touches status itself, it
+/// reports the turn and the surface decides what that means.
 enum ShareSocketServicer {
-    static func serve(_ socket: ShareSocket, table: ShareEngineTable, token: String) async {
+    static func serve(
+        _ socket: ShareSocket,
+        table: ShareEngineTable,
+        token: String,
+        onTurn: @escaping @Sendable (Bool) async -> Void = { _ in }
+    ) async {
+        guard await socket.begin() else {
+            socket.abandon()
+            return
+        }
         switch await socket.readRequest() {
         case .needMoreBytes:
             socket.abandon()
@@ -44,11 +59,13 @@ enum ShareSocketServicer {
                 await socket.finishWriting()
             case .turn(let turn, _):
                 guard let provider = table.provider(forModelID: turn.modelID) else {
-                    await socket.writeHead(ShareHTTPResponse.error(status: 503, dialect: turn.endpoint.errorDialect ?? .ollama, message: "no engine behind that name"))
+                    await socket.writeHead(ShareHTTPResponse.error(status: 503, dialect: turn.endpoint.errorDialect, message: "no engine behind that name"))
                     await socket.finishWriting()
                     return
                 }
+                await onTurn(true)
                 await ShareTurnPump.run(turn: turn, provider: provider, to: socket)
+                await onTurn(false)
             }
         }
     }

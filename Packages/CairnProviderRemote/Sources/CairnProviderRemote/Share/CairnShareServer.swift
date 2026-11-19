@@ -19,16 +19,22 @@ public final class CairnShareServer: ShareServing, ShareEngineListing {
 
     let transport: ShareSocketTransport
     /// The live engine list, read at the moment sharing starts.
-    private let engineSource: @Sendable () -> [any InferenceProvider]
-    private let addressSource: @Sendable () -> String?
+    ///
+    /// A **main-actor closure rather than a `@Sendable` one**, because that is what the app can
+    /// actually hand over: the live list lives in a `ProviderRegistry`, a main-actor-owned object and
+    /// not a `Sendable` value, so a `@Sendable` closure could not capture it. Every read here happens
+    /// on the main actor anyway — `start` and `availableEngines` are both main-actor methods — and
+    /// what crosses to a socket is a `Sendable` `ShareEngineTable` snapshot, never this closure.
+    private let engineSource: @MainActor () -> [any InferenceProvider]
+    private let addressSource: @MainActor () -> String?
     var table = ShareEngineTable()
     var token = ""
     var turnTasks: [Task<Void, Never>] = []
     var openClients = 0
 
     public init(
-        engines: @escaping @Sendable () -> [any InferenceProvider],
-        addressSource: @escaping @Sendable () -> String? = { LocalIPv4Reader.primaryAddress() }
+        engines: @escaping @MainActor () -> [any InferenceProvider],
+        addressSource: @escaping @MainActor () -> String?
     ) {
         self.transport = ShareSocketTransport()
         self.engineSource = engines
@@ -36,6 +42,17 @@ public final class CairnShareServer: ShareServing, ShareEngineListing {
         transport.onConnection = { [weak self] socket in
             Task { @MainActor in self?.accept(socket) }
         }
+    }
+
+    /// Sharing with no address chosen by the caller: the phone's own private address, read from the
+    /// interface table.
+    ///
+    /// It has to be spelled in an initializer body rather than as a default argument, because
+    /// `LocalIPv4Reader` is module-internal and a public default argument may not name an internal
+    /// type — the compiler rejects it, which is the right rule: a public signature cannot quietly
+    /// promise a dependency the module does not export.
+    public convenience init(engines: @escaping @MainActor () -> [any InferenceProvider]) {
+        self.init(engines: engines, addressSource: { LocalIPv4Reader.primaryAddress() })
     }
 
     public func availableEngines() -> [ShareModelEntry] {
@@ -94,6 +111,15 @@ public final class CairnShareServer: ShareServing, ShareEngineListing {
         // Once no client is connected, every task that was running one has finished, so the list is
         // dropped rather than tracked per request — which is also what keeps it from growing forever.
         if openClients == 0 { turnTasks.removeAll() }
+    }
+
+    /// Whether a turn is being answered right now — the one thing the screen needs beyond a counter,
+    /// because "port open" and "port open and generating right now" are different lines to a user
+    /// watching a laptop wait. Reported by the servicer on the main actor, never from a socket queue,
+    /// and dropped the moment the surface is no longer running.
+    func noteTurn(active: Bool) {
+        guard status.state == .running else { return }
+        status.isServingTurn = active
     }
 
     func refusal(in decision: ShareStartDecision) -> ShareRefusal {

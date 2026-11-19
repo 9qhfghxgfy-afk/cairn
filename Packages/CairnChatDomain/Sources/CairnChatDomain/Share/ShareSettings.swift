@@ -34,17 +34,30 @@ public struct ShareSettings: Sendable, Equatable, Codable {
     public var hasSelection: Bool { !sharedEngineIDs.isEmpty }
 }
 
-/// The token that keys the surface.
+/// The key that keys the surface.
 ///
 /// It lives in the Keychain (`.afterFirstUnlockThisDeviceOnly`) and nowhere else — not in
-/// `UserDefaults`, not in a plist, never in a log. `ShareTokenHolding` is the seam; the app
-/// backs it with the Keychain and a test backs it with a dictionary.
-public protocol ShareTokenHolding: Sendable {
+/// `UserDefaults`, not in a plist, never in a log. `ShareTokenStoring` is the seam the screen holds;
+/// the app backs it with the Keychain (`ShareTokenHolding` in `CairnProviderRemote`) and a test backs
+/// it with a dictionary.
+///
+/// Main-actor-isolated, because every vault this app has is: `SecretStoring` is a `@MainActor`
+/// protocol, and a holder that was not main-actor-isolated could not reach the Keychain at all
+/// without an `await` in the middle of a synchronous screen update. It is also named apart from its
+/// concrete holder on purpose — a screen that imports both modules would otherwise read the name
+/// `ShareTokenHolding` as ambiguous, and `CairnAppUI` must hold this protocol rather than import the
+/// module that owns the Keychain.
+@MainActor
+public protocol ShareTokenStoring: AnyObject {
     /// The stored token, or nil when none has been set.
     func token() -> String?
     /// Store, or clear when `token` is empty. Returns whether the write held.
     @discardableResult func save(_ token: String) -> Bool
     func clear()
+    /// A fresh key from the system generator, replacing the stored one. This is how a key that
+    /// leaked into a screenshot, or a laptop the user no longer trusts, is revoked without
+    /// uninstalling anything — and it is why the screen offers the act rather than a text field.
+    func rotate() -> String
 }
 
 public enum ShareToken {

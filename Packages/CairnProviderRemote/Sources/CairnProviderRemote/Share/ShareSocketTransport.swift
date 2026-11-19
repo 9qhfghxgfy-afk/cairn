@@ -19,6 +19,32 @@ final class ShareSocket: ShareFrameWriting, @unchecked Sendable {
         self.queue = queue
     }
 
+    /// Starts this accepted connection and waits until it can carry bytes.
+    ///
+    /// **An `NWConnection` handed over by a listener is not started.** Apple delivers it in the setup
+    /// state and makes the accept site call `start(queue:)`; reading before that waits for bytes the
+    /// stack will never deliver, which looks to a client like a phone that accepts and then goes
+    /// silent. False means the peer failed or went away before the connection came up — answered by
+    /// closing, never by pretending a turn ran.
+    func begin() async -> Bool {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+            let latch = ResumeOnce()
+            queue.async {
+                self.connection.stateUpdateHandler = { state in
+                    switch state {
+                    case .ready:
+                        if latch.claim() { continuation.resume(returning: true) }
+                    case .failed, .cancelled:
+                        if latch.claim() { continuation.resume(returning: false) }
+                    default:
+                        break
+                    }
+                }
+                self.connection.start(queue: self.queue)
+            }
+        }
+    }
+
     /// Reads until the parser has a whole request, has rejected one, or the client stops talking.
     /// `needMoreBytes` on return means the peer went away mid-request: the caller closes, and a
     /// partial request is never answered as if it had arrived whole.
@@ -67,8 +93,11 @@ final class ShareSocket: ShareFrameWriting, @unchecked Sendable {
                     return
                 }
                 // `isComplete: true` flushes what is already queued before the completion runs, so
-                // the last frame is on the wire before the socket closes.
-                self.connection.send(content: nil, contentContext: .default, isComplete: true,
+                // the last frame is on the wire before the socket closes. `.finalMessage` is Apple's
+                // own "this is the last one" context — the documented way to end a connection. Note
+                // there is no `.default` on `NWConnection.ContentContext`: the constant send contexts
+                // are `defaultMessage`, `finalMessage` and `defaultStream`.
+                self.connection.send(content: nil, contentContext: .finalMessage, isComplete: true,
                                      completion: .contentProcessed { _ in
                     self.connection.cancel()
                     continuation.resume()
@@ -84,7 +113,7 @@ final class ShareSocket: ShareFrameWriting, @unchecked Sendable {
                     continuation.resume()
                     return
                 }
-                self.connection.send(content: bytes, contentContext: .default, isComplete: false,
+                self.connection.send(content: bytes, contentContext: .defaultMessage, isComplete: false,
                                      completion: .contentProcessed { _ in
                     continuation.resume()
                 })
