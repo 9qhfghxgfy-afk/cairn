@@ -90,7 +90,12 @@ extension ChatSessionModel {
             // to invent one.
             toolsActive: !offered.isEmpty,
             toolNames: ToolPromptBlock.names(offered.definitions),
-            webFetchActive: false,
+            // The `Force Web Fetch` toggle in the sheet, read live: on a turn that really is being
+            // offered a web tool. This used to be `false` with no input at all, which made the key in
+            // the sheet a switch that switched nothing.
+            webFetchActive: ContextAssembly.webFetchIsLive(
+                toggles: config.context, offered: offered
+            ),
             visionOn: capabilities.vision,
             // Documents counted by the retrieval pass, which counts distinct attachments rather than
             // passages: one file cut into six passages is still one file the user attached.

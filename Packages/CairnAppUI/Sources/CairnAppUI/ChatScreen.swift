@@ -44,11 +44,14 @@ public struct ChatScreen: View {
         .background(CairnTheme.slateDeep)
         .sheet(isPresented: $showingConfig) {
             if let session {
+                // The theme is handed across the presentation gap on purpose: a sheet arrives with a
+                // window of its own, and a sheet that is not told which theme to wear wears the system's.
                 ChatConfigSheet(
                     session: session,
                     defaults: workspace.defaultConfig,
                     makeDefault: makeDefaultConfig
                 )
+                .cairnPresentation(theme: settings)
             }
         }
     }

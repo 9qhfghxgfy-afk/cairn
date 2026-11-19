@@ -58,7 +58,7 @@ struct ChatListView: View {
             importFile(result)
         }
         .sheet(isPresented: $showingExport) {
-            NavigationStack { ChatExportSheet(workspace: workspace) }
+            CairnSheet { ChatExportSheet(workspace: workspace) }
         }
     }
 

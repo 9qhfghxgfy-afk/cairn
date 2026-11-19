@@ -43,7 +43,7 @@ struct SettingsView: View {
         }
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
-        .cairnChrome(theme.palette, appearance: theme.settings.appearance)
+        .cairnChrome(theme: theme)
     }
 
     /// The half of the theme the app is drawing with right now, so a preview cannot show a variant the

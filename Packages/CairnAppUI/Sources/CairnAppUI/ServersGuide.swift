@@ -69,6 +69,9 @@ struct ServersGuide: View {
                     Button("Done") { dismiss() }
                 }
             }
+            // This screen owns its own stack, so it paints its own bar: a sheet that wears the system's
+            // chrome beside a themed window is what reads as "the theme did not apply".
+            .cairnPresentation()
         }
     }
 

@@ -61,12 +61,13 @@ struct WebSearchSettingsScreen: View {
         .navigationTitle("Web Search")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $editing) { rowDraft in
-            NavigationStack {
+            CairnSheet {
                 WebSearchProviderEditor(model: model, draft: rowDraft.draft)
             }
         }
         .sheet(isPresented: $showingGuide) {
             SearxngGuideSheet()
+                .cairnPresentation()
         }
     }
 

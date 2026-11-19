@@ -78,6 +78,8 @@ struct WebSearchConsentSheet: View {
                     Button("Close") { deny() }
                 }
             }
+            // Owns its own stack, so paints its own bar from the theme it was presented with.
+            .cairnPresentation()
         }
         // Closing the sheet is a refusal, not a way to postpone the decision. A dismissed warning that left
         // the question undecided would simply bring the sheet back next turn, which teaches a person that

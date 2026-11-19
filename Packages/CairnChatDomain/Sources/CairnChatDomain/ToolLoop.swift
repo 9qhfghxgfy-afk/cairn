@@ -67,8 +67,17 @@ public enum ToolLoop {
             var buffered = ""
             var calls: [ToolCallRequest] = []
 
+            // Every step carries the tools and the protocol the turn was assembled with, not only the
+            // first step. A native backend reads its `tools` array per request, so a second step that
+            // arrives without one is a model that was told tools exist and then shown none — which is
+            // how an armed `Tools` chip can look dead against a real server: the first step is answered
+            // from the block in the system message, and every step after it has nothing to call.
             let stepRequest = GenerationRequest(
-                modelID: request.modelID, messages: messages, config: request.config
+                modelID: request.modelID,
+                messages: messages,
+                config: request.config,
+                tools: request.tools,
+                toolProtocol: request.toolProtocol
             )
             for try await chunk in engine.stream(stepRequest) {
                 switch chunk {

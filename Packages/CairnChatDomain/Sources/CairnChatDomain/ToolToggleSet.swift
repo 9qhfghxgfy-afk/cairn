@@ -37,6 +37,14 @@ public struct ToolToggleSet: Sendable, Equatable, Codable {
 
     public static let `default` = ToolToggleSet()
 
+    /// The chip **up**, with every tool switched on — what one tap on the composer's `Tools` chip means.
+    ///
+    /// This is a state of its own because `.default` is not it: the shipped default has the chip down, and
+    /// a tap that writes the shipped default writes a chip that is still down. That is how the `Tools` chip
+    /// came to look dead on a real device — the tap was handled, the write happened, and the chip stayed
+    /// unfilled because the value written meant "off".
+    public static let armed = ToolToggleSet(isEnabled: true)
+
     /// Nothing offered, which is what a chat with the chip off resolves to on every turn.
     public static let off = ToolToggleSet(isEnabled: false)
 

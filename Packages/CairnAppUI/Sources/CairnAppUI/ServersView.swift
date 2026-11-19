@@ -75,12 +75,13 @@ public struct ServersView: View {
             }
         }
         .sheet(item: $editing) { profile in
-            NavigationStack {
+            CairnSheet {
                 ServerProfileEditor(model: model, profile: profile)
             }
         }
         .sheet(isPresented: $showingGuide) {
             ServersGuide(onAdd: { kind in editing = model.draft(for: kind) })
+                .cairnPresentation()
         }
     }
 }

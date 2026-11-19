@@ -51,6 +51,9 @@ public struct ChatConfigSheet: View {
                 }
             }
             .safeAreaInset(edge: .bottom) { footer }
+            // This screen owns its own stack, so it paints its own bar too: a sheet whose canvas changed
+            // and whose bar stayed the system's own is the half of the theme bug a user could point at.
+            .cairnPresentation()
         }
     }
 

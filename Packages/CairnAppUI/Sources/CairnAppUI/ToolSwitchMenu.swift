@@ -10,6 +10,7 @@ import CairnChatDomain
 struct ToolSwitchMenu: View {
     let session: ChatSessionModel
     let outboundAllowed: Bool
+    @Environment(\.cairnTokens) private var tokens
 
     var body: some View {
         Menu {
@@ -28,8 +29,8 @@ struct ToolSwitchMenu: View {
             Image(systemName: "slider.horizontal.below.rectangle")
                 .font(.caption)
                 .padding(6)
-                .background(Capsule().fill(CairnTheme.stone.opacity(0.16)))
-                .foregroundStyle(CairnTheme.amber)
+                .background(Capsule().fill(tokens.onCanvasMuted.opacity(0.16)))
+                .foregroundStyle(tokens.accent)
         }
         .accessibilityLabel("Tool switches")
     }

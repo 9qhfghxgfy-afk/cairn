@@ -47,6 +47,10 @@ public struct CairnRootView: View {
         NavigationStack {
             ChatScreen(workspace: workspace, settings: settings, imagePreparer: imagePreparer)
                 .navigationTitle("Cairn")
+                // Painted from inside the stack as well as outside it: a nav bar takes its bar styling
+                // from the content it belongs to, so a chrome modifier wrapped around the stack never
+                // reaches the bar and the buttons in it.
+                .cairnPresentation(theme: settings)
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     // The list of chats leads, not trails: it is where a conversation comes from, and on a
@@ -84,20 +88,20 @@ public struct CairnRootView: View {
         .sheet(isPresented: $showingChats) {
             // A stack of its own, because the list searches and pushes screens of its own; and it is the
             // workspace that acts, so opening a chat here re-reads the store rather than a row on screen.
-            NavigationStack {
+            CairnSheet(theme: settings) {
                 ChatListView(workspace: workspace)
             }
         }
         .sheet(isPresented: $showingServers) {
             if let servers {
-                NavigationStack {
+                CairnSheet(theme: settings) {
                     ServersView(model: servers)
                 }
             }
         }
         .sheet(isPresented: $showingSettings) {
             if let settings {
-                NavigationStack {
+                CairnSheet(theme: settings) {
                     SettingsView(theme: settings, workspace: workspace, webSearch: webSearch)
                 }
             }
@@ -112,15 +116,15 @@ public struct CairnRootView: View {
         )) {
             if let consent, let prompt = consent.pending {
                 WebSearchConsentSheet(model: consent, prompt: prompt)
+                    .cairnPresentation(theme: settings)
             }
         }
-        // The chosen theme, from the stored theme id: the accent actions take, the surface the app
-        // sits on, and which half of it to paint. Nothing here changes where a prompt goes — a theme
-        // is a look, never a network decision.
-        .cairnChrome(
-            settings?.palette ?? .trailhead,
-            appearance: settings?.settings.appearance ?? .system
-        )
+        // The chosen theme, from the stored settings: the accent actions take, the surface the app sits
+        // on, and which half of it to paint. Applied to the window, and again inside the stack where the
+        // bar can read it — a sheet that wore the system's own chrome was the half of this bug the user
+        // could see. Nothing here changes where a prompt goes: a theme is a look, never a network
+        // decision.
+        .cairnChrome(theme: settings)
         .task { await workspace.start() }
         .onChange(of: scenePhase) { _, phase in
             // Going to the background really does end a turn. iOS suspends the app and takes the socket

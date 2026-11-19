@@ -29,6 +29,8 @@ struct SearxngGuideSheet: View {
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
             }
+            // Owns its own stack, so paints its own bar from the theme it was presented with.
+            .cairnPresentation()
         }
     }
 
