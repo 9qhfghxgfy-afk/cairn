@@ -131,35 +131,51 @@ final class LocationProvider: NSObject, LocationFixProviding, CLLocationManagerD
     // this object is built. `assumeIsolated` states that to the checker instead of pretending the class is
     // not main-actor-bound: if Apple ever moved the delivery thread, it would stop here loudly rather than
     // touch actor state from the wrong place.
+    //
+    // Nothing here captures `manager` inside the hop. `CLLocationManager` is **not** `Sendable`, so capturing
+    // it in a `@MainActor` closure is a send the checker rejects — and it is right to reject it: a reference
+    // the checker cannot prove is unshared is a reference the checker must not move. CI said so at
+    // 44625858672 ("sending 'manager' risks causing data races"). Each method therefore reduces what arrived
+    // to a value — a fix, a failure reason, an authorization status — and carries only the value across.
 
     nonisolated func locationManager(
         _ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]
     ) {
-        MainActor.assumeIsolated { deliver(locations) }
+        let outcome: Result<LocationFix, LocationFailureReason>
+        if let reading = locations.last {
+            outcome = .success(Self.fix(from: reading))
+        } else {
+            outcome = .failure(.unavailable)
+        }
+        MainActor.assumeIsolated { settle(with: outcome) }
     }
 
     nonisolated func locationManager(
         _ manager: CLLocationManager, didFailWithError error: any Error
     ) {
-        MainActor.assumeIsolated { fail(with: Self.reason(for: error)) }
+        let reason = Self.reason(for: error)
+        MainActor.assumeIsolated { fail(with: reason) }
     }
 
     nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         // The name is the requirement: `didChangeAuthorization:` was replaced by this one in iOS 14, and an
         // optional delegate method with a name of our own would simply never be called — which would not fail
         // loudly, it would leave the permission wait parked until the tool's budget ran out.
-        MainActor.assumeIsolated { answerPrompt(with: manager.authorizationStatus) }
+        //
+        // The status is read on the delivery thread, outside the hop, because reading a property is not a send
+        // and capturing the manager in a main-actor closure is.
+        let status = manager.authorizationStatus
+        MainActor.assumeIsolated { answerPrompt(with: status) }
     }
 
 
-    private func deliver(_ locations: [CLLocation]) {
+    private func settle(with outcome: Result<LocationFix, LocationFailureReason>) {
         guard let continuation = pending else { return }
         pending = nil
-        guard let reading = locations.last else {
-            continuation.resume(throwing: LocationFailureReason.unavailable)
-            return
+        switch outcome {
+        case .success(let fix): continuation.resume(returning: fix)
+        case .failure(let reason): continuation.resume(throwing: reason)
         }
-        continuation.resume(returning: Self.fix(from: reading))
     }
 
     private func fail(with reason: LocationFailureReason) {
