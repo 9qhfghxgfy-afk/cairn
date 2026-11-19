@@ -754,7 +754,7 @@ needs both.
 | M4 | Hybrid Parallel + Synthesized engine | preserved core | **Closed** — engine, session path, provenance storage, hybrid picker, live panels, draft cards, and the measured residency gate. **CI-verified `44209524177`** on `9bbd82b` (guards 53/53; 159 domain + 69 remote + 60 on-device host tests; simulator build + 95 `CairnTests`, 0 failures). **Not** on-device-verified, **not** real-network-verified. Record at the end of this file |
 | P3 | Tool runtime + built-ins + search routing (keyless default, SearXNG optional, cloud key-gated) | §3.7 | **Closed** — the loop (native wire **and** prompt-protocol fallback), the five built-ins, the three search routes with the F4 resolution, per-chat arming with the outbound badge and disclosure, the tool run on the one assistant node with its cards, and the deferred Statistics toggle. **CI-verified `44242238211`** on `0b3e3fc` (guards 53/53; host suites 184 domain + 93 remote + 60 on-device + 17 native, 0 failures; simulator build **SUCCEEDED** + 104 `CairnTests`, 0 failures on iPhone 17 / iOS 26.5). **Not** on-device-verified, **not** real-network-verified. Record at the end of this file |
 | M5 | Chat list, Markdown + code copy, Continue Generation, duplicate chat, temp banner, background processing, `.cairn`/`.md` | §3.1, §3.9 | **Closed** — the domain half and the screen half are both written: chat list with search, rename, duplicate, delete and open; Markdown answers with highlighted code and copy-as-prose / copy-the-source; Continue on a stopped, interrupted or token-cut answer; the temporary-chat line with keep-a-copy; `.md` and `.cairn` export through the system share sheet; `.cairn` import from the file picker and by opening a file from another app; a backgrounded turn really is stopped and offered for continuation. 268 domain host tests green, guards 53/53 local. **CI-verified `44396176219`** on `0ecd1d4` (guards 53/53; host suites 268 domain + 93 remote + 60 on-device + 17 native, 0 failures; simulator build **SUCCEEDED** + 108 `CairnTests`, 0 failures on iPhone 17 / iOS 26.5). **Not** on-device-verified, **not** real-network-verified: the 14-line M5 device checklist has never been run on a phone, and three named gaps stay open — `BGContinuedProcessingTask` for a turn that outlives the app, an all-chats export, and an editable title in the top bar. Record at the end of this file |
-| M6 | File + image attachments, chunked retrieval with citations, vision gating | §3.8 | **in progress — code landed 2026-11-18, UI owed.** The domain engine (accept ceilings, image prep rule, text extraction, chunking, BM25 retrieval, grounding, vision gate) and the persistence half (attachment metadata column, citation column, file store beside the database, delete cleanup) are written; 320 domain host tests green, guards 53/53. **Not CI-verified** — this Windows machine compiles neither SwiftData nor UIKit, so the persistence and app halves have never been compiled anywhere. Record at the end of this file |
+| M6 | File + image attachments, chunked retrieval with citations, vision gating | §3.8 | **code complete, CI-verified 2026-11-18 — run `44429557557`; device pass owed.** Domain engine (accept ceilings, image prep rule, text extraction, chunking, BM25 retrieval, grounding, vision gate), persistence (attachment and citation columns, file store beside the database, delete cleanup), and the UI/app half: composer with Photo Library and Files, staged chips with remove, the refusal / vision / storage lines, chips and sources on the message row, metadata-only export, the app's ImageIO preparer, and the wiring that hands every session the store's reader. 328 domain host tests, 29 new simulator tests, guards 53/53. **Not on-device-verified, not real-network-verified.** Record at the end of this file |
 | P4 | On-device model sharing server over LAN (`NWListener`, both dialects) | §3.6 | todo |
 | P5 | Accessibility, AppIcon, licenses/privacy/issues, doc refresh | §3.10 | todo |
 
@@ -1464,12 +1464,13 @@ on-device-verified, and a line that fails on a real device reopens M5 as a defec
   dialog — and the top bar shows the title it has, but that title is a `Text`, not a field, so renaming means
   leaving the chat to go and find it.
 
-## M6 — attachments, chunked retrieval with citations, vision gating (**in progress 2026-11-18**)
+## M6 — attachments, chunked retrieval with citations, vision gating (**code complete, CI-verified 2026-11-18; device pass owed**)
 
-Spec §3.8. Started 2026-11-18 on the Windows fallback machine, which is why the honest status is
-"code landed, not compiled everywhere": `CairnChatDomain` compiles and tests here; `CairnPersistence`
-needs SwiftData and the app needs UIKit, and neither exists on this machine. Nothing here is claimed as
-CI-verified, on-device-verified or real-network-verified.
+Spec §3.8. Started 2026-11-18 on the Windows fallback machine, where `CairnChatDomain` compiles and tests but
+`CairnPersistence` (SwiftData) and the app (UIKit) do not: that is why nothing was called verified from here,
+and why the simulator build and tests were left to CI rather than asserted. The host tests and the simulator
+build and tests are now **CI-verified**. What is still not claimed is **on-device-verified** and
+**real-network-verified** — no phone has run this code, and no image has been sent to a real server by it.
 
 ### What landed — `CairnChatDomain` (compiles and tests on the host)
 
@@ -1638,24 +1639,49 @@ about something a host build cannot answer:
   before anything is decoded.
 
 
-### What is owed before M6 can be claimed
+### Closure — what the second pass closed, and what is still open
 
-- **The composer.** A paperclip that opens the photo picker and the file picker, chips for what is pending
-  with a remove button, the `VisionGate.warning(for:modelSees:)` line before the send rather than after, and
-  the acceptance refusal shown where the user just tapped. `ComposerChips.swift` and `ChatScreen.swift` are
-  the files.
-- **The message row.** Attachment chips on a user message, thumbnails read through
-  `ChatSessionModel.attachmentPayload` (never off disk from a view), and the source line under a grounded
-  answer: file name, place in the file, score. `MessageRow.swift`, `MessageRow+Controls.swift`.
-- **App wiring.** `session.attachmentBytes = store.attachmentData`, `session.attachmentStorageAvailable` from
-  `SwiftDataStore.canStoreAttachments`, and a UIKit-backed `ImagePreparing` in the app target that reads real
-  dimensions and resamples to `ImagePreparationPolicy.targetSize`.
-- **Export.** `.cairn` must carry attachment metadata and citations; the transcript must show sources. An
-  attachment's bytes should not be embedded in an exported transcript by surprise — that is a separate,
-  opt-in decision, and right now the honest behaviour is metadata only.
-- **Temporary chats.** Attachments in a temp chat live in memory only and die with the process. That is the
-  rule; the composer has to say it rather than letting a user believe a photo was saved.
-- **Everything in this milestone is unverified.** No CI run, no simulator build, no phone. `CairnPersistence`
-  and the app target have never been compiled on this machine, so the first Mac build is likely to find
-  something. Gate: `Scripts/ci.sh all` on the Mac, then the device pass.
+Every item on the earlier list is now code, and the milestone's gate is a CI run rather than an intention.
+
+- **The composer.** A paperclip with Photo Library and Files, staged chips with a remove button, the acceptance
+  refusal shown beside the paperclip in the codec's own words, the vision warning before the send rather than
+  after it, and the line about where these files actually live. `ComposerDraft.swift` plus four views.
+- **The message row.** Chips under the sentence they came with, thumbnails read through
+  `ChatSessionModel.attachmentPayload` rather than off disk from a view, and the sources under a grounded answer
+  in the citation's own numbering: file, chunk, character offset, ranking number, short quote.
+- **App wiring.** `AttachmentWiring.install(on:store:)` gives every session `store.attachmentData` and
+  `SwiftDataStore.canStoreAttachments` before it is built; `App/ImageIOPreparer.swift` is the UIKit/ImageIO
+  `ImagePreparing` the size rule needed, and it is handed through `CairnRootView` rather than reached for.
+- **Export.** `.cairn` carries attachment metadata and citations; the transcript names what was attached and
+  says the pixels are not in it. Metadata only, deliberately: bytes leaving the phone as a side effect of
+  "export the chat" is a decision the app does not make alone. An opt-in export that includes the files, with
+  its own confirmation, is a separate piece of work.
+- **Temporary chats.** `AttachmentNotices` says the file dies with the app, next to the paperclip, before the
+  send — and blocks nothing, because a file the app cannot keep still rides the turn it was picked for.
+
+**CI-verified — code.** Run `44429557557` on `0f95f62`: guards, host unit tests (328 in `CairnChatDomain`), and
+the simulator build plus the 29 new simulator tests on iPhone 17 / iOS 26.5. Getting there took four runs, and
+the loop earned its keep. Four compile faults: the composer tests needed `import CairnAppUI`; a `Result` was
+being unwrapped with a case used as a member; `fileExists(atPath:isDirectory:)` takes an `ObjCBool`, not an
+optional one; and `isWritableFileAtPath` is spelled `isWritableFile(atPath:)` now. Behind the last two sat the
+fault actually worth finding. `AttachmentFiles` made its directory with `try?` — the ordinary case being that it
+already exists — and `SwiftDataStore.canStoreAttachments` only asked whether a directory had been *handed over*.
+A path that was already a file therefore read to the user as "these files are kept on this phone" right up until
+the send failed on a write that could never work. `AttachmentFiles.isWritable` now asks the path whether it is a
+directory it can write, and the flag the composer states is that answer, so the bad news arrives while the user
+still has a choice to make rather than after the send. Disk-full is still found at write time, because nothing
+can promise it won't happen halfway through.
+
+**Not on-device-verified.** Nothing in this milestone has run on a phone. The things a simulator cannot answer:
+what the Photo Library and Files sheets really hand over on a current iOS, whether a resampled 12 MP photo feels
+instant or sluggish on a warm device, whether a large image in a long transcript keeps scrolling smooth, and what
+happens to an attachment write when the Local Network prompt or a low-memory kill interrupts it.
+
+**Not real-network-verified.** No image has been sent to a real Ollama or OpenAI-compatible endpoint from this
+app, and no grounded answer has been checked against a real server's echo of the injected passages. The domain
+tests prove what the request contains by recording it against doubles; they cannot prove a server accepts it.
+
+Still owed, in order: the device pass above; an opt-in "include the files in the export" decision with its own
+confirmation; and voice in/out, which stays deferred out of this milestone.
+
 
