@@ -1684,4 +1684,28 @@ tests prove what the request contains by recording it against doubles; they cann
 Still owed, in order: the device pass above; an opt-in "include the files in the export" decision with its own
 confirmation; and voice in/out, which stays deferred out of this milestone.
 
+### The device pass, spelled out
+
+None of this is answerable from a simulator, and it needs a phone talking to a real server on the LAN.
+
+1. Pick a 12 MP photo from the Photo Library into a LAN Ollama chat: the chip appears promptly, the staged file
+   reads as `.jpg`, and the amber vision line disappears the moment a vision model is selected.
+2. Pick that same photo with a text-only model: the send is blocked, the reason is readable rather than merely
+   amber, and the pick is not silently dropped.
+3. Attach a 2 MB text file and a 30 MB one: the first lands, the second is refused in the codec's own words
+   before any reading starts, and nothing is left half-staged.
+4. Ask something grounded about a multi-page document: the sources row names file, chunk, character offset and
+   ranking number, and those numbers point at the passages the prompt actually quoted.
+5. Kill the app while scrolling a long transcript that carries images, then reopen: nothing is missing, and no
+   thumbnail had to be rebuilt from an original.
+6. Turn on Temporary Chat, attach the photo, send, quit, reopen: the conversation and the file are both gone, and
+   the composer said so before the send.
+7. Delete the message that carried a photo, then quit and reopen: the message is gone, and the file went with it.
+   The file side is only checkable from a container a Mac can see — Xcode's container browser on the simulator,
+   or a jailbreak-free device backup — because a phone offers no way to look inside Application Support.
+8. Export while offline, and again through the public-internet gate: the `.cairn` opens in both, names the
+   attachments, holds no bytes, and the transcript says the pixels are not in it.
+9. Run a phone down near a full disk and attach a photo: the failure shows up at the write, says so legibly, and
+   leaves no row naming a file that never landed.
+
 
