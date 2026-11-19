@@ -64,6 +64,15 @@ struct ShareView: View {
                 .accessibilityElement(children: .combine)
             }
 
+            // Said here because it qualifies the line above it: the address is what a client types either
+            // way, but whether the system pinned the socket to that one interface is a separate fact, and
+            // a screen that printed only the address would claim more than the system granted.
+            if let bindNote = ShareStatusText.bindNote(model.status) {
+                Text(bindNote)
+                    .font(.caption)
+                    .foregroundStyle(CairnTheme.stoneLight)
+            }
+
             if let notice = model.notice {
                 ServersNoticeBanner(text: notice)
             }

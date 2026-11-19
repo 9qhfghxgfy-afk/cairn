@@ -90,6 +90,21 @@ final class ShareSurfaceTests: XCTestCase {
         XCTAssertFalse(ShareStatusText.failureText(nil).isEmpty)
     }
 
+    /// Asking for one address is not the same as getting one, and the difference has to be said out loud.
+    /// A port the system bound device-wide must never be described as pinned to the address printed on the
+    /// line above it; a port that really is pinned needs no caveat at all.
+    func testTheStatusSaysHowFirmlyThePortIsBound() {
+        let pinned = ShareServerStatus(state: .running, port: 11434, servedModelIDs: ["a"], boundAddress: "192.168.1.20", bindScope: .chosenAddress)
+        let wide = ShareServerStatus(state: .running, port: 11434, servedModelIDs: ["a"], boundAddress: "192.168.1.20", bindScope: .deviceWide)
+
+        XCTAssertFalse(ShareStatusText.statusLine(pinned).contains("every interface"), "a pinned port says nothing extra")
+        XCTAssertTrue(ShareStatusText.statusLine(wide).contains("every interface"))
+        XCTAssertTrue(ShareStatusText.bindNote(pinned)?.contains("only") == true)
+        XCTAssertTrue(ShareStatusText.bindNote(wide)?.contains("whole") == true)
+        XCTAssertNil(ShareStatusText.bindNote(.off), "nothing is bound, so there is nothing to qualify")
+        XCTAssertFalse((ShareStatusText.bindNote(wide) ?? "").contains("192"), "even the caveat names no address")
+    }
+
     /// The two limits this milestone owes are stated, not hidden: a phone is not a server, and the
     /// Local Network permission really breaks the connection when it is denied.
     func testTheDocumentedLimitsAreSaidOutLoud() {

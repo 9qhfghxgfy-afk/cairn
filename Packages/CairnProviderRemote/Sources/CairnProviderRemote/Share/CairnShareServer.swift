@@ -78,7 +78,9 @@ public final class CairnShareServer: ShareServing, ShareEngineListing {
         }
 
         status = ShareServerStatus(state: .starting, port: port, servedModelIDs: built.servedIDs)
-        guard await transport.start(address: address, port: port) else {
+        // The scope is what the system actually granted, not what was asked for: a port pinned to the
+        // chosen address and a port bound device-wide are different facts, and the screen says which.
+        guard let scope = await transport.start(address: address, port: port) else {
             // The bind failed. Which system error it was is not reportable here — a failure string can
             // carry an address — so the screen gets the code that describes a port that will not open.
             status = ShareServerStatus(state: .failed, port: port, servedModelIDs: built.servedIDs, failure: .portUnusable)
@@ -87,7 +89,13 @@ public final class CairnShareServer: ShareServing, ShareEngineListing {
 
         self.table = built
         self.token = token
-        status = ShareServerStatus(state: .running, port: port, servedModelIDs: built.servedIDs, boundAddress: address)
+        status = ShareServerStatus(
+            state: .running,
+            port: port,
+            servedModelIDs: built.servedIDs,
+            boundAddress: address,
+            bindScope: scope
+        )
         return .allowed
     }
 

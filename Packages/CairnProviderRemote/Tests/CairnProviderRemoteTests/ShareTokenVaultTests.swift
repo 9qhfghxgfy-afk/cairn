@@ -64,7 +64,7 @@ final class ShareTokenVaultTests: XCTestCase {
     func testClearRemovesTheItemRatherThanLeavingAReadableKey() {
         let fake = FakeKeychainOperator()
         let holder = vault(fake)
-        holder.rotate()
+        _ = holder.rotate()
 
         holder.clear()
 
@@ -92,7 +92,7 @@ final class ShareTokenVaultTests: XCTestCase {
     func testSavingAnEmptyKeyClearsTheItem() {
         let fake = FakeKeychainOperator()
         let holder = vault(fake)
-        holder.rotate()
+        _ = holder.rotate()
 
         XCTAssertTrue(holder.save(""))
         XCTAssertNil(holder.token())

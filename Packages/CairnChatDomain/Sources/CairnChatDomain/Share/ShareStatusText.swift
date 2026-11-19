@@ -26,9 +26,26 @@ public enum ShareStatusText {
             var parts = ["Port \(status.port)", "\(status.clientCount) client\(status.clientCount == 1 ? "" : "s") connected"]
             parts.append("\(status.servedModelIDs.count) model\(status.servedModelIDs.count == 1 ? "" : "s") shared")
             if status.isServingTurn { parts.append("answering now") }
+            // Only the weaker case is called out: a pinned port needs no caveat, a device-wide one does.
+            if status.bindScope == .deviceWide { parts.append("open on every interface") }
             return parts.joined(separator: " · ")
         case .stopping: return "Closing the port..."
         case .failed: return "Could not open the port. \(failureText(status.failure))"
+        }
+    }
+
+    /// How firmly the port is pinned, said plainly — and only while something is bound.
+    ///
+    /// This is the sentence that keeps the address line honest. The address is what a client types either
+    /// way; whether the operating system welded the socket to that one interface is a separate fact, and
+    /// a screen that printed only the address would be claiming more than the system granted.
+    public static func bindNote(_ status: ShareServerStatus) -> String? {
+        guard status.isSharing else { return nil }
+        switch status.bindScope {
+        case .chosenAddress:
+            return "The port is bound to that address only — one interface on this phone."
+        case .deviceWide:
+            return "This system would not pin the port to a single address, so it is open on this phone as a whole. The address above is still what a client types, and the key is still what decides who gets answered."
         }
     }
 

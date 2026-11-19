@@ -72,6 +72,13 @@ final class ShareServerTests: XCTestCase {
         XCTAssertEqual(surface.status.servedModelIDs, ["cairn-mock"])
         XCTAssertFalse(surface.status.isServingTurn)
 
+        // Whatever the system granted, the sentence has to match it. This is the real network stack rather
+        // than a constructed status: a port bound device-wide must never read as a pinned one.
+        XCTAssertEqual(
+            ShareStatusText.statusLine(surface.status).contains("every interface"),
+            surface.status.bindScope == .deviceWide
+        )
+
         await surface.stop()
     }
 

@@ -126,13 +126,19 @@ final class ShareSocket: ShareFrameWriting, @unchecked Sendable {
     }
 }
 
-/// The listening side: one address, one port, one serial queue for every callback.
+/// The listening side: one port, one serial queue for every callback, and a bind as tight as the system
+/// will grant.
 ///
-/// The bind is **one address, never a wildcard**. A wildcard listener means "every interface this
-/// phone has", and one of those interfaces is whatever the cellular carrier handed out — a port open
-/// to the internet that the user never asked for and cannot see. Binding the address the policy
-/// picked means exactly one interface, and `SharePolicy` has already refused any address that is not
-/// a private LAN address before this code is reached.
+/// **The intent is one address, never a wildcard** — a wildcard listener means "every interface this phone
+/// has", and one of those is whatever the cellular carrier handed out. The Network framework, however,
+/// decides whether a listener may actually be pinned to one local endpoint, and it has been seen to
+/// reject a listener started that way outright: on the CI runner, `NWListener(using:on:)` with a required
+/// local endpoint failed in under a millisecond, which is a parameter rejection, not a busy port.
+///
+/// So the bind is tried in order of preference and the result is reported as a `ShareBindScope`: pinned to
+/// the chosen address if the system allows it, otherwise the port bound on the device and **said out loud
+/// on the screen**. What does not bend is the pair of rules the policy enforces before this code is ever
+/// reached: the phone must have a private LAN address, and every request must carry the key.
 final class ShareSocketTransport: @unchecked Sendable {
     let queue: DispatchQueue
     private var listener: NWListener?
@@ -143,17 +149,31 @@ final class ShareSocketTransport: @unchecked Sendable {
         queue = DispatchQueue(label: queueLabel, qos: .utility)
     }
 
-    /// Binds and waits for the port to come up. False means it is not listening; the caller reports a
+    /// Binds and waits for the port to come up. nil means it is not listening; the caller reports a
     /// refusal code rather than an address or a system error string, because neither belongs in a log.
-    func start(address: String, port: Int) async -> Bool {
-        guard let rawPort = NWEndpoint.Port(rawValue: UInt16(port)) else { return false }
+    func start(address: String, port: Int) async -> ShareBindScope? {
+        guard let rawPort = NWEndpoint.Port(rawValue: UInt16(port)) else { return nil }
+        if await bind(address: address, port: rawPort, pinToAddress: true) { return .chosenAddress }
+        if await bind(address: address, port: rawPort, pinToAddress: false) { return .deviceWide }
+        return nil
+    }
+
+    /// One bind attempt. `pinToAddress` asks the stack to confine the listener to that local endpoint;
+    /// when that attempt is refused, the caller retries without the request and records the weaker scope.
+    private func bind(address: String, port rawPort: NWEndpoint.Port, pinToAddress: Bool) async -> Bool {
         let parameters = NWParameters.tcp
-        parameters.requiredLocalEndpoint = .hostPort(host: NWEndpoint.Host(address), port: rawPort)
+        // Set in both directions on purpose: `NWParameters.tcp` hands back a parameters object that this
+        // code just mutates, and the second attempt must not inherit the first attempt's requirement.
+        parameters.requiredLocalEndpoint = pinToAddress
+            ? .hostPort(host: NWEndpoint.Host(address), port: rawPort)
+            : nil
 
         let created: NWListener
         do {
             created = try NWListener(using: parameters, on: rawPort)
         } catch {
+            // A rejected parameter, not a busy port. Neither the address nor the system error is
+            // reportable, so the caller only learns that this strategy did not work.
             return false
         }
         created.newConnectionHandler = { [weak self] connection in
@@ -161,8 +181,8 @@ final class ShareSocketTransport: @unchecked Sendable {
             self.onConnection?(ShareSocket(connection: connection, queue: self.queue))
         }
 
-        let latch = ResumeOnce()
         let ready = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+            let latch = ResumeOnce()
             created.stateUpdateHandler = { state in
                 switch state {
                 case .ready:
@@ -179,6 +199,9 @@ final class ShareSocketTransport: @unchecked Sendable {
             created.cancel()
             return false
         }
+        // Handed to the queue rather than written here: `stop()` also runs on this queue, and keeping the
+        // two on one FIFO queue is what makes "start then immediately stop" cancel the listener it was
+        // given rather than race past it and leave the port open.
         queue.async { self.listener = created }
         return true
     }

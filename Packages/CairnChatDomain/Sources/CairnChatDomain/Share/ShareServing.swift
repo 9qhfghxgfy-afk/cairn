@@ -12,6 +12,25 @@ public enum ShareRunState: String, Sendable, Equatable, CaseIterable {
     public var isSharing: Bool { self == .running || self == .starting }
 }
 
+/// How firmly the operating system pinned the listener to the address this surface asked for.
+///
+/// **Asking for one address is not the same as getting one.** Whether a listener may be bound to a single
+/// interface is the operating system's decision, and it has been observed to refuse: a listener started
+/// with a required local endpoint can be rejected outright by the network stack. So the surface records
+/// which of the two it actually got, and the screen says it out loud. Letting "bound to your LAN address"
+/// be a claim the code does not keep is exactly the kind of promise this app should not make.
+///
+/// Either way the two policy rules that do the real work are unchanged: the surface refuses to start
+/// unless this phone has a **private LAN address**, and every request needs the key.
+public enum ShareBindScope: String, Sendable, Equatable, CaseIterable {
+    /// Pinned to the address the policy chose: one interface, nothing else.
+    case chosenAddress
+    /// The system would not pin the port, so it is open on this phone as a whole. The address the user is
+    /// told is still the chosen LAN address — it is what a client has to type — but the screen must not
+    /// imply the socket is welded to that one interface when it is not.
+    case deviceWide
+}
+
 /// What the share surface can report right now.
 ///
 /// The bound address is here because the ledger asks for it: a user with a laptop on the same Wi-Fi
@@ -30,6 +49,9 @@ public struct ShareServerStatus: Sendable, Equatable {
     public var failure: ShareRefusal?
     /// True when the surface is serving a turn at this moment.
     public var isServingTurn: Bool
+    /// How firmly the port is pinned. Defaults to the weaker of the two, so a status built without
+    /// saying anything cannot accidentally claim a guarantee it never got.
+    public var bindScope: ShareBindScope
 
     public init(
         state: ShareRunState = .off,
@@ -38,7 +60,8 @@ public struct ShareServerStatus: Sendable, Equatable {
         clientCount: Int = 0,
         boundAddress: String? = nil,
         failure: ShareRefusal? = nil,
-        isServingTurn: Bool = false
+        isServingTurn: Bool = false,
+        bindScope: ShareBindScope = .deviceWide
     ) {
         self.state = state
         self.port = port
@@ -47,6 +70,7 @@ public struct ShareServerStatus: Sendable, Equatable {
         self.boundAddress = boundAddress
         self.failure = failure
         self.isServingTurn = isServingTurn
+        self.bindScope = bindScope
     }
 
     public static let off = ShareServerStatus()
