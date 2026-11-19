@@ -23,7 +23,8 @@ Gate for every milestone (from `.clinerules`):
 | P1 | Servers parity: active-server selection, one-tap switching with per-server last model, `lmStudio`/`ollamaCloud` kinds, guide sheet, user-initiated LAN scan | **done** — code + all five required suites green on `de0ec5a` | [44015633614](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/44015633614) |
 | P2 | Per-chat + default configuration, `configured` vs `unset`, capability-filtered payloads, injected context, themes | **done** — code + both new simulator suites and the domain suite green on `823bd86` | [44144881214](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/44144881214) |
 | P3 | Tool runtime + five built-ins + search routing (keyless / own SearXNG / Ollama Cloud key-gated) + `Thinking`/`Tools` chips + Statistics toggle | **done** — code + every tool suite green on `0b3e3fc` | [44242238211](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/44242238211) |
-| P4–P5 | Parity milestones, ledger in `docs/PARITY.md` | todo (plan approved 2026-11-16) | |
+| P4 | LAN model sharing: `NWListener` surface answering Ollama's `/api/*` and OpenAI's `/v1/*`, per-session opt-in, generated key in its own Keychain service, foreground-only | **closed (code + CI)** — guards, all four host suites, simulator build and 147 `CairnTests` green on `b523ca9`; **not** on-device-verified, **not** real-network-verified | [44466484720](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/44466484720) |
+| P5 | Accessibility pass, AppIcon pipeline, licenses + privacy statement + issues link, doc refresh | todo | |
 
 ## Decisions (durable — update here, not in chat)
 
@@ -755,7 +756,7 @@ needs both.
 | P3 | Tool runtime + built-ins + search routing (keyless default, SearXNG optional, cloud key-gated) | §3.7 | **Closed** — the loop (native wire **and** prompt-protocol fallback), the five built-ins, the three search routes with the F4 resolution, per-chat arming with the outbound badge and disclosure, the tool run on the one assistant node with its cards, and the deferred Statistics toggle. **CI-verified `44242238211`** on `0b3e3fc` (guards 53/53; host suites 184 domain + 93 remote + 60 on-device + 17 native, 0 failures; simulator build **SUCCEEDED** + 104 `CairnTests`, 0 failures on iPhone 17 / iOS 26.5). **Not** on-device-verified, **not** real-network-verified. Record at the end of this file |
 | M5 | Chat list, Markdown + code copy, Continue Generation, duplicate chat, temp banner, background processing, `.cairn`/`.md` | §3.1, §3.9 | **Closed** — the domain half and the screen half are both written: chat list with search, rename, duplicate, delete and open; Markdown answers with highlighted code and copy-as-prose / copy-the-source; Continue on a stopped, interrupted or token-cut answer; the temporary-chat line with keep-a-copy; `.md` and `.cairn` export through the system share sheet; `.cairn` import from the file picker and by opening a file from another app; a backgrounded turn really is stopped and offered for continuation. 268 domain host tests green, guards 53/53 local. **CI-verified `44396176219`** on `0ecd1d4` (guards 53/53; host suites 268 domain + 93 remote + 60 on-device + 17 native, 0 failures; simulator build **SUCCEEDED** + 108 `CairnTests`, 0 failures on iPhone 17 / iOS 26.5). **Not** on-device-verified, **not** real-network-verified: the 14-line M5 device checklist has never been run on a phone, and three named gaps stay open — `BGContinuedProcessingTask` for a turn that outlives the app, an all-chats export, and an editable title in the top bar. Record at the end of this file |
 | M6 | File + image attachments, chunked retrieval with citations, vision gating | §3.8 | **code complete, CI-verified 2026-11-18 — run `44429557557`; device pass owed.** Domain engine (accept ceilings, image prep rule, text extraction, chunking, BM25 retrieval, grounding, vision gate), persistence (attachment and citation columns, file store beside the database, delete cleanup), and the UI/app half: composer with Photo Library and Files, staged chips with remove, the refusal / vision / storage lines, chips and sources on the message row, metadata-only export, the app's ImageIO preparer, and the wiring that hands every session the store's reader. 328 domain host tests, 29 new simulator tests, guards 53/53. **Not on-device-verified, not real-network-verified.** Record at the end of this file |
-| P4 | On-device model sharing server over LAN (`NWListener`, both dialects) | §3.6 | **in progress** — the domain half is landed and host-green (**422** domain tests): route + key table, a byte-level HTTP/1.1 reader (CR+LF is one `Character` in Swift, so the head is split on the LF byte), turn decoding in both dialect shapes with the per-dialect stream default, and the four response shapes (`/api/chat`, `/api/generate`, `/v1/chat/completions`, `/v1/completions`) written by `ShareStreamEncoder` + `ShareTurnPump` and read back by this app's own Ollama and OpenAI client decoders. The `NWListener` transport is written — one-address bind, never a wildcard; key required on every route including the model list; the close is the stream terminator — and all four Share files parse clean, but **they have never been compiled**: this workspace is Windows, where `import Network` does not build. `ShareView` and `App/ShareWiring` are not written, so the surface has no switch yet. **No CI run is claimed.** |
+| P4 | On-device model sharing server over LAN (`NWListener`, both dialects) | §3.6 | **Closed** — the domain half, the `NWListener` half, and the screen half, all compiled and tested. **CI-verified `44466484720`** on `b523ca9` (guards 53/53; host suites **423** domain + **112** remote + **60** on-device + **17** native, 0 failures; simulator build **SUCCEEDED** + **147** `CairnTests`, 0 failures on iPhone 17 / iOS 26.5). The loopback exit condition is met for real: five checks drive a live `NWListener` over `127.0.0.1` and get a keyed model list in both dialects with 401 without the key, a streamed Ollama answer arriving as NDJSON and ending with `"done":true`, a 404 for a name nobody ticked, and a refused port after `stop()`. **Not** on-device-verified, **not** real-network-verified: no phone has ever bound a port, no real client (Ollama CLI, an OpenAI SDK, a real app on a laptop) has ever talked to it, the Local Network prompt has never been seen, and whether iOS pins the listener to one address or hands back the device-wide scope is unknown outside a phone. Record at the end of this file |
 | P5 | Accessibility, AppIcon, licenses/privacy/issues, doc refresh | §3.10 | todo |
 
 ### P0 record — zero-paywall guard (2026-11-16)
@@ -1709,3 +1710,89 @@ None of this is answerable from a simulator, and it needs a phone talking to a r
    leaves no row naming a file that never landed.
 
 
+
+### P4 record — LAN model sharing (2026-11-19)
+
+**CI-verified `44466484720` on `b523ca9`.** Privacy guards 53/53; host suites 423 domain + 112 remote +
+60 on-device + 17 native, 0 failures; simulator build **SUCCEEDED** and 147 `CairnTests`, 0 failures on
+iPhone 17 / iOS 26.5.
+
+Files. Domain (`CairnChatDomain/Share/`): routes and the key table (`ShareRouting`, `ShareDispatch`), a
+byte-level HTTP/1.1 reader (`ShareHTTPParser` — CR+LF is one `Character` in Swift, so the head is split on
+the LF byte), turn decoding in both dialect shapes with the per-dialect stream default
+(`ShareTurnDecoder`), the four response shapes (`ShareStreamEncoder`, `ShareLegacyEncoder`, `ShareReply`),
+the pump (`ShareTurnPump`), the policy (`SharePolicy`), the settings and seams (`ShareSettings`,
+`ShareServing`, `ShareEngineTable`) and every sentence the surface says (`ShareStatusText`).
+Remote (`CairnProviderRemote/Share/`): `ShareSocketTransport` (listener + one client socket),
+`CairnShareServer` + `CairnShareServer+Serving`, `ShareTokenHolding`.
+UI (`CairnAppUI/`): `ShareModel`, `ShareView`, `ShareView+Selection`, `ShareEntryRow`, and `ServersModel.share`.
+App: `App/ShareWiring.swift` (installed from `CairnApp`, scene-phase hook), `project.yml` (the wiring file
+compiled into the simulator suite).
+Tests: 19 new remote host checks (8 vault, 6 surface, 5 loopback) and 9 new `CairnTests` share checks.
+
+What the exit condition actually got. `ShareLoopbackTests` starts a live `NWListener` on `127.0.0.1` and
+drives it with real HTTP: `/api/tags` and `/v1/models` answer 200 only with the key and 401 without it;
+`POST /api/chat` streams NDJSON that terminates with `"done":true`; `POST /v1/chat/completions` answers in
+its own shape; a model name nobody ticked is refused 404 rather than run against some other engine; and
+after `stop()` the port refuses. Loopback only, so CI needs no network and no ATS exception.
+
+Nine things only a real compiler and a real stack taught, each now a rule rather than a note:
+
+1. `NWConnection.ContentContext` has no `.default`. The constant send contexts are `defaultMessage`,
+   `finalMessage` and `defaultStream`; body bytes send `.defaultMessage`, the terminator `.finalMessage`.
+2. A public default argument may not name a module-internal type, so the "use the phone's own address"
+   default lives in a convenience initializer body (`LocalIPv4Reader` stays internal).
+3. The key vault is `@MainActor`, because `SecretStoring` is: an actor holding it cannot call the vault
+   synchronously. The domain seam is `ShareTokenStoring`, named apart from its concrete holder so a screen
+   importing both modules cannot read `ShareTokenHolding` as ambiguous.
+4. **An `NWConnection` handed over by a listener is not started.** Reading one waits for bytes that never
+   arrive; `serve` now waits for `.ready` before it reads, which is the difference between a phone that
+   answers and a phone that accepts and goes silent.
+5. A weak capture is bound as a **var**, so a nested `@Sendable` closure may not read it — the surface is
+   copied to a constant once at the top of the detached task.
+6. `NWListener(using:on:)` **rejects** parameters carrying `requiredLocalEndpoint`: on the CI runner the
+   bind failed in under a millisecond, and every loopback test skipped. The transport now tries the pinned
+   bind first and falls back to a device-wide bind, and reports which it got as `ShareBindScope` — the
+   screen prints that sentence, because the address line alone would claim a guarantee the system did not
+   grant. The two rules that do the real work did not move: no private LAN address, no start; no key, no
+   answer.
+7. **A head that promises a `Content-Length` has to deliver the body.** The pump ran buffered turns through
+   a head-only sink call, so the socket closed with the length unsatisfied and URLSession reported
+   `-1005, the network connection was lost`. `ShareFrameWriting.writeHead` is now `writeReply`: head and
+   body in one send, so the mistake cannot be made again by a caller who forgets a line.
+8. `private` in Swift means file-private: `ShareView` holds its model module-internally because the picker
+   is a second file — the same reason `ServersModel` keeps its state module-internal for `+Discovery`.
+9. XCTest assertions take autoclosures, which do not run concurrency: `await` goes into a name first.
+
+The key. Generated, never typed, at least 16 characters by policy and 32 in practice, stored under the
+Keychain service `app.cairn.share-key` with `.afterFirstUnlockThisDeviceOnly` — **a different service from
+`app.cairn.server-token`**, the vault that holds the tokens this phone presents to other machines. Two
+directions of trust, two namespaces, tested both ways: a share key is not readable as a server token, and a
+server token is not readable as the key that opens this phone. Rotation is the revocation button, and the
+screen says out loud that old clients stop working.
+
+Still owed, in order:
+
+1. The device pass below, on a phone on a real Wi-Fi network.
+2. A real client against the phone: `ollama -h http://<phone>:11434 list`, one streamed chat from the Ollama
+   CLI, one OpenAI-SDK completion, and one browser hitting `/api/version` (the `OPTIONS` answer is a stated
+   refusal, not a wildcard grant — that stays true and needs a real browser to confirm).
+3. Whether iOS reports `chosenAddress` or `deviceWide` — the caveat sentence is already written for both.
+
+### The device pass, spelled out
+
+1. Turn sharing on with no server configured: the switch comes on, the status line names the port, the
+   address line shows an address, and the key row shows a masked key with Copy and Regenerate.
+2. Turn it on with nothing ticked to share: the switch snaps back and the sentence says nothing is ticked,
+   rather than the screen going quiet.
+3. First connection from a laptop: iOS raises the Local Network prompt; denying it really does stop the
+   client, and the screen's permission line is what the user has to find.
+4. Copy the key into a laptop and ask for the model list: it answers. Delete the key from the laptop's
+   request: 401, and the model list is not discoverable without the key.
+5. Regenerate the key while the laptop is configured: the laptop stops working immediately.
+6. Stream a shared answer from the laptop: tokens arrive as they are produced, the client ends cleanly, and
+   the phone's status line says "answering now" while it happens.
+7. Turn sharing on, then background Cairn: within moments the client stops reaching the phone, and when
+   Cairn comes back the switch is off with the sentence that says why. Nothing re-opens itself.
+8. Share an engine that is a remote server: the laptop's request is answered by that server, and the screen
+   has already said that a client reaching this phone reaches that server too.
