@@ -49,6 +49,25 @@ final class WebSearchSettingsModelTests: XCTestCase {
         )
     }
 
+    /// The same row pointed somewhere the caller chooses.
+    ///
+    /// A row on the user's own network is never a third party and is never asked about, so
+    /// `consentDecision(for:)` reports it **granted whatever the stored record says**. That is a deliberate
+    /// rule, not an accident, and it means a permission rule can only be observed against a row that reaches
+    /// the public internet — asserted against a LAN row, the test would be reading a value the design
+    /// produces regardless of the rule, and would keep passing if the rule were deleted.
+    private func boxEdit(
+        at address: String,
+        token: String? = "s3cr3t",
+        id: UUID? = nil
+    ) -> WebSearchRowEdit {
+        WebSearchRowEdit(
+            id: id, name: "Box", address: address,
+            categories: [], language: "", timeoutSeconds: 8,
+            credentialShape: tokenShape, token: token, customHeaders: [:]
+        )
+    }
+
     func testASearchTokenGoesToTheSearchVaultAndNowhereElse() throws {
         let box = fixtures()
         XCTAssertTrue(box.model.save(boxEdit()))
@@ -94,7 +113,7 @@ final class WebSearchSettingsModelTests: XCTestCase {
     /// kitchen shelf, not to whatever answers that hostname next, so the grant does not travel.
     func testMovingARowToANewAddressTakesThePermissionBack() throws {
         let box = fixtures()
-        XCTAssertTrue(box.model.save(boxEdit()))
+        XCTAssertTrue(box.model.save(boxEdit(at: "https://first.example.com")))
         let row = try XCTUnwrap(box.model.rows.first { $0.displayName == "Box" })
         var search = box.theme.settings.webSearch
         search.consent.grant(row)
@@ -102,7 +121,7 @@ final class WebSearchSettingsModelTests: XCTestCase {
         XCTAssertEqual(box.model.consent(for: row), .granted)
 
         var moved = WebSearchRowEdit(row: row)
-        moved.address = "http://192.168.1.20:8889"
+        moved.address = "https://second.example.com"
         moved.token = nil
         XCTAssertTrue(box.model.save(moved))
 
@@ -113,7 +132,7 @@ final class WebSearchSettingsModelTests: XCTestCase {
 
     func testDeletingARowTakesItsTokenAndItsPermissionWithIt() throws {
         let box = fixtures()
-        XCTAssertTrue(box.model.save(boxEdit()))
+        XCTAssertTrue(box.model.save(boxEdit(at: "https://box.example.com")))
         let row = try XCTUnwrap(box.model.rows.first { $0.displayName == "Box" })
         var search = box.theme.settings.webSearch
         search.consent.grant(row)

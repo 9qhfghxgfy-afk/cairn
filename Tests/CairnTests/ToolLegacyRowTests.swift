@@ -74,7 +74,22 @@ final class ToolLegacyRowTests: XCTestCase {
 
         let settings = try store.appSettings()
         XCTAssertTrue(settings.showsGenerationStats, "a row that never asked still shows the numbers")
-        XCTAssertNil(settings.webTools, "there was no web-tool choice to remember")
+        // The reader materialises a web-tool value for every row now, because search cannot run without a
+        // provider store existing. So "no web-tool choice to remember" cannot mean the value is absent — it
+        // has to mean the materialised value invents nothing the user never chose. That is the assertion
+        // worth keeping: a legacy row must not come back with an acknowledgement, an address, or a
+        // page-reading answer it never had.
+        let remembered = try XCTUnwrap(settings.webTools)
+        XCTAssertFalse(remembered.outboundAllowed, "the acknowledgement a pre-P3 build never made is not invented")
+        XCTAssertNil(remembered.searxngURL, "no search address the user never typed")
+        XCTAssertNil(remembered.fetchAllowed, "no page-reading answer the user never gave")
+        // Asserted field by field rather than against `WebSearchSettings.default`: a provider row carries
+        // `createdAt` / `updatedAt` that default to `Date()`, so two "defaults" built a moment apart are not
+        // equal, and a whole-value comparison here would be a timestamp test pretending to be a privacy test.
+        XCTAssertEqual(settings.webSearch.providerCount, 1, "the built-in row and nothing else")
+        XCTAssertTrue(settings.webSearch.activeProvider.isBuiltIn, "and it is the built-in one")
+        XCTAssertEqual(settings.webSearch.consent, .default, "no consent carried over from the upgrade")
+        XCTAssertTrue(settings.webSearch.requiresConsentPrompt, "the first search still has to ask")
         XCTAssertFalse(settings.outboundWebAllowed, "so nothing may leave the device")
         XCTAssertEqual(settings.defaultChatConfig.toolToggle, .default)
     }

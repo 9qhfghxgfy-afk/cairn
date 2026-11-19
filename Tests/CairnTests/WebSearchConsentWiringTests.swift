@@ -18,9 +18,16 @@ final class WebSearchConsentWiringTests: XCTestCase {
         return settings
     }
 
-    private func makeWiring(_ settings: AppSettings = AppSettings.default) -> WebSearchWiring {
+    /// Builds the seam over **the caller's own** `ThemeModel`.
+    ///
+    /// This used to take an `AppSettings` and build a model of its own, which meant the wiring answered
+    /// through one model while the test read another: a consent decision genuinely filed was invisible to the
+    /// assertion, and every test here read back `undecided`. The app installs exactly one `ThemeModel` and
+    /// hands that same instance to the wiring, so a test of the join has to share one too — otherwise it is
+    /// testing two models that were never connected, which is the bug this file exists to catch.
+    private func makeWiring(on theme: ThemeModel) -> WebSearchWiring {
         WebSearchWiring.install(
-            theme: ThemeModel(settings: settings),
+            theme: theme,
             serverSecrets: MemorySecretStore(),
             searchSecrets: MemorySecretStore(),
             testing: nil
@@ -45,8 +52,9 @@ final class WebSearchConsentWiringTests: XCTestCase {
     }
 
     func testAPublicSearchStopsAndAsksBeforeASingleByteLeaves() async {
-        let wiring = makeWiring(acknowledged)
-        let profile = ThemeModel(settings: acknowledged).settings.webSearch.activeProvider
+        let theme = ThemeModel(settings: acknowledged)
+        let wiring = makeWiring(on: theme)
+        let profile = theme.settings.webSearch.activeProvider
         async let answer = wiring.searchRequester(profile)
         let asked = await waitUntil { wiring.consent.pending != nil }
         XCTAssertTrue(asked, "the request must be parked on a sheet, not in flight")
@@ -60,7 +68,7 @@ final class WebSearchConsentWiringTests: XCTestCase {
 
     func testAnAnswerIsFiledAgainstThatProviderAndStopsTheAsking() async {
         let theme = ThemeModel(settings: acknowledged)
-        let wiring = makeWiring(theme.settings)
+        let wiring = makeWiring(on: theme)
         let profile = theme.settings.webSearch.activeProvider
         async let answer = wiring.searchRequester(profile)
         let asked = await waitUntil { wiring.consent.pending != nil }
@@ -77,7 +85,7 @@ final class WebSearchConsentWiringTests: XCTestCase {
 
     func testADenialIsHeldAndTheToolRefusesWithoutAskingAgain() async {
         let theme = ThemeModel(settings: acknowledged)
-        let wiring = makeWiring(theme.settings)
+        let wiring = makeWiring(on: theme)
         let profile = theme.settings.webSearch.activeProvider
         async let answer = wiring.searchRequester(profile)
         let asked = await waitUntil { wiring.consent.pending != nil }
@@ -97,7 +105,7 @@ final class WebSearchConsentWiringTests: XCTestCase {
     /// dangle would hang the tool forever.
     func testWalkingAwayFromTheSheetCountsAsANoAndDoesNotHang() async {
         let theme = ThemeModel(settings: acknowledged)
-        let wiring = makeWiring(theme.settings)
+        let wiring = makeWiring(on: theme)
         let profile = theme.settings.webSearch.activeProvider
         async let answer = wiring.searchRequester(profile)
         let asked = await waitUntil { wiring.consent.pending != nil }
@@ -121,7 +129,7 @@ final class WebSearchConsentWiringTests: XCTestCase {
         var settings = acknowledged
         settings.setWebSearch(search)
         let theme = ThemeModel(settings: settings)
-        let wiring = makeWiring(theme.settings)
+        let wiring = makeWiring(on: theme)
         let rows = theme.settings.webSearch.allProviders.filter { $0.reachesPublicInternet }
         XCTAssertEqual(rows.count, 3, "both added rows and the built-in one are third parties")
 
@@ -147,7 +155,7 @@ final class WebSearchConsentWiringTests: XCTestCase {
 
     func testAPageReadIsOneAnswerForTheToolRatherThanOnePerHost() async {
         let theme = ThemeModel(settings: acknowledged)
-        let wiring = makeWiring(theme.settings)
+        let wiring = makeWiring(on: theme)
         async let answer = wiring.fetchRequester(URL(string: "https://example.com/a")!)
         let asked = await waitUntil { wiring.consent.pending != nil }
         XCTAssertTrue(asked, "a page read has to stop and ask before it reads")
