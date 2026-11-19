@@ -1187,7 +1187,7 @@ shipped and how far the checks actually reached.
 | `CalculatorEvaluator*` + `CalculatorTool` + `CalculatorError` | Cairn's own hand-written, bounded parser. Nothing evaluates a string: no `NSExpression`, no format string off an untrusted input, no `value(forKey:)`, no symbol lookup by name. A hostile expression is a typed error the model can read. |
 | `MailDraft` + `ComposeMailTool` + `MailComposerPresentation` | The whole mail story, deliberately small: Apple's own composer opens with the draft filled in and **nothing in Cairn can send it**, so the tool says the draft was *offered for review* and the tool description tells the model never to state a send. A device or build with no composer gets no `compose_mail` rather than a tool that claims success and opens nothing. |
 | `WebSearchRouting` / `WebToolSettings` + `CairnProviderRemote/Tools/*` | The F4 resolution: the user's own SearXNG address wins when set — plain `http://` is allowed for it because that server is on their own network — otherwise the keyless public endpoint, and Ollama's own search only when the active profile is `ollamaCloud` **and** its Keychain key is present. A request is *built* before it is sent, which is the only way "only the query left" can be asserted rather than hoped. |
-| `ToolToggleSet` + `ComposerChips` + `ToolSwitchMenu` + `ToolsOutboundBadge` + `MessageRow+ToolCards` + `SettingsView+Tools` | Tools ship off. Arming is per chat, and the first raise while the acknowledgement is down asks first with **both** ways out: `.default` (web included) or `.localOnly` (arithmetic and mail drafts only) — a real state, not a refusal. The outbound badge is read back off stored nodes, so it survives the turn, the scroll, and a relaunch. |
+| `ToolChipRule` + `ToolToggleSet` + `ComposerChips` + `ToolSwitchMenu` + `ToolsOutboundBadge` + `MessageRow+ToolCards` + `SettingsView+Tools` | Tools ship off. Arming is per chat, and **one tap arms it** — `ToolChipRule` decides up-or-down only, so neither a backend's advertised capability nor an unanswered acknowledgement can gate the chip (the device round of 2026-11-19 took the veto out; see `## Device bug round`). The acknowledgement is still asked, beside the arming rather than in front of it, with **both** ways out: `.armed` (web included once acknowledged) or `.localOnly` (arithmetic and mail drafts only) — a real state, not a refusal, in a per-tool menu whose web switches stay dimmed until the acknowledgement is up. The outbound badge is read back off stored nodes, so it survives the turn, the scroll, and a relaunch. |
 | `App/ToolWiring.swift` | The only place a registry can be assembled: a window, a Keychain and two Settings switches meet here and the domain reaches for none of them. `project.yml` compiles it into the test bundle so the factory is proven, not trusted; the registry is re-assembled when either switch moves, so arming a chat right after saying "yes" really works. |
 | `ChatConfig+Decoding` + `Mapping` + `Records` | The upgrade is additive in both directions: a pre-P3 configuration blob decodes with the chip **down** (an upgrade may not arm a chat the user never opted into), a pre-P3 node row has neither tool column, and a pre-P3 settings row keeps both shipped defaults — internet unacknowledged, statistics still shown. |
 
@@ -1274,9 +1274,11 @@ shipped and how far the checks actually reached.
 3. **A real model's prose for the prompt protocol.** The parser is tested against fixtures that were typed
    to look like model output; no model has yet emitted the block for it, and `ToolRouting` has never had
    to choose between native and prompt against a real backend's advertised capability.
-4. **`forceWebFetch` is still dead.** `TurnContext.webFetchActive` is written `false` everywhere, so that
-   conditional-context key stays reserved even though the web tools are live. Recorded in
-   `docs/PARITY.md` so nobody reads the row as finished.
+4. **`forceWebFetch` was dead; it is not any more.** It was written `false` on every path, so the key stayed
+   reserved while the web tools were live. The device round of 2026-11-19 made it follow the switch **and** the
+   tools actually offered on the turn (`ContextAssembly.webFetchIsLive`) and carried it on every continuation
+   step (`ToolLoop`). CI `44599188881` — `WebFetchLivenessTests`, `ToolLoopStepRequestTests`. Whether a real
+   model obeys the block it unlocks is still owed to a device pass.
 5. **One warning that predates P3 and is not folded into this diff:**
    `Tests/CairnTests/ServerSelectionTests.swift:120` discards the result of
    `createConversation(title:mode:config:isTemporary:)`, which CI surfaces as an annotation. It is a
@@ -1997,3 +1999,90 @@ proves; a pass on one is not evidence for the next. Record what the phone actual
 
 **What closing this list would mean:** on-device-verified and real-network-verified could be cited for Task B.
 Until then Task B is closed at the CI gate only, and that distinction is the whole point of the list.
+
+## Device bug round — four fixes before the next IPA (2026-11-19)
+
+Four things a phone reported that the simulator lane could not see. Each one is now a rule with a test
+where the rule can be pure, and none of them is claimed `on-device-verified` until the list at the bottom
+of this section has been run on the phone.
+
+1. **One tap on `Tools` arms the chat.** `ToolChipRule.tap(chipIsUp:outboundWebAllowed:)` decides the tap,
+   and it decides only *up or down*. What a backend claims to support never enters that decision — a
+   server with no native tool calling is still handed the tools, through `PromptToolProtocol`
+   (`ToolRouting.format` decides *how* a call travels, never *whether* the user may arm a chat). The
+   outbound acknowledgement is still asked, with both ways out, but it now travels **with** the arming
+   instead of standing in front of it: a tap that opened a question and left the chip unfilled read, on a
+   phone, as a dead button, and a dialog dismissed by reflex left the chat unarmed with nothing to show for
+   the tap. The value a tap writes is `ToolToggleSet.armed`, not `.default` — the shipped default has the
+   chip **down**, so writing it was a tap that changed nothing, which is the actual defect.
+   Test: `ToolChipRuleTests`.
+2. **Every step of a tool loop carries its tools.** `ToolLoop` rebuilt each continuation
+   `GenerationRequest` from `modelID` / `messages` / `config` alone, so a second step reached a native
+   backend with no `tools` array: the first turn was answered from the block in the system message, and
+   every step after it had nothing to call. Steps now carry `tools` and `toolProtocol`.
+   Test: `ToolLoopStepRequestTests`.
+3. **`Force Web Fetch` is a switch again.** `TurnContext.webFetchActive` was written `false` on every path,
+   so the key in the configuration sheet moved a conditional block that could never be live.
+   `ContextAssembly.webFetchIsLive(toggles:offered:)` requires the switch to be on **and** a web tool the
+   model was actually offered this turn — a web tool the acknowledgement has not released is already
+   removed by `ToolRouting`, and a block that says "a web search ran" must not ride on a calculator-only
+   turn, because a model told to cite a page it was never offered invents one. The flag now travels on the
+   continuation steps with the tools. Test: `WebFetchLivenessTests`.
+4. **A theme reaches every window.** Each screen used to resolve its own paint, and any window that forgot
+   fell back to the environment default — one fixed dark palette — so the transcript recoloured while
+   Settings, Servers, the chat list and every editor behind them did not. `CairnChromeStyle` is now the one
+   place paint is resolved; `CairnSheet` gives a presentation its own themed stack instead of a bare
+   `NavigationStack`; and `CairnChromeModifier` paints the tint, the canvas, the nav bar, the list's own
+   background and the sheet material — inside a presentation's stack, where a bar actually reads its styling
+   from, and outside it, so a pushed screen inherits the paint rather than meeting the default.
+   Test: `ThemePropagationTests`.
+
+### The concurrency rule this round cost a CI cycle
+
+A `ViewModifier`'s `body(content:)` is **not** main-actor isolated in the iOS SDK, while `ThemeProvider`
+and the settings object are. So `@MainActor` helper methods called from `body` are Swift 6 concurrency
+errors — and putting `@MainActor` on the modifier type is a *different* error, because it then cannot
+witness the nonisolated `body(content:)` requirement. The form that compiles: a `ViewModifier` stores
+**values** and does no isolation-sensitive work inside `body`; the resolving happens in the `View` extension
+method that builds it, which is main-actor work. `CairnChromeModifier` therefore holds a `CairnPalette?` and
+an `AppearanceMode?` and nothing else, with the scheme / pin / token resolution as three nonisolated computed
+properties over those two values.
+
+### What the per-tool menu still does — correcting the record
+
+`7397156`'s commit message said a per-tool web switch "arms on its own tap and confirms only against the
+state that tap changes". **That is not what shipped, and this is the record of what did:** a web switch in
+`ToolSwitchMenu` stays **disabled** until the outbound acknowledgement is up. That is deliberate — the
+acknowledgement is asked once, by the chip, with both ways out, and the menu reports state rather than
+re-asking it. A menu that asked per switch would put the same disclosure in front of the user five times.
+
+### Verification — the three categories, not merged
+
+Locally (Windows, host toolchain): guards 53/53, `CairnChatDomain` 552 tests green, `Scripts/parse-check.sh`
+clean across 573 files. `CairnProviderRemote` cannot build here at all — `import Security` has no Windows
+module — so its lane is CI's, as are `CairnAppUI` and the simulator suite.
+CI [`44599188881`](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/44599188881) on `4353030`: **completed, success**
+— Privacy guards, Host unit tests (macOS), and **Build + test on simulator** all green. The simulator job is
+the lane that compiles `CairnAppUI` and runs `ThemePropagationTests`, and it is the run the four
+`docs/PARITY.md` rows updated in this round cite.
+Not `on-device-verified`. Not `real-network-verified`. The CI gate for a fresh unsigned IPA is met on this
+commit; `ipa.yml` is a `workflow_dispatch`, so the user triggers the build.
+
+### Device checklist for this round — five lines, each says what it proves
+
+1. **Tap `Tools` on a chat whose web acknowledgement is down.** The chip fills **on the tap**, before any
+   dialog, and the dialog offers both ways out. "Only tools on this device" leaves the chip up with the
+   calculator and the mail draft; the web switches beside it stay dimmed and say why.
+2. **Arm it on a server that does not advertise native tool calling, then ask something a tool should
+   answer.** The prompt protocol runs the call, or the answer says it could not. Silence is the failure this
+   fix was for, and it is why the chip no longer consults capability.
+3. **Switch `Force Web Fetch` on and open the context preview.** The block appears on a turn with a web tool
+   offered, and does not appear on a calculator-only turn, nor on a turn whose web tool the acknowledgement
+   has not released.
+4. **Change theme and appearance, then open every presentation**: the chat list, servers, settings, the chat
+   configuration sheet, the web-search screen and its provider editor, the SearXNG guide, the servers guide,
+   and a web-search consent sheet. Each shows the chosen accent, canvas and nav bar; none shows the system's
+   card background or the old fixed amber.
+5. **Kill the app with a web tool armed and a badge up, then reopen it.** The chip comes back up, the
+   acknowledgement comes back, and the badge is still read back off the stored node rather than off the live
+   turn.
