@@ -17,11 +17,25 @@ import CairnChatDomain
 public struct AttachmentFiles {
     public let directory: URL
 
+    /// Whether this directory can really be written to.
+    ///
+    /// `createDirectory` below is `try?`, because the ordinary case is that the directory already exists.
+    /// That convenience has a cost: a path that is already a file, or a volume that refuses the write,
+    /// leaves an object that looks usable and then fails every store — so the directory is checked for what
+    /// it is rather than trusted for what it was asked to be. `ChatSessionModel.attachmentStorageAvailable`
+    /// and the composer's line depend on this flag; a disk-full condition is still discovered at write time,
+    /// which is the one failure no check can predict.
+    public let isWritable: Bool
+
     public init(directory: URL) {
         self.directory = directory
         try? FileManager.default.createDirectory(
             at: directory, withIntermediateDirectories: true
         )
+        var kind: ObjCBool?
+        let present = FileManager.default.fileExists(atPath: directory.path, isDirectory: &kind)
+        self.isWritable = present && (kind?.boolValue ?? false)
+            && FileManager.default.isWritableFileAtPath(directory.path)
     }
 
     /// The app's own attachment directory, or nil when this device will not give one out — in which case

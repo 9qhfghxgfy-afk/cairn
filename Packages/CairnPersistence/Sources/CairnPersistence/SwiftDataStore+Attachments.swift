@@ -19,9 +19,12 @@ extension SwiftDataStore {
 
     /// Whether this store can keep an attached file between turns. It cannot when it is in-memory — a photo
     /// in that conversation exists only as long as the app is open, which the composer says out loud rather
-    /// than letting the user believe a picture had been saved.
+    /// than letting the user believe a picture had been saved — and it cannot when the directory it was given
+    /// is not a directory it can write. The second case is the one worth stating early: a store that reports
+    /// itself able and then fails at send time leaves the user holding a failed send and a photo they cannot
+    /// find out of, so the flag asks the directory what it is instead of trusting that it was created.
     public var canStoreAttachments: Bool {
-        attachmentFiles != nil
+        attachmentFiles?.isWritable ?? false
     }
 
     /// Drops the files belonging to a set of message rows, which is what makes deleting a message actually
