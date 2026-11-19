@@ -7,7 +7,10 @@ import SwiftUI
 /// screen ("a phone is not a server", "every request needs this key") are the same claims the tests
 /// check, not a second copy written next to the view where they could drift.
 struct ShareView: View {
-    private var model: ShareModel
+    /// Not `private`: the picker and the port live in `ShareView+Selection`, and `private` in Swift means
+    /// **file**-private, which a second file cannot see. The same reason `ServersModel` keeps its stored
+    /// state module-internal for its `+Discovery` extension.
+    var model: ShareModel
 
     init(model: ShareModel) { self.model = model }
 
