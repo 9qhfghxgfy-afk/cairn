@@ -9,11 +9,25 @@ import Foundation
 /// removes the third party from the request entirely.
 public struct WebToolSettings: Sendable, Equatable, Codable {
     public var outboundAllowed: Bool
+    /// **Legacy.** The single SearXNG address from before providers existed. Read once by
+    /// `WebSearchMigration` so an upgrade imports an address instead of losing it; the active provider row
+    /// is what decides where a query goes now.
     public var searxngURL: String?
+    /// The provider list, the active row, the result count and per-provider consent. nil means "this build's
+    /// settings predate providers", which reads as `WebSearchSettings.default` — DuckDuckGo active, five
+    /// results, nothing consented to. Held **optional** for the same reason the whole struct is: a
+    /// synthesized decoder reads a missing optional key as nil, while a missing required key would fail the
+    /// row and drop the user's theme with it.
+    public var search: WebSearchSettings?
 
-    public init(outboundAllowed: Bool = false, searxngURL: String? = nil) {
+    public init(
+        outboundAllowed: Bool = false,
+        searxngURL: String? = nil,
+        search: WebSearchSettings? = nil
+    ) {
         self.outboundAllowed = outboundAllowed
         self.searxngURL = searxngURL?.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.search = search
     }
 
     public static let `default` = WebToolSettings()

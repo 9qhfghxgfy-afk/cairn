@@ -14,6 +14,23 @@ public enum ToolError: String, Sendable, Equatable, Codable, CaseIterable {
     case toolsOff
     /// No search endpoint is usable for this route.
     case searchUnavailable
+    /// The provider the user selected cannot be used as configured — no credential, or the row that was
+    /// active is gone. A configuration problem, so a different query cannot fix it.
+    case providerUnavailable
+    /// The provider answered the request could not be reached at all.
+    case endpointUnreachable
+    /// The provider refused the request: a `403`, a bot challenge, or an endpoint that does not accept
+    /// the kind of client Cairn is.
+    case endpointRejected
+    /// The provider answered in a shape Cairn could not read. Distinct from "no results" on purpose:
+    /// a page that changed is not a page that found nothing.
+    case endpointMalformed
+    /// The provider is rate limiting this client.
+    case rateLimited
+    /// The address is on the public internet and was refused for not using https.
+    case httpsRequired
+    /// iOS refused the local network permission the request needed.
+    case localNetworkDenied
     /// The request would leave the device and the user has not allowed it.
     case internetNotAllowed
     /// The address resolves to a private or loopback target a fetch may not touch.
@@ -33,8 +50,14 @@ public enum ToolError: String, Sendable, Equatable, Codable, CaseIterable {
     /// worth spending on a call the model can actually fix.
     public var modelCanRetry: Bool {
         switch self {
-        case .unknownTool, .badArguments, .blockedTarget, .timedOut, .failed, .searchUnavailable:
+        // Only a transient transport condition or a bad query is worth another step. Everything else is
+        // a setting or a permission the user has to change, and a model burning steps cannot change it.
+        case .unknownTool, .badArguments, .blockedTarget, .timedOut, .failed, .searchUnavailable,
+             .endpointUnreachable:
             return true
+        case .providerUnavailable, .endpointRejected, .endpointMalformed, .rateLimited, .httpsRequired,
+             .localNetworkDenied:
+            return false
         case .toolsOff, .internetNotAllowed, .unavailable, .cancelled, .responseTooLarge:
             return false
         }
@@ -47,6 +70,14 @@ public enum ToolError: String, Sendable, Equatable, Codable, CaseIterable {
         case .badArguments: return "The tool was called with arguments it does not accept."
         case .toolsOff: return "Tools are off for this chat."
         case .searchUnavailable: return "No search endpoint is configured."
+        case .providerUnavailable: return "The search provider you selected is not usable as configured."
+        case .endpointUnreachable: return "Cairn could not reach the search provider."
+        case .endpointRejected: return "The search provider refused the request."
+        case .endpointMalformed: return "The search provider answered in a form Cairn could not read."
+        case .rateLimited: return "The search provider is slowing requests down. Try again shortly."
+        case .httpsRequired: return "That search address needs a secure connection."
+        case .localNetworkDenied:
+            return "iOS did not allow local network access, so the request was stopped."
         case .internetNotAllowed: return "This tool needs the outbound web opt-in."
         case .blockedTarget: return "That address is on a private network, so it was not fetched."
         case .responseTooLarge: return "The page was larger than the allowed response size."

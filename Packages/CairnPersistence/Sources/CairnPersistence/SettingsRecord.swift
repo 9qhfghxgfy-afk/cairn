@@ -22,6 +22,17 @@ public final class SettingsRecord {
     public var appearanceRaw: String?
     public var showsGenerationStats: Bool?
     public var updatedAt: Date
+    /// The outbound web acknowledgement. A switch the user granted once, and a switch that is not stored is
+    /// a switch that either re-asks forever or silently stops working.
+    public var outboundWebAllowed: Bool?
+    /// The **legacy** single SearXNG address, kept so an upgrade can import it into a provider row.
+    public var searxngURL: String?
+    /// The provider list, active selection, result count and per-provider consent, as one blob.
+    ///
+    /// Before this column none of it was stored at all: `toSettings()` built `AppSettings` without
+    /// `webTools`, so the acknowledgement and the search address were gone on every relaunch. Every new
+    /// attribute here is optional, which is what lets an existing store migrate by itself.
+    public var webSearchJSON: Data?
 
     public init(
         slot: Int = 0,
@@ -29,7 +40,10 @@ public final class SettingsRecord {
         themeID: String? = nil,
         appearanceRaw: String? = nil,
         showsGenerationStats: Bool? = nil,
-        updatedAt: Date = Date()
+        updatedAt: Date = Date(),
+        outboundWebAllowed: Bool? = nil,
+        searxngURL: String? = nil,
+        webSearchJSON: Data? = nil
     ) {
         self.slot = slot
         self.defaultConfigJSON = defaultConfigJSON
@@ -37,6 +51,9 @@ public final class SettingsRecord {
         self.appearanceRaw = appearanceRaw
         self.showsGenerationStats = showsGenerationStats
         self.updatedAt = updatedAt
+        self.outboundWebAllowed = outboundWebAllowed
+        self.searxngURL = searxngURL
+        self.webSearchJSON = webSearchJSON
     }
 }
 
@@ -44,11 +61,24 @@ extension SettingsRecord {
     /// Missing columns read as the shipped defaults rather than as "off" or "blank": a row written
     /// by an older build must not silently disable something the user never disabled.
     func toSettings() -> AppSettings {
-        AppSettings(
+        var search = JSONCodec.decode(WebSearchSettings.self, from: webSearchJSON) ?? .default
+        // A row written before providers existed holds one loose SearXNG address. Importing it here rather
+        // than at launch means the first read after an upgrade already has the provider row, and the next
+        // write stores it — so there is no window in which an instance the user was already searching
+        // through stops working. The import is skipped once the column exists, which makes it idempotent.
+        if webSearchJSON == nil {
+            WebSearchMigration.importLegacySearxngURL(searxngURL, into: &search)
+        }
+        return AppSettings(
             defaultChatConfig: JSONCodec.decode(ChatConfig.self, from: defaultConfigJSON) ?? .default,
             themeID: themeID.flatMap { $0.isEmpty ? nil : $0 } ?? AppSettings.defaultThemeID,
             appearance: AppearanceMode(rawValue: appearanceRaw ?? "") ?? .system,
-            showsGenerationStats: showsGenerationStats ?? true
+            showsGenerationStats: showsGenerationStats ?? true,
+            webTools: WebToolSettings(
+                outboundAllowed: outboundWebAllowed ?? false,
+                searxngURL: searxngURL,
+                search: search
+            )
         )
     }
 
@@ -57,6 +87,16 @@ extension SettingsRecord {
         themeID = settings.themeID
         appearanceRaw = settings.appearance.rawValue
         showsGenerationStats = settings.showsGenerationStats
+        let tools = settings.webTools ?? .default
+        outboundWebAllowed = tools.outboundAllowed
+        // Written back as-is so the legacy field cannot be resurrected after it has been cleared at its
+        // source.
+        searxngURL = tools.searxngURL
+        // Only written once there is something to write. A settings value that still carries `nil` here is
+        // a build that has never touched the provider list, and that is exactly the state the import in
+        // `toSettings()` keys off — writing a default blob here would erase the signal and lose an existing
+        // SearXNG address instead of importing it.
+        webSearchJSON = tools.search.flatMap { JSONCodec.encode($0) }
         updatedAt = now
     }
 }

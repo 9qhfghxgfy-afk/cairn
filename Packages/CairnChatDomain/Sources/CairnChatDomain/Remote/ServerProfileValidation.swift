@@ -78,8 +78,11 @@ extension ServerProfile {
         for (key, _) in headers {
             let headerName = key.trimmingCharacters(in: .whitespacesAndNewlines)
             if headerName.isEmpty { throw ServerProfileValidationError.emptyHeaderName }
-            // Credentials belong in the token field, which is Keychain-backed.
-            if headerName.lowercased() == "authorization" {
+            // Credentials belong in the token field, which is Keychain-backed. The list of names that can
+            // only ever carry a credential is shared with search providers, so one rule covers both
+            // settings surfaces — `Authorization` was the only one refused before, which left
+            // `X-API-Key` and `Cookie` as a way to put a secret in the settings store by accident.
+            if HTTPHeaderNames.isCredentialBearing(headerName) {
                 throw ServerProfileValidationError.reservedHeader(headerName)
             }
         }
