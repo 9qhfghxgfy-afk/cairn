@@ -32,9 +32,9 @@ public struct AttachmentFiles {
         try? FileManager.default.createDirectory(
             at: directory, withIntermediateDirectories: true
         )
-        var kind: ObjCBool?
+        var kind = ObjCBool(false)
         let present = FileManager.default.fileExists(atPath: directory.path, isDirectory: &kind)
-        self.isWritable = present && (kind?.boolValue ?? false)
+        self.isWritable = present && kind.boolValue
             && FileManager.default.isWritableFileAtPath(directory.path)
     }
 
