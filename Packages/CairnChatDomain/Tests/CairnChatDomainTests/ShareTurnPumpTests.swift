@@ -30,7 +30,7 @@ final class ShareTurnPumpTests: XCTestCase {
         private(set) var head: ShareReply?
         private(set) var frames: [String] = []
         private(set) var finished = false
-        func writeHead(_ reply: ShareReply) async { head = reply }
+        func writeReply(_ reply: ShareReply) async { head = reply }
         func writeFrame(_ frame: String) async { frames.append(frame) }
         func finishWriting() async { finished = true }
     }

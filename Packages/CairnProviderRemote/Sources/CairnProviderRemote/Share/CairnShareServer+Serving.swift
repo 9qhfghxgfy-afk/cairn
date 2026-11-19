@@ -55,17 +55,20 @@ enum ShareSocketServicer {
         case .needMoreBytes:
             socket.abandon()
         case .rejected:
-            await socket.writeHead(ShareHTTPResponse.error(status: 400, dialect: .ollama, message: "unreadable request"))
+            await socket.writeReply(ShareHTTPResponse.error(status: 400, dialect: .ollama, message: "unreadable request"))
             await socket.finishWriting()
         case .complete(let request):
             switch ShareDispatch.dispatch(request, table: table, token: token) {
             case .reply(let reply):
-                await socket.writeHead(reply)
-                for frame in reply.frames { await socket.writeFrame(frame) }
+                // One call, head and body together: a reply that announced a Content-Length has to
+                // deliver it before the socket closes.
+                await socket.writeReply(reply)
                 await socket.finishWriting()
             case .turn(let turn, _):
                 guard let provider = table.provider(forModelID: turn.modelID) else {
-                    await socket.writeHead(ShareHTTPResponse.error(status: 503, dialect: turn.endpoint.errorDialect, message: "no engine behind that name"))
+                    // Dispatch already refused any name that is not in the table, so this is the narrow
+                    // race where an engine went away between that answer and this one.
+                    await socket.writeReply(ShareHTTPResponse.error(status: 503, dialect: turn.endpoint.errorDialect, message: "no engine behind that name"))
                     await socket.finishWriting()
                     return
                 }

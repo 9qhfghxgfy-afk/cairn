@@ -114,12 +114,16 @@ final class ShareLoopbackTests: XCTestCase {
         }
     }
 
+    /// A name the user never ticked is answered in the dialect of the path, with 404 rather than 503:
+    /// dispatch refuses it before a turn is ever built, because running a different engine than the one a
+    /// client named would be inventing an answer. This is the whole feature in one request — the key, the
+    /// table, and the honest refusal — over a real socket.
     func testANameWithNoEngineBehindItIsRefusedRatherThanInvented() async throws {
         try await withSurface { server in
             let body = #"{"model":"some-model-not-shared","messages":[{"role":"user","content":"hi"}],"stream":false}"#
             let answer = try await self.call(server, "POST", "/api/chat", body: body, key: self.shareToken)
-            XCTAssertEqual(answer.0, 503)
-            XCTAssertTrue(answer.1.contains("no engine behind that name"))
+            XCTAssertEqual(answer.0, 404)
+            XCTAssertTrue(answer.1.contains("no such model"))
         }
     }
 

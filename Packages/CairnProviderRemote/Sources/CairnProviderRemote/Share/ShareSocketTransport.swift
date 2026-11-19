@@ -79,7 +79,13 @@ final class ShareSocket: ShareFrameWriting, @unchecked Sendable {
         }
     }
 
-    func writeHead(_ reply: ShareReply) async { await writeBytes(reply.headData) }
+    /// The head **and whatever body the reply carries**, as one write.
+    ///
+    /// `ShareReply` keeps its body pieces in `frames`, so a buffered answer's body is the reply. Writing
+    /// only the head here would print a `Content-Length` and then close without filling it, which a real
+    /// client reports as a lost connection rather than as a short answer — so this writes both, in one
+    /// send, and the caller cannot get one without the other.
+    func writeReply(_ reply: ShareReply) async { await writeBytes(reply.allBytes) }
     func writeFrame(_ frame: String) async { await writeBytes(Data(frame.utf8)) }
 
     /// Ends the answer. A streamed response carries no Content-Length, so **the close is the

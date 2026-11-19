@@ -3,8 +3,15 @@ import Foundation
 /// Where a shared turn's bytes go. One method per thing a socket can be asked to do, so the pump
 /// that turns a model stream into a wire stream is testable with a recorder instead of a listener.
 public protocol ShareFrameWriting: AnyObject, Sendable {
-    /// The response head, written once, before any body byte.
-    func writeHead(_ reply: ShareReply) async
+    /// The response head, **with whatever body that reply carries**. Written once, before any frame.
+    ///
+    /// The body travels with the head on purpose. A buffered answer keeps its whole body inside the reply,
+    /// and a sink that wrote only the head would announce a `Content-Length` it never satisfied — which is
+    /// not a slow client but a broken one: URLSession reports exactly that as "the network connection was
+    /// lost". Anything a caller could forget belongs in the same call as the thing it belongs to. A
+    /// streaming reply carries no body, so this is the head alone, and it still goes out before the first
+    /// token so a client switches to streaming mode instead of waiting for a length that never comes.
+    func writeReply(_ reply: ShareReply) async
     /// One body piece. For a stream this is one frame and it is flushed now, not buffered.
     func writeFrame(_ frame: String) async
     /// Half-close the write side: the answer is over, and for a stream the end of the socket is what
@@ -35,7 +42,7 @@ public enum ShareTurnPump {
         var encoder = ShareStreamEncoder(shape: ShareStreamShape.forEndpoint(turn.endpoint) ?? .ollamaChat, model: turn.modelID)
         do {
             if turn.streams {
-                await sink.writeHead(encoder.streamReply)
+                await sink.writeReply(encoder.streamReply)
             }
             for try await chunk in provider.stream(turn.generationRequest()) {
                 let frames = encoder.append(chunk)
@@ -62,9 +69,9 @@ public enum ShareTurnPump {
     ) async -> FinishReason {
         if !turn.streams {
             if reason == .error {
-                await sink.writeHead(ShareHTTPResponse.error(status: 500, dialect: encoder.shape.dialect, message: failureText))
+                await sink.writeReply(ShareHTTPResponse.error(status: 500, dialect: encoder.shape.dialect, message: failureText))
             } else {
-                await sink.writeHead(encoder.bufferedReply())
+                await sink.writeReply(encoder.bufferedReply())
             }
             await sink.finishWriting()
             return reason
