@@ -27,16 +27,29 @@ final class WebSearchConsentWiringTests: XCTestCase {
         )
     }
 
-    /// Lets a request reach the sheet. The seam suspends on a continuation, so the asking side has to be given
-    /// a turn before the answering side can see the question.
-    private func settle() async { try? await Task.sleep(for: .milliseconds(30)) }
+    /// Waits until a question is genuinely on the sheet, instead of assuming a slice of main-actor time.
+    ///
+    /// The seam parks the asking side on a continuation, and an `async let` only reaches it when this task
+    /// yields. A fixed sleep is a guess about how long that takes: a loaded CI runner can stall past any
+    /// constant, and a test that then answers a question that was never asked would sit waiting forever for a
+    /// reply nobody gave — a hang rather than a failure. Yielding until the condition holds turns the wait into
+    /// a condition, and the deadline makes a broken join report itself instead of running to the job timeout.
+    private func waitUntil(_ condition: () -> Bool, timeout: Duration = .seconds(2)) async -> Bool {
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: timeout)
+        while !condition() {
+            if clock.now >= deadline { return false }
+            await Task.yield()
+        }
+        return true
+    }
 
     func testAPublicSearchStopsAndAsksBeforeASingleByteLeaves() async {
         let wiring = makeWiring(acknowledged)
         let profile = ThemeModel(settings: acknowledged).settings.webSearch.activeProvider
         async let answer = wiring.searchRequester(profile)
-        await settle()
-        XCTAssertNotNil(wiring.consent.pending, "the request must be parked on a sheet, not in flight")
+        let asked = await waitUntil { wiring.consent.pending != nil }
+        XCTAssertTrue(asked, "the request must be parked on a sheet, not in flight")
         XCTAssertTrue(wiring.consent.pending?.isSearch ?? false, "a provider question, not a page one")
         wiring.consent.resolve(allow: true)
 
@@ -50,11 +63,13 @@ final class WebSearchConsentWiringTests: XCTestCase {
         let wiring = makeWiring(theme.settings)
         let profile = theme.settings.webSearch.activeProvider
         async let answer = wiring.searchRequester(profile)
-        await settle()
+        let asked = await waitUntil { wiring.consent.pending != nil }
+        XCTAssertTrue(asked, "the row has to be on the sheet before an answer can be filed against it")
         wiring.consent.resolve(allow: true)
-        XCTAssertTrue(await answer)
+        let granted = await answer
+        XCTAssertTrue(granted, "the sheet's yes is the answer the tool gets")
 
-        XCTAssertEqual(theme.settings.webSearch.consentDecision(for: profile.id), .granted)
+        XCTAssertEqual(theme.settings.webSearch.consentDecision(for: profile), .granted)
         let second = await wiring.searchRequester(profile)
         XCTAssertTrue(second)
         XCTAssertNil(wiring.consent.pending, "a granted provider does not interrupt twice")
@@ -65,13 +80,15 @@ final class WebSearchConsentWiringTests: XCTestCase {
         let wiring = makeWiring(theme.settings)
         let profile = theme.settings.webSearch.activeProvider
         async let answer = wiring.searchRequester(profile)
-        await settle()
+        let asked = await waitUntil { wiring.consent.pending != nil }
+        XCTAssertTrue(asked, "a refusal is still an answer that has to be given")
         wiring.consent.resolve(allow: false)
 
         let allowed = await answer
         XCTAssertFalse(allowed, "a seam that lost the refusal would let the query out")
-        XCTAssertEqual(theme.settings.webSearch.consentDecision(for: profile.id), .denied)
-        XCTAssertFalse(await wiring.searchRequester(profile))
+        XCTAssertEqual(theme.settings.webSearch.consentDecision(for: profile), .denied)
+        let askedAgain = await wiring.searchRequester(profile)
+        XCTAssertFalse(askedAgain, "a stored no is an answer, not a fresh question")
         XCTAssertNil(wiring.consent.pending)
     }
 
@@ -83,16 +100,17 @@ final class WebSearchConsentWiringTests: XCTestCase {
         let wiring = makeWiring(theme.settings)
         let profile = theme.settings.webSearch.activeProvider
         async let answer = wiring.searchRequester(profile)
-        await settle()
+        let asked = await waitUntil { wiring.consent.pending != nil }
+        XCTAssertTrue(asked, "walking away only means something if there was a sheet to walk away from")
         wiring.consent.declineUnanswered()
 
         let allowed = await answer
         XCTAssertFalse(allowed)
-        XCTAssertEqual(theme.settings.webSearch.consentDecision(for: profile.id), .denied)
+        XCTAssertEqual(theme.settings.webSearch.consentDecision(for: profile), .denied)
     }
 
     /// One sheet at a time, so two turns that both want to ask cannot stack two sheets on each other.
-    func testTwoQuestionsQueueInsteadOfStacking() async {
+    func testTwoQuestionsQueueInsteadOfStacking() async throws {
         var search = WebSearchSettings.default
         try search.providers.add(WebSearchProviderProfile(
             kind: .searxng, displayName: "First", baseURLString: "https://one.example.com"
@@ -109,12 +127,16 @@ final class WebSearchConsentWiringTests: XCTestCase {
 
         async let first = wiring.searchRequester(rows[0])
         async let second = wiring.searchRequester(rows[1])
-        await settle()
-        XCTAssertEqual(wiring.consent.pending?.profile?.displayName, rows[0].displayName, "one at a time")
+        let firstWasAsked = await waitUntil {
+            wiring.consent.pending?.profile?.displayName == rows[0].displayName
+        }
+        XCTAssertTrue(firstWasAsked, "one at a time, and the first one first")
 
         wiring.consent.resolve(allow: true)
-        await settle()
-        XCTAssertEqual(wiring.consent.pending?.profile?.displayName, rows[1].displayName, "it waits its turn")
+        let secondWasAsked = await waitUntil {
+            wiring.consent.pending?.profile?.displayName == rows[1].displayName
+        }
+        XCTAssertTrue(secondWasAsked, "the next question takes the sheet's turn instead of stacking on it")
         wiring.consent.resolve(allow: true)
 
         let answers = [await first, await second]
@@ -127,10 +149,12 @@ final class WebSearchConsentWiringTests: XCTestCase {
         let theme = ThemeModel(settings: acknowledged)
         let wiring = makeWiring(theme.settings)
         async let answer = wiring.fetchRequester(URL(string: "https://example.com/a")!)
-        await settle()
-        XCTAssertEqual(wiring.consent.pending?.subjectKind, .page, "a page, not a provider")
+        let asked = await waitUntil { wiring.consent.pending != nil }
+        XCTAssertTrue(asked, "a page read has to stop and ask before it reads")
+        XCTAssertFalse(wiring.consent.pending?.isSearch ?? true, "a page, not a provider")
         wiring.consent.resolve(allow: true)
-        XCTAssertTrue(await answer)
+        let read = await answer
+        XCTAssertTrue(read)
         XCTAssertEqual(theme.settings.webFetchAllowed, true)
 
         let otherHost = await wiring.fetchRequester(URL(string: "https://elsewhere.example.org")!)

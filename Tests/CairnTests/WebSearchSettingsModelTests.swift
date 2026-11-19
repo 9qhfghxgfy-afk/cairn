@@ -17,6 +17,10 @@ import CairnProviderRemote
 final class WebSearchSettingsModelTests: XCTestCase {
     private let tokenShape = WebSearchCredentialShape.secretHeader(name: "X-API-Key")
 
+    /// A nested type does **not** inherit the outer test class's actor isolation, so this one says so
+    /// itself: `ThemeModel` and `WebSearchSettingsModel` are main-actor types, and building them from a
+    /// nonisolated `init` is an error rather than a warning.
+    @MainActor
     private final class Fixtures {
         let theme: ThemeModel
         let searchVault = MemorySecretStore()
