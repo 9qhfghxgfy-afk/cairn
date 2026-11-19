@@ -26,7 +26,7 @@ Gate for every milestone (from `.clinerules`):
 | P3b | Task B — Web search providers: DuckDuckGo default, own SearXNG, Ollama Cloud; consent asked before the socket; the Web Search settings screen | **closed (code + CI)** — guards 53/53, host suites 492 domain + 170 remote + 60 on-device + 17 native, simulator build **SUCCEEDED** and 171 `CairnTests` green on `f7a4f77`; **not** on-device-verified, **not** real-network-verified — the 16-line Task B device checklist stays open (see `## Task B`) | [44567976658](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/44567976658) |
 | P4 | LAN model sharing: `NWListener` surface answering Ollama's `/api/*` and OpenAI's `/v1/*`, per-session opt-in, generated key in its own Keychain service, foreground-only | **closed (code + CI)** — guards, all four host suites, simulator build and 147 `CairnTests` green on `b523ca9`; **not** on-device-verified, **not** real-network-verified | [44466484720](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/44466484720) |
 | P5 | Accessibility pass, AppIcon pipeline, licenses + privacy statement + issues link, doc refresh | todo | |
-| P6 | Built-in `get_location`: one position read from CoreLocation, consent settled **before** any radio work, no geocoding, per-chat switch, no outbound badge | **in-progress** — domain (`GetLocationTool`, `LocationConsentGate`, `LocationFix`), UI (`LocationConsentModel`/`Sheet`, `ToolSwitchLabels`), app (`LocationProvider`+`Mapping`, `LocationWiring`) and 9 new simulator tests written. Host-verified: 535 domain tests green, guards 53/53, 593 files parse clean. **Not compiled** — CoreLocation/SwiftUI/XCTest cannot build on the Windows authoring machine, so `xcodebuild build` + `CairnTests` on the Mac or CI is the first real check | |
+| P6 | Built-in `get_location`: one position read from CoreLocation, consent settled **before** any radio work, no geocoding, per-chat switch, no outbound badge | **done — CI-verified** on `a02eb51`: Privacy guards green with the guard self-test at 53/53, Host unit tests on macOS (535 domain + 170 remote, 0 failures), Build + test on iPhone 17 / iOS 26.5 (build green, **190 `CairnTests`, 0 failures** — 14 of them this seam: 9 wiring, 5 mapping). On the Windows authoring machine: 535 domain tests green, guards 53/53, 593 files parse clean — which is the whole of what this machine can say, since CoreLocation, SwiftUI and XCTest-on-macOS do not build here. **Not `on-device-verified`**: every refusal test answers a counting fake, no iPhone has raised iOS's own permission prompt, and no real `CLLocationManager` has produced a fix in any test. **`real-network-verified` cannot apply** — there is no socket: `NetworkClass.onDevice`, no badge, no opt-in, no geocoder | [44634743108](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/44634743108) |
 
 ## Decisions (durable — update here, not in chat)
 
@@ -2087,3 +2087,44 @@ commit; `ipa.yml` is a `workflow_dispatch`, so the user triggers the build.
 5. **Kill the app with a web tool armed and a badge up, then reopen it.** The chip comes back up, the
    acknowledgement comes back, and the badge is still read back off the stored node rather than off the live
    turn.
+
+## P6 — `get_location`: what is proved, and what a phone still owes
+
+**CI-verified** on `a02eb51`, run [44634743108](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/44634743108):
+Privacy guards green with the guard self-test at 53/53; Host unit tests on macOS — 535 domain + 170 remote, 0
+failures; Build + test on iPhone 17 / iOS 26.5 — the build compiles `LocationProvider`, its mapping extension,
+`LocationWiring`, the consent model and the consent sheet, and **190 `CairnTests` run with 0 failures**, 14 of
+them written for this seam (9 wiring, 5 mapping).
+
+**Host-verified** on the Windows authoring machine: 535 domain tests green, guards 53/53, 593 files parse clean.
+That machine compiles none of the CoreLocation or SwiftUI code — no `Security`, no `CoreLocation`, no XCTest on
+macOS — so its numbers describe the pure half, and the pure half is exactly where the consent state machine
+lives.
+
+**On-device-verified: no.** **Real-network-verified: not applicable** — a position read opens no socket, the
+tool's `NetworkClass` is `.onDevice`, and there is no badge, no outbound opt-in and no geocoder in the binary's
+path for this tool.
+
+### Device checklist for `get_location` — six lines, each says what it proves
+
+1. **Ask a model where you are with the `Tools` switch on and location never answered.** The consent sheet comes
+   up first and Location Services stays dark while it is up. The entire privacy claim is that ordering, and only
+   a phone can show that no radio woke.
+2. **Answer no.** The next turn is answered from the record with no sheet, and System Settings still says Cairn
+   has never asked. A dismissed sheet counts as a no too.
+3. **Answer yes, then answer iOS's own prompt.** Two different questions, two different no's: ours asks whether
+   Cairn may use your location, iOS asks whether this app may, this time. A yes to ours and a no to iOS's has to
+   come back as "no position" — not a crash, and not a position invented from the network.
+4. **Kill the app with the sheet up, then reopen it.** Nothing about a position survives, a fresh chat asks
+   again, and no half-finished read is replayed from storage.
+5. **Switch Cairn's system permission to Never while our record still says granted.** The tool answers "no
+   position" with one attempt and no retry loop, and it must not report a person's decision as the cause — iOS's
+   denial does not rewrite our record.
+6. **Read a position with a weak indoor fix and ask a model what place that is.** The tool hands over numbers
+   and an accuracy radius and nothing else. If the answer names a town, the model invented it, which is why no
+   geocoder is linked in.
+
+What closing this list would mean: `on-device-verified` could be cited for P6. It changes nothing about the CI
+claim, and no amount of device checking turns the counting fake into a radio — that gap is the reason the two
+tiers are reported separately.
+
