@@ -37,7 +37,7 @@ public struct ToolDefinition: Sendable, Equatable, Identifiable {
     }
 }
 
-/// The five built-in tool names, in one place.
+/// The six built-in tool names, in one place.
 ///
 /// Every comparison, badge and test in P3 goes through these constants; a literal typed in two files
 /// is how a renamed tool silently stops working in one of them.
@@ -47,17 +47,19 @@ public enum BuiltInTool {
     public static let wikiSearch = "wiki_search"
     public static let calculator = "calculator"
     public static let composeMail = "compose_mail"
+    public static let getLocation = "get_location"
 
     /// Every built-in name, in the order the UI lists them.
     public static let allNames: [String] = [
-        webSearch, webFetch, wikiSearch, calculator, composeMail,
+        webSearch, webFetch, wikiSearch, calculator, composeMail, getLocation,
     ]
 
     /// The three that reach the public internet, and so the three the `Tools` chip gates.
     public static let webNames: [String] = [webSearch, webFetch, wikiSearch]
 
-    /// The two that need nothing beyond this device.
-    public static let localNames: [String] = [calculator, composeMail]
+    /// The three that need nothing beyond this device. `get_location` reads a radio, not a socket: no
+    /// reverse geocoding, no request to anybody, so it belongs here with the arithmetic.
+    public static let localNames: [String] = [calculator, composeMail, getLocation]
 
     public static func isWebTool(_ name: String) -> Bool { webNames.contains(name) }
     public static func isKnown(_ name: String) -> Bool { allNames.contains(name) }

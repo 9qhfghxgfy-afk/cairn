@@ -22,6 +22,11 @@ final class ToolWiring {
     /// leaves the consent seams out, and a tool with nobody to ask it refuses rather than assumes — see
     /// `WebSearchConsentGate` and `WebFetchConsentGate`.
     private let webSearch: WebSearchWiring?
+    /// The app-layer location surface: the record, the sheet, and the one thing in this app that may read a
+    /// position. nil leaves `get_location` out of the registry — a tool that could only ever answer that
+    /// nobody is there to ask is worse to a model than no tool at all, and a sheet with no window behind it
+    /// would park a turn forever.
+    private let location: LocationWiring?
     /// Held for the life of the app: the mail composer, and the delegate that composer calls back on. A
     /// presenter owned by a tool call would be released the moment that call returned, taking the sheet the
     /// user is still reading with it.
@@ -32,13 +37,15 @@ final class ToolWiring {
         secrets: KeychainSecretStore,
         servers: ServersModel?,
         searchSecrets: KeychainSecretStore = WebSearchKeychain.store(),
-        webSearch: WebSearchWiring? = nil
+        webSearch: WebSearchWiring? = nil,
+        location: LocationWiring? = nil
     ) {
         self.settings = settings
         self.secrets = secrets
         self.servers = servers
         self.searchSecrets = searchSecrets
         self.webSearch = webSearch
+        self.location = location
     }
 
     /// What one search reads at the moment it runs: the provider settings as they are now, and the one
@@ -97,6 +104,9 @@ final class ToolWiring {
     /// The two consent seams travel with it, and a build that has nothing to ask with gets a refusal rather
     /// than a free pass: `web_search` and `web_fetch` answer with the typed "Cairn has to ask first" failure
     /// when nobody is there to ask, which is the only honest answer when nobody is there to answer.
+    /// `get_location` is offered whenever this build has a position source, badge or no badge, because a
+    /// position read asks nothing of anybody but the person holding the phone — and it carries that tool's
+    /// own gate with it, so the sheet is the same one record the next turn reads.
     func registry() -> ToolRegistry {
         syncCloudRows()
         return BuiltInToolRegistry.make(
@@ -104,7 +114,8 @@ final class ToolWiring {
             mailPresenter: mail,
             webToolsAllowed: settings.settings.outboundWebAllowed,
             consent: webSearch?.searchRequester,
-            fetchConsent: webSearch?.fetchRequester
+            fetchConsent: webSearch?.fetchRequester,
+            locationTool: location?.tool
         )
     }
 

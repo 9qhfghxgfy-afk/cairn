@@ -30,15 +30,36 @@ public enum ToolPromptBlock {
     /// in its request, so this only sets what to do with them.
     public static func nativeListing(_ definitions: [ToolDefinition]) -> String {
         let names = definitions.map(\.name).sorted()
-        return """
+        let base = """
             Tools are available on this request: \(names.joined(separator: ", ")). \
             Call one instead of guessing, and say which one you used. Only report a result a tool \
             actually returned — a call you did not make has told you nothing.
             """
+        // The same line the prompt format gets: a native backend is told the schemas by its request, but
+        // not what to do with a refusal, and a refused location read is the one answer a model is most
+        // tempted to fill in itself.
+        let guidance = ToolPromptBlock.guidance(for: definitions)
+        return guidance.isEmpty ? base : base + "\n" + guidance
     }
 
     /// The names offered, for `TurnContext` and for the transcript's record of what a turn could do.
     public static func names(_ definitions: [ToolDefinition]) -> [String] {
         definitions.map(\.name).sorted()
+    }
+
+    /// The extra line a tool needs beyond its own blurb, for the set offered on this turn.
+    ///
+    /// Only `get_location` has one. Its blurb already says the tool can be refused, and a model that
+    /// reads a refusal and then names a city anyway has invented precisely the thing this tool exists to
+    /// keep honest — so the rule is stated once more, in the block rather than in a tool result a model
+    /// may skim past. An offer with no location tool in it renders the empty string, so nothing is added
+    /// to a prompt that cannot use it.
+    public static func guidance(for definitions: [ToolDefinition]) -> String {
+        guard definitions.contains(where: { $0.name == BuiltInTool.getLocation }) else { return "" }
+        return """
+            get_location answers only after the user allows it. If it reports that it was refused, \
+            that Location Services are off, or that the device did not answer, that is the whole of \
+            what you know about where they are: say so, and do not name a place, a city or a time zone.
+            """
     }
 }

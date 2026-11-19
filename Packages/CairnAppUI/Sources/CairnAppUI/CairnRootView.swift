@@ -18,6 +18,10 @@ public struct CairnRootView: View {
     /// belongs to the device, not to one conversation: a search asked in a second chat while the first sheet is
     /// still up must not put a second sheet on top of it.
     private var consent: WebSearchConsentModel?
+    /// The question `get_location` stops in front of. Device-level for the same reason the web question is:
+    /// the answer is about this phone, not about one conversation, and a second chat that asks while the
+    /// sheet is up must not stack a second sheet on it.
+    private var location: LocationConsentModel?
     /// The thing that can resize a photo before it joins a message. Handed through rather than reached for:
     /// `CairnAppUI` may draw an image, but the size a photo becomes is the domain's rule
     /// (`ImagePreparationPolicy`), and the codec that applies it belongs to the app.
@@ -33,7 +37,8 @@ public struct CairnRootView: View {
         settings: ThemeModel? = nil,
         imagePreparer: (any ImagePreparing)? = nil,
         webSearch: WebSearchSettingsModel? = nil,
-        consent: WebSearchConsentModel? = nil
+        consent: WebSearchConsentModel? = nil,
+        location: LocationConsentModel? = nil
     ) {
         self.workspace = workspace
         self.servers = servers
@@ -41,6 +46,7 @@ public struct CairnRootView: View {
         self.imagePreparer = imagePreparer
         self.webSearch = webSearch
         self.consent = consent
+        self.location = location
     }
 
     public var body: some View {
@@ -116,6 +122,19 @@ public struct CairnRootView: View {
         )) {
             if let consent, let prompt = consent.pending {
                 WebSearchConsentSheet(model: consent, prompt: prompt)
+                    .cairnPresentation(theme: settings)
+            }
+        }
+        // The question `get_location` cannot ask for itself. The tool asks through its own gate and this is
+        // the only thing that can answer, so a root view built without a location model gets no tool from
+        // the app layer at all rather than a turn parked on a sheet nobody will ever see. Swiping down is a
+        // refusal, recorded as one, because the turn behind the sheet has to be resumed either way.
+        .sheet(isPresented: Binding(
+            get: { location?.isAsking == true },
+            set: { asking in if !asking { location?.declineUnanswered() } }
+        )) {
+            if let location {
+                LocationConsentSheet(model: location)
                     .cairnPresentation(theme: settings)
             }
         }

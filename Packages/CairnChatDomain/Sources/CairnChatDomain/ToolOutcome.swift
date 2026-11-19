@@ -31,6 +31,10 @@ public enum ToolError: String, Sendable, Equatable, Codable, CaseIterable {
     case httpsRequired
     /// iOS refused the local network permission the request needed.
     case localNetworkDenied
+    /// The user has not allowed this app to use location, so nothing was read.
+    case locationDenied
+    /// Location Services are off on the device, so no app can read a position.
+    case locationDisabled
     /// The request would leave the device and the user has not allowed it.
     case internetNotAllowed
     /// The address resolves to a private or loopback target a fetch may not touch.
@@ -56,7 +60,7 @@ public enum ToolError: String, Sendable, Equatable, Codable, CaseIterable {
              .endpointUnreachable:
             return true
         case .providerUnavailable, .endpointRejected, .endpointMalformed, .rateLimited, .httpsRequired,
-             .localNetworkDenied:
+             .localNetworkDenied, .locationDenied, .locationDisabled:
             return false
         case .toolsOff, .internetNotAllowed, .unavailable, .cancelled, .responseTooLarge:
             return false
@@ -78,6 +82,10 @@ public enum ToolError: String, Sendable, Equatable, Codable, CaseIterable {
         case .httpsRequired: return "That search address needs a secure connection."
         case .localNetworkDenied:
             return "iOS did not allow local network access, so the request was stopped."
+        case .locationDenied:
+            return "Location access has not been allowed for this app, so no position was read."
+        case .locationDisabled:
+            return "Location Services are turned off on this device."
         case .internetNotAllowed: return "This tool needs the outbound web opt-in."
         case .blockedTarget: return "That address is on a private network, so it was not fetched."
         case .responseTooLarge: return "The page was larger than the allowed response size."

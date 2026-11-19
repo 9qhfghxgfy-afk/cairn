@@ -105,6 +105,12 @@ targets:
             LSHandlerRank: Owner
             LSItemContentTypes:
               - app.cairn.chat
+        # Location: when-in-use only, and one reading at a time. The string says what the tool does and what
+        # it does not do, because a permission prompt is the one place a person can learn the truth about a
+        # feature before agreeing to it. There is no background mode and no `NSLocationAlwaysUsageDescription`
+        # anywhere in this project: the source calls `requestLocation()` once and never enters continuous
+        # updates, so background location is not merely disallowed, it is not requested.
+        NSLocationWhenInUseUsageDescription: "Cairn reads one position so an answer can depend on where you are — only after you allow the location tool, in this chat, while Cairn is open. The reading goes to no map or geocoding service, and Cairn does not track you."
     configFiles:
       # Signing chain. Config/Signing.xcconfig optionally #includes the git-ignored
       # Config/Local.xcconfig, so a local Team ID is picked up when the file exists and CI,
@@ -155,6 +161,14 @@ targets:
       # present — that a public search stops in front of a sheet instead of running, and that a refusal is held
       # rather than re-asked. No @main here either.
       - App/WebSearchWiring.swift
+      # The location surface and its CoreLocation source, for the same reason and needing a simulator for the
+      # same reason: this is the only place the domain's consent record, the UI's sheet and a
+      # CLLocationManager exist together, and the promise worth proving is the order — a refusal performs no
+      # hardware work at all, which no test inside any one of the three modules can see. No @main in either
+      # file, and no test here ever starts a real location request.
+      - App/LocationWiring.swift
+      - App/LocationProvider.swift
+      - App/LocationProvider+Mapping.swift
     dependencies:
       - package: CairnChatDomain
       - package: CairnPersistence

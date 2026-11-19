@@ -53,6 +53,13 @@ public enum PromptToolProtocol {
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             lines.append("- \(definition.name) — \(arguments). \(blurb)")
         }
+        // A tool whose refusal is a real answer gets one more line, in the block the model reads rather
+        // than in a result it might not. `ToolPromptBlock` owns which tools need it.
+        let guidance = ToolPromptBlock.guidance(for: definitions)
+        if !guidance.isEmpty {
+            lines.append("")
+            lines.append(guidance)
+        }
         return lines.joined(separator: "\n")
     }
 

@@ -18,6 +18,10 @@ public struct ToolToggleSet: Sendable, Equatable, Codable {
     public var wikiSearch: Bool
     public var calculator: Bool
     public var composeMail: Bool
+    /// The switch for `get_location`. On by default like the other local tools, and separate from the
+    /// outbound acknowledgement because a position read never leaves the device — the gate on it is
+    /// `LocationConsentGate`, which is asked by the tool itself.
+    public var getLocation: Bool
 
     public init(
         isEnabled: Bool = false,
@@ -25,7 +29,8 @@ public struct ToolToggleSet: Sendable, Equatable, Codable {
         webFetch: Bool = true,
         wikiSearch: Bool = true,
         calculator: Bool = true,
-        composeMail: Bool = true
+        composeMail: Bool = true,
+        getLocation: Bool = true
     ) {
         self.isEnabled = isEnabled
         self.webSearch = webSearch
@@ -33,6 +38,7 @@ public struct ToolToggleSet: Sendable, Equatable, Codable {
         self.wikiSearch = wikiSearch
         self.calculator = calculator
         self.composeMail = composeMail
+        self.getLocation = getLocation
     }
 
     public static let `default` = ToolToggleSet()
@@ -63,6 +69,7 @@ public struct ToolToggleSet: Sendable, Equatable, Codable {
         case BuiltInTool.wikiSearch: return wikiSearch
         case BuiltInTool.calculator: return calculator
         case BuiltInTool.composeMail: return composeMail
+        case BuiltInTool.getLocation: return getLocation
         // An unknown tool cannot be switched on from this set, and a tool the user has never seen a
         // switch for is not something to offer silently.
         default: return false
@@ -76,6 +83,7 @@ public struct ToolToggleSet: Sendable, Equatable, Codable {
         case BuiltInTool.wikiSearch: wikiSearch = on
         case BuiltInTool.calculator: calculator = on
         case BuiltInTool.composeMail: composeMail = on
+        case BuiltInTool.getLocation: getLocation = on
         default: break
         }
     }

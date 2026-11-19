@@ -30,6 +30,11 @@ struct CairnLaunchView: View {
     /// model, and the launch-time import of a pre-provider SearXNG address. Kept alive because the sheet's
     /// answer has somewhere to go — a model deallocated mid-question would leave the turn waiting forever.
     @State private var webSearchWiring: WebSearchWiring?
+    /// The location surface, kept alive for the life of the app. It owns the consent record and the sheet,
+    /// and a turn parked behind an unanswered sheet must not be waiting on an object that has already been
+    /// deallocated. The record is per app run: iOS keeps the durable authorization, and a copy of it in
+    /// Cairn's database could only ever disagree with the system.
+    @State private var locationWiring: LocationWiring?
     /// A chat file that arrived before the workspace existed. iOS hands an opened file over in the same
     /// moment it launches the app, so the file is held for a beat and imported as soon as there is a store
     /// to import it into — rather than dropped on the floor because the launch lost a race.
@@ -52,7 +57,8 @@ struct CairnLaunchView: View {
                     settings: theme,
                     imagePreparer: ImageIOPreparer(),
                     webSearch: webSearchWiring?.settings,
-                    consent: webSearchWiring?.consent
+                    consent: webSearchWiring?.consent,
+                    location: locationWiring?.consent
                 )
             } else if let startupFailure {
                 ContentUnavailableView(
@@ -170,11 +176,18 @@ struct CairnLaunchView: View {
                 let webSearch = WebSearchWiring.install(theme: builtTheme, serverSecrets: secrets)
                 webSearchWiring = webSearch
 
+                // The location surface is built before the tools, because `get_location` is only in the
+                // registry when this exists: a sheet the root view never draws would park a turn forever, so
+                // the wiring that owns the sheet and the wiring that hands out the tool are the same object.
+                let location = LocationWiring.install()
+                locationWiring = location
+
                 let wiring = ToolWiring(
                     settings: builtTheme,
                     secrets: secrets,
                     servers: builtServers,
-                    webSearch: webSearch
+                    webSearch: webSearch,
+                    location: location
                 )
                 wiring.install(on: builtWorkspace)
                 toolWiring = wiring
