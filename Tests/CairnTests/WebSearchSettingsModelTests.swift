@@ -98,7 +98,7 @@ final class WebSearchSettingsModelTests: XCTestCase {
         XCTAssertEqual(box.model.consent(for: row), .granted)
 
         var moved = WebSearchRowEdit(row: row)
-        moved.address = "http://192.168.1.21:8888"
+        moved.address = "http://192.168.1.20:8889"
         moved.token = nil
         XCTAssertTrue(box.model.save(moved))
 
