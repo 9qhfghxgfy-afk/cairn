@@ -16,8 +16,16 @@ struct WebSearchSettingsScreen: View {
     /// Present when this build cannot open a connection at all. The Test button is then absent rather than
     /// disabled — a button that can only say "not available" is a worse affordance than no button.
     private var canTest: Bool { model.testing != nil }
-    @State private var editing: WebSearchRowEdit?
+    /// A draft in front of the editor sheet. `WebSearchRowEdit` carries an optional id of its own — a row
+    /// being added has none yet — so the sheet needs a separate identity to present on.
+    @State private var editing: RowDraft?
     @State private var showingGuide = false
+
+    /// One row draft, wrapped so SwiftUI can present it as a sheet item.
+    struct RowDraft: Identifiable {
+        let id = UUID()
+        var draft: WebSearchRowEdit
+    }
 
     init(model: WebSearchSettingsModel) {
         self.model = model
@@ -47,9 +55,9 @@ struct WebSearchSettingsScreen: View {
         }
         .navigationTitle("Web Search")
         .navigationBarTitleDisplayMode(.inline)
-        .sheet(item: $editing) { draft in
+        .sheet(item: $editing) { rowDraft in
             NavigationStack {
-                WebSearchProviderEditor(model: model, draft: draft)
+                WebSearchProviderEditor(model: model, draft: rowDraft.draft)
             }
         }
         .sheet(isPresented: $showingGuide) {
@@ -107,11 +115,11 @@ struct WebSearchSettingsScreen: View {
         Section {
             ForEach(model.rows) { row in
                 WebSearchProviderRow(model: model, row: row) {
-                    editing = WebSearchRowEdit(row: row)
+                    editing = RowDraft(draft: WebSearchRowEdit(row: row))
                 }
             }
             Button {
-                editing = WebSearchRowEdit()
+                editing = RowDraft(draft: WebSearchRowEdit())
             } label: {
                 Label("Add a SearXNG instance", systemImage: "plus")
             }
