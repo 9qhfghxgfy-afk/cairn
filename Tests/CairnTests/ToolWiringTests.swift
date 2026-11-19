@@ -71,7 +71,15 @@ final class ToolWiringTests: XCTestCase {
         for name in BuiltInTool.webNames {
             XCTAssertNotNil(armed.tool(name), "\(name) arrives with the acknowledgement")
         }
-        XCTAssertEqual(armed.availableDefinitions(context: offered).count, BuiltInTool.allNames.count)
+        // The registry assembled here has no position source, so `get_location` is deliberately absent — a
+        // built-in that could only ever answer "no position" is not offered. Everything else this build can
+        // really do is advertised once the acknowledgement is up. Compared by name rather than by count so the
+        // assertion says which tool it is talking about when it breaks.
+        XCTAssertEqual(
+            armed.availableDefinitions(context: offered).map(\.name).sorted(),
+            BuiltInTool.allNames.filter { $0 != BuiltInTool.getLocation }.sorted(),
+            "the acknowledgement opens the web tools, and nothing else moved"
+        )
 
         // A device with no composer gets no mail tool rather than a tool that answers "done" and opens
         // nothing.
