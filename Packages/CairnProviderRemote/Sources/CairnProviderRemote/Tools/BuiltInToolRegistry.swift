@@ -22,14 +22,15 @@ public enum BuiltInToolRegistry {
         searchState: @escaping WebSearchStateReader,
         mailPresenter: (any MailDraftPresenting)? = nil,
         webToolsAllowed: Bool,
-        transport: any WebRequesting = WebHTTPTransport()
+        transport: any WebRequesting = WebHTTPTransport(),
+        consent: WebSearchConsentRequester? = nil
     ) -> ToolRegistry {
         var tools: [any ToolExecuting] = [CalculatorTool()]
         if let mailPresenter {
             tools.append(ComposeMailTool(presenter: mailPresenter))
         }
         guard webToolsAllowed else { return ToolRegistry(tools: tools) }
-        tools.append(WebSearchTool(state: searchState, transport: transport))
+        tools.append(WebSearchTool(state: searchState, transport: transport, consent: consent))
         tools.append(WebFetchTool(transport: transport))
         tools.append(WikiSearchTool(transport: transport))
         return ToolRegistry(tools: tools)

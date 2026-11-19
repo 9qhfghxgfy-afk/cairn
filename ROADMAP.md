@@ -1801,4 +1801,59 @@ Still owed, in order:
 7. Turn sharing on, then background Cairn: within moments the client stops reaching the phone, and when
    Cairn comes back the switch is off with the sentence that says why. Nothing re-opens itself.
 8. Share an engine that is a remote server: the laptop's request is answered by that server, and the screen
+
+## Task B — Web search providers: DuckDuckGo default, own SearXNG, Ollama Cloud (**in progress, 2026-11-19**)
+
+Against `docs/CLEANROOM_SPEC.md` §7. Three slices; two landed, one owed.
+
+- **Slice 1 — `7f76c50`** (domain, persistence, failure taxonomy). Provider rows instead of one routing
+  switch: exactly one row is active, there is no fallback, and a failure is named rather than answered with
+  "nothing found". `SettingsRecord` also stopped losing `webTools` on relaunch, and a pre-provider SearXNG
+  address imports itself as a row on the first read after an upgrade.
+- **Slice 2 — this commit** (consent, the failure suites, the wiring that still pointed at the old model).
+- **Slice 3 — owed:** the Web Search settings screen (provider picker, SearXNG address, result count, Test
+  Connection), the consent sheet the app hands to `WebSearchConsentRequester`, and the SwiftData round-trip
+  for `webSearchJSON` on the simulator lane.
+
+### What Slice 2 decided, and why
+
+- **Consent is asked before the request is built.** The tool cannot present a sheet, so the app hands it a
+  `@MainActor` requester. A refusal costs no socket, no bytes, no latency, and it is a typed
+  `internetNotAllowed` — the model reads a person's decision, not a broken tool.
+- **Nobody to ask is not a yes.** A preview, a test host, or a build with no sheet gets the "Cairn has to ask
+  first" refusal. The default is denial, because the alternative is a silent grant the user never gave.
+- **A stored no is an answer.** A declined row is refused without asking again, so "no" cannot be worn down
+  by a persistent model. A row on the user's own network is never asked about at all: it is not a third
+  party, and a sheet that asks nothing trains people to tap through a warning.
+- **A challenge page is `blocked`.** The endpoint answers a bot check with an ordinary page and a 2xx status;
+  read as markup-with-no-results it would have become "nothing exists". Result anchors still win over the
+  words — someone may legitimately search for "captcha".
+- **The cache key is the domain's key.** `WebSearchCourtesy.key` covers provider, normalized query and every
+  parameter that can change the answer; the cache stays in memory, because a stored record of what the user
+  searched for is the kind of side file this app must not create quietly.
+- **Two vaults, one direction.** A cloud row takes its key only from the server profile it mirrors; a LAN
+  server's API token is never handed to a search row, and a row that declares no credential is handed
+  nothing at all.
+
+### Verification, by tier — the tiers do not substitute for each other
+
+- **Local, host:** `swift test --package-path Packages/CairnChatDomain` — 481 tests, 0 failures.
+  `Scripts/ci.sh guards` — 53 ok, 0 failed. `Scripts/parse-check.sh` — 541 files parse clean.
+- **A guard hardened, because it had a hole:** `parse-check.sh` scanned `App`, `Packages/*/Sources` and
+  `Tests`, so nothing in `Packages/*/Tests` was parsed at all; and parsed as one module, a missing `}` at the
+  end of a file is absorbed by the next file. It now scans the package test directories too, and re-parses
+  every file the working tree has touched on its own. That second pass is what found the unclosed class
+  `WebSearchToolTests.swift` had been carrying.
+- **Not compiled here, said plainly:** `CairnProviderRemote` imports `Security`, which does not exist in the
+  Windows Swift 6.4.2 SDK, so `swift test --package-path Packages/CairnProviderRemote` cannot run on this
+  machine. The six new remote suites are type-checked for the first time by CI. Every symbol they use was
+  read back out of the module first — `WebSearchRequests.apply`, `failureForUnusable`,
+  `WebSearchFailure.response(status:)` and `transport(_:)`, `DuckDuckGoHTML.pageKind`,
+  `WebSearchCourtesy.key`, `WebSearchTestStatus.detail` — but a type error is still possible, and it is a CI
+  fix to make, not a result to describe as passing.
+- **CI-verified:** not yet for this task. `7f76c50`'s simulator lane went red, which is what the stale
+  `ToolWiringTests` assertions (`.routing`, `.route`, `.cloudToken` — all removed with the routing model)
+  would do to the test target; they now assert the same promise against the provider-row model.
+- **On-device-verified:** no. **Real-network-verified:** no — no real DuckDuckGo endpoint, no real SearXNG
+  instance, no real `POST /api/web_search` with a real key.
    has already said that a client reaching this phone reaches that server too.

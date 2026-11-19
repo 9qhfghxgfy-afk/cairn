@@ -79,15 +79,19 @@ final class ToolWiringTests: XCTestCase {
         XCTAssertEqual(noComposer.names, [BuiltInTool.calculator], "only what this build can really do")
     }
 
-    /// The key that unlocks the cloud route is read from the Keychain for the server this chat is on,
-    /// and only for a server of the cloud kind. A LAN profile's bearer token is that server's own API
-    /// credential; letting it decide a search route would send it onward to a third party.
-    func testTheCloudKeyIsReadOnlyForAServerOfTheCloudKind() throws {
+    /// The key a cloud search row uses is read from the Keychain for the one server profile that mirrors
+    /// it, and only for a profile of the cloud kind. A LAN profile's bearer token is that server's own API
+    /// credential; letting it decide a search row would send it onward to a third party.
+    func testACloudRowTakesItsKeyOnlyFromTheProfileThatMirrorsIt() throws {
         let store = try SwiftDataStore(inMemory: true)
         let servers = ServersModel(
             storing: store, testing: StubTester(), managing: StubModelService(),
             secrets: MemorySecretStore(), selection: ServerSelectionModel(storing: store)
         )
+        let theme = ThemeModel(settings: acknowledged)
+        let secrets = KeychainSecretStore(service: "app.cairn.test", operation: MemoryKeychain())
+        let wired = ToolWiring(settings: theme, secrets: secrets, servers: servers)
+
         let cloud = ServerProfile(
             name: "Cloud", kind: .ollamaCloud, baseURLString: "https://ollama.com",
             hasBearerToken: true, enabled: true, publicInternetOptIn: true
@@ -96,17 +100,29 @@ final class ToolWiringTests: XCTestCase {
         let saved = try XCTUnwrap(servers.profiles.first { $0.name == "Cloud" })
         servers.use(saved)
 
-        let secrets = KeychainSecretStore(service: "app.cairn.test", operation: MemoryKeychain())
-        let wired = ToolWiring(settings: ThemeModel(settings: acknowledged), secrets: secrets, servers: servers)
-
-        XCTAssertFalse(wired.searchState().routing.hasOllamaCloudKey, "no key stored yet")
-        XCTAssertEqual(wired.searchState().route, .keyless, "a cloud profile with no key falls through")
+        // No key, no row. A search provider that cannot authenticate looks configured and then fails, which
+        // is worse than never offering it.
+        wired.syncCloudRows()
+        XCTAssertFalse(
+            wired.searchState().settings.allProviders.contains { $0.kind == .ollamaCloud },
+            "a cloud profile without a key is not a provider"
+        )
 
         try secrets.setSecret("cloud-key", for: saved.id)
-        let armed = wired.searchState()
-        XCTAssertEqual(armed.route, .ollamaCloud, "the server in use, with its own key, goes first")
-        XCTAssertEqual(armed.cloudToken, "cloud-key")
+        wired.syncCloudRows()
+        let row = try XCTUnwrap(
+            wired.searchState().settings.allProviders.first { $0.kind == .ollamaCloud }
+        )
+        XCTAssertEqual(row.credentialShape, .bearer, "the row says the shape its key travels in")
 
+        // Selecting the row is what makes its own profile's key the secret a search carries.
+        var chosen = wired.searchState().settings
+        chosen.providers.select(id: row.id)
+        theme.setWebSearch(chosen)
+        XCTAssertEqual(wired.searchState().credential, "cloud-key", "the mirrored profile's key, no other")
+
+        // A LAN server's API token belongs to that server. Neither switching to it nor syncing again may
+        // put it on a search row — including a SearXNG row, which declares no credential at all.
         let box = ServerProfile(
             name: "Box", kind: .ollama, baseURLString: "http://192.168.1.20:11434", hasBearerToken: true
         )
@@ -114,10 +130,17 @@ final class ToolWiringTests: XCTestCase {
         let lan = try XCTUnwrap(servers.profiles.first { $0.name == "Box" })
         try secrets.setSecret("lan-token", for: lan.id)
         servers.use(lan)
+        wired.syncCloudRows()
+
+        var withInstance = wired.searchState().settings
+        let instance = WebSearchProviderProfile(
+            kind: .searxng, displayName: "Box search", baseURLString: "http://192.168.1.20:8888"
+        )
+        try withInstance.providers.add(instance)
+        theme.setWebSearch(withInstance)
         let onLAN = wired.searchState()
-        XCTAssertNil(onLAN.cloudToken, "a LAN server's token never becomes a search key")
-        XCTAssertFalse(onLAN.routing.hasOllamaCloudKey)
-        XCTAssertEqual(onLAN.route, .keyless)
+        XCTAssertEqual(onLAN.provider.kind, .searxng, "adding a row selects it")
+        XCTAssertNil(onLAN.credential, "a row that declares no credential is handed nothing")
     }
 
     /// Installing reaches the workspace, the session live at that moment, and every session opened

@@ -31,13 +31,6 @@ public struct WebToolSettings: Sendable, Equatable, Codable {
     }
 
     public static let `default` = WebToolSettings()
-
-    /// The routing this build's settings describe, before the active server is taken into account.
-    /// The Keychain is not read here — the app layer says whether the active cloud profile has a key,
-    /// because a settings value must never be the thing that reaches for a secret.
-    public func routing(hasOllamaCloudKey: Bool = false) -> WebSearchRouting {
-        WebSearchRouting(searxngURL: searxngURL, hasOllamaCloudKey: hasOllamaCloudKey)
-    }
 }
 
 public extension AppSettings {
@@ -46,19 +39,18 @@ public extension AppSettings {
 
     var searxngURL: String? { webTools?.searxngURL }
 
-    func routing(hasOllamaCloudKey: Bool = false) -> WebSearchRouting {
-        (webTools ?? .default).routing(hasOllamaCloudKey: hasOllamaCloudKey)
-    }
-
     mutating func setOutboundWebAllowed(_ allowed: Bool) {
         var updated = webTools ?? .default
         updated.outboundAllowed = allowed
         webTools = updated
     }
 
-    /// Empty means "not set" rather than "set to nothing", which is what makes the keyless default the
-    /// answer instead of a broken endpoint.
-    mutating func setSearXNGURL(_ url: String?) {
+    /// The user's own SearXNG endpoint; nil or empty means "not set".
+    ///
+    /// **Legacy.** This no longer routes anything — the active provider row does — but the field and its
+    /// writer stay until the import has run on every install, because deleting the row would take away the
+    /// only record a pre-provider user has of their own instance.
+    public mutating func setSearXNGURL(_ url: String?) {
         var updated = webTools ?? .default
         let trimmed = url?.trimmingCharacters(in: .whitespacesAndNewlines)
         updated.searxngURL = (trimmed?.isEmpty == false) ? trimmed : nil

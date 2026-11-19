@@ -21,7 +21,9 @@ fi
 
 sources=()
 while IFS= read -r file; do sources+=("$file"); done < <(
-  find App Packages/*/Sources Tests -name '*.swift' -type f 2>/dev/null
+  # Package test sources are included even though only CI can type-check them here: on the Windows box a
+  # brace left in a remote-suite test file otherwise travels 6 minutes to a CI log before anyone sees it.
+  find App Packages/*/Sources Packages/*/Tests Tests -name '*.swift' -type f 2>/dev/null
 )
 
 if [ ${#sources[@]} -eq 0 ]; then
@@ -37,6 +39,31 @@ if [ "$errors" -ne 0 ]; then
   printf '%s\n' "$output" | grep 'error:' | head -20
   echo "parse-check: $errors syntax error(s) in ${#sources[@]} files."
   exit 1
+fi
+
+# Second pass, one file at a time, but only for what the working tree has touched. Parsing every file as a
+# single module can absorb an unterminated class into the next file, which is how a missing `}` once passed
+# this guard and failed on CI. Touched files are few, so their own parse is cheap.
+if command -v git >/dev/null 2>&1 && git rev-parse --git-dir >/dev/null 2>&1; then
+  touched=$(
+    {
+      git diff --name-only HEAD -- '*.swift' 2>/dev/null
+      git ls-files --others --exclude-standard -- '*.swift' 2>/dev/null
+    } | sort -u
+  )
+  split_open=0
+  while IFS= read -r file; do
+    [ -f "$file" ] || continue
+    solo=$(swiftc -parse "$file" 2>&1 | grep 'error:' | head -3 || true)
+    if [ -n "$solo" ]; then
+      printf '%s\n' "$solo"
+      split_open=$((split_open + 1))
+    fi
+  done <<< "$touched"
+  if [ "$split_open" -ne 0 ]; then
+    echo "parse-check: $split_open touched file(s) fail on their own."
+    exit 1
+  fi
 fi
 
 echo "parse-check: ${#sources[@]} files parse clean."

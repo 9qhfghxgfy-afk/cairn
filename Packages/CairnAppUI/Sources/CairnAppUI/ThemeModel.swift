@@ -66,10 +66,40 @@ public final class ThemeModel {
         mutate { $0.setOutboundWebAllowed(allowed) }
     }
 
-    /// The user's own SearXNG endpoint; nil or empty means "not set", which routes search to the
-    /// keyless default rather than to a broken address.
+    /// The user's own SearXNG endpoint; nil or empty means "not set", which is what makes the keyless
+    /// default the answer instead of a broken address.
+    ///
+    /// **Legacy**, kept while the import that turns it into a provider row still has to run on installs that
+    /// predate providers. New code writes `setWebSearch`.
     public func setSearXNGURL(_ url: String?) {
         mutate { $0.setSearXNGURL(url) }
+    }
+
+    /// The whole web-search settings value, written as one unit.
+    ///
+    /// Providers, selection, result count and consent travel together because a provider list saved without
+    /// its consent record would be a list that can search somewhere the user never agreed to.
+    public func setWebSearch(_ search: WebSearchSettings) {
+        mutate { $0.setWebSearch(search) }
+    }
+
+    /// Selecting a provider, and clearing the notice that says selection moved. Both go through the store so
+    /// a row the user tapped cannot be ignored, and a notice cannot outlive the choice it describes.
+    public func selectWebSearchProvider(id: UUID) {
+        mutate { $0.selectWebSearchProvider(id: id) }
+    }
+
+    public func setWebSearchResultCount(_ count: Int) {
+        mutate { $0.setWebSearchResultCount(count) }
+    }
+
+    /// The per-provider answer to the outbound question: granted, or declined and remembered.
+    public func grantWebSearchConsent(for profile: WebSearchProviderProfile) {
+        mutate { $0.grantWebSearchConsent(for: profile) }
+    }
+
+    public func denyWebSearchConsent(for profile: WebSearchProviderProfile) {
+        mutate { $0.denyWebSearchConsent(for: profile) }
     }
 
     public func save(_ updated: AppSettings) { mutate { $0 = updated } }

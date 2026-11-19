@@ -17,6 +17,19 @@ public enum WebSearchTimeRange: String, Sendable, Equatable, Codable, CaseIterab
         self == .week ? "month" : rawValue
     }
 
+    /// DuckDuckGo's own letter codes for the same idea (`df=d|w|m|y`).
+    ///
+    /// The two spellings live here rather than in the transports so one enum remains the single statement
+    /// of what "past month" means, whatever the provider calls it.
+    public var duckDuckGoValue: String {
+        switch self {
+        case .day: return "d"
+        case .week: return "w"
+        case .month: return "m"
+        case .year: return "y"
+        }
+    }
+
     public var label: String {
         switch self {
         case .day: return "Past day"

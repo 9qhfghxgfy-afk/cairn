@@ -77,13 +77,47 @@ enum RequestReader {
     }
 }
 
-/// A search route stated as a value, so a test says which route it means instead of reaching for a
+/// A search route stated as a value, so a test says which provider it means instead of reaching for a
 /// Keychain to imply one.
+///
+/// Rows are placed directly rather than through `store.add`: these tests are about what the tool does with
+/// a row, not about what the settings screen is allowed to save, and a cloud row is not user-addable by
+/// design. The domain suite owns the validation rules.
+///
+/// `consent` is the state of the prompt rather than a second state type — the same row, differing only in
+/// what the user answered. The default is a row already agreed to, because most tests are about what a
+/// provider sends and reads. A row on the user's own network reports `.granted` whatever is passed here,
+/// because it is not a third party.
 func searchState(
-    searxng: String? = nil, serverKind: ServerProfileKind? = nil, cloudToken: String? = nil
+    _ profile: WebSearchProviderProfile = .builtIn,
+    credential: String? = nil,
+    consent: WebSearchConsentState.Decision? = .granted,
+    resultCount: Int = WebSearchProviderProfile.defaultResultCount
 ) -> WebSearchState {
-    WebSearchState(
-        routing: WebSearchRouting(searxngURL: searxng, hasOllamaCloudKey: cloudToken != nil),
-        serverKind: serverKind, cloudToken: cloudToken
+    var settings = WebSearchSettings(
+        providers: WebSearchProviderStore(providers: [profile], activeProviderID: profile.id),
+        resultCount: resultCount
+    )
+    switch consent {
+    case .granted: settings.consent.grant(profile)
+    case .denied: settings.consent.deny(profile)
+    case .undecided, nil: break
+    }
+    return WebSearchState(settings: settings, credential: credential)
+}
+
+/// A SearXNG row on the documented example LAN address.
+func lanRow(name: String = "Box") -> WebSearchProviderProfile {
+    WebSearchProviderProfile(
+        kind: .searxng, displayName: name, baseURLString: "http://192.168.1.20:8888"
+    )
+}
+
+/// A cloud row, mirroring a profile whose key the caller supplies separately.
+func cloudRow(name: String = "Cloud") -> WebSearchProviderProfile {
+    WebSearchProviderProfile(
+        kind: .ollamaCloud, sourceProfileID: UUID(), displayName: name,
+        baseURLString: WebSearchProviderKind.ollamaCloudEndpoint,
+        credentialShape: .bearer, hasCredential: true
     )
 }

@@ -10,17 +10,56 @@ import CairnChatDomain
 enum DuckDuckGoHTML {
     private static let anchorMarker = "result__a"
     private static let snippetMarker = "result__snippet"
+    /// DuckDuckGo's own class for a sponsored result.
+    private static let adMarker = "result--ad"
+    /// What a bot page says about itself. The endpoint answers a challenge with an ordinary page rather
+    /// than a status a client could read, so the words are the only signal there is — and they are read
+    /// before the empty markers, because a refusal taken for "found nothing" sends the user away convinced
+    /// the web has no answer when in fact this client was refused one.
+    private static let challengeMarkers = [
+        "captcha", "unusual traffic", "are you a robot", "confirm you are not a bot",
+    ]
+
     /// How far past a marker to look for its attributes, so one malformed page cannot make the scan
     /// walk a whole document.
     private static let attributeWindow = 400
 
+    /// What kind of page this endpoint sent back, told apart by its markers.
+    ///
+    /// The distinction is the whole point of this type: a page with no result markers may be an honest
+    /// "nothing found", or it may be a page whose markup moved. Reading the second as the first is how a
+    /// broken provider ends up telling the user that nothing exists.
+    enum PageKind: Sendable, Equatable {
+        case results
+        case empty
+        /// A challenge page: the endpoint refused this client rather than answering it. Reported as
+        /// blocked, never as an empty result list.
+        case challenge
+        case unrecognized
+    }
+
+    static func pageKind(in html: String) -> PageKind {
+        if html.contains(anchorMarker) { return .results }
+        let lowered = html.lowercased()
+        if challengeMarkers.contains(where: { lowered.contains($0) }) { return .challenge }
+        if lowered.contains("no results") || lowered.contains("no-results")
+            || lowered.contains("did not match any documents") { return .empty }
+        return .unrecognized
+    }
+
     static func results(in html: String, limit: Int) -> [WebSearchResult] {
         var found: [WebSearchResult] = []
+        var seen = Set<String>()
         var search = Substring(html)
         while found.count < max(1, limit), let mark = search.range(of: anchorMarker) {
             let tail = search[mark.upperBound...]
             search = tail
-            guard let href = attribute("href", in: tail), let target = resolve(href) else { continue }
+            guard !isAd(mark, in: html),
+                  let href = attribute("href", in: tail),
+                  let target = resolve(href),
+                  !seen.contains(target)
+            else { continue }
+            seen.insert(target)
             found.append(WebSearchResult(
                 title: text(after: tail),
                 url: target,
@@ -28,6 +67,16 @@ enum DuckDuckGoHTML {
             ))
         }
         return found
+    }
+
+    /// Sponsored results are dropped rather than labelled.
+    ///
+    /// A tool result is plain text handed to a model, which has no badge to read and every reason to cite
+    /// whatever is in front of it. A paid link presented as a source is a source that was bought, so it is
+    /// not in the list at all. The class is looked for just before the anchor because that is where the
+    /// enclosing element carries it.
+    private static func isAd(_ mark: String.Index, in html: String) -> Bool {
+        html[html.startIndex...mark].suffix(240).contains(adMarker)
     }
 
     /// `name="value"`, read within the attribute window.
