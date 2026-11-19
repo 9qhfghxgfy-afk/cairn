@@ -14,12 +14,18 @@ extension CairnShareServer {
         let snapshot = table
         let key = token
         let task = Task.detached(priority: .userInitiated) { [weak self] in
+            // A `let` of the weak capture, bound once. A weak capture is bound as a **var** in the
+            // closure that takes it, and a nested `@Sendable` closure may not read a var captured by an
+            // enclosing concurrently-executing closure — which is exactly the error the compiler gives
+            // here. Copying it to a constant first is the honest fix rather than an unchecked box: the
+            // surface is a main-actor object, so the only safe thing to do with it off-main is hop back.
+            let surface = self
             await ShareSocketServicer.serve(socket, table: snapshot, token: key) { busy in
-                await MainActor.run { [weak self] in self?.noteTurn(active: busy) }
+                await MainActor.run { surface?.noteTurn(active: busy) }
             }
-            await MainActor.run { [weak self] in
-                self?.noteTurn(active: false)
-                self?.noteClient(opened: false)
+            await MainActor.run {
+                surface?.noteTurn(active: false)
+                surface?.noteClient(opened: false)
             }
         }
         turnTasks.append(task)
