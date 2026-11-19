@@ -23,7 +23,7 @@ struct SearxngGuideSheet: View {
                 }
                 .padding(20)
             }
-            .background(CairnTheme.stone950)
+            .background(CairnTheme.slateDeep)
             .navigationTitle("SearXNG")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -47,8 +47,8 @@ struct SearxngGuideSheet: View {
             body: "Docker is the shortest way. JSON output has to be enabled explicitly; without it Cairn "
                 + "would have to read HTML, which changes whenever the instance's theme changes.",
             command: """
-            docker run -d -p 8888:8051 \
-              -e SEARXNG_BASE_URL=http://your-box.local:8888 \
+            docker run -d -p 8888:8051 \\
+              -e SEARXNG_BASE_URL=http://your-box.local:8888 \\
               searxng/searxng
             """
         )
