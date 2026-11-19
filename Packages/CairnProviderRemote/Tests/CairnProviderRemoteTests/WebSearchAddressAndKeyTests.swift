@@ -13,6 +13,7 @@ import CairnChatDomain
 /// The address rule is tested on a stored row even though the settings screen refuses to save such a row:
 /// the screen's rule and the tool's rule are separate, and the tool's rule is what has to hold when a row
 /// written under an older, looser rule is still sitting in the store.
+@MainActor
 final class WebSearchAddressAndKeyTests: XCTestCase {
 
     // MARK: the address, before any socket

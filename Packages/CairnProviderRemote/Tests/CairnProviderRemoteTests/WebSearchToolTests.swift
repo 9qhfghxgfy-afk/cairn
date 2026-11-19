@@ -8,6 +8,7 @@ import CairnChatDomain
 /// Nothing here opens a socket. `RecordingWebTransport` answers with a canned reply and records the request
 /// that *would* have gone out, which is the only way "only the query leaves" and "nothing was sent" can be
 /// asserted rather than believed.
+@MainActor
 final class WebSearchToolTests: XCTestCase {
     private func call(_ query: String) -> ToolCall {
         ToolCall(id: "c1", name: BuiltInTool.webSearch, arguments: ["query": .text(query)])

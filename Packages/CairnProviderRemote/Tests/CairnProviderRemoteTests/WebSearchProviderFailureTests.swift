@@ -12,6 +12,7 @@ import CairnChatDomain
 ///
 /// No socket is opened here. `RecordingWebTransport` records the request that *would* have left, which is
 /// the only place "nothing left" and "only the query left" can actually be checked.
+@MainActor
 final class WebSearchProviderFailureTests: XCTestCase {
 
     // MARK: the provider answered "no"

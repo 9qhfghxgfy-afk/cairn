@@ -69,6 +69,12 @@ final class ConsentRecorder: @unchecked Sendable {
 /// Asserts the typed failure a search throws, so a change of case cannot slip through as "still fails".
 /// The expected value is named apart from `error`: inside the trailing `catch`, `error` is whatever the
 /// tool actually threw, and that has no `rawValue` to compare against.
+///
+/// `@MainActor` because the body is a plain closure, not a `@Sendable` one, and a test hands it in while it
+/// is on the main actor. A nonisolated `async` helper would have to receive it across isolation, which a
+/// non-Sendable closure cannot do — the checker calls that a data race rather than letting it pass. Staying
+/// on the main actor keeps the hand-off local, which is also where asking for consent lives.
+@MainActor
 func expectSearchFailure(_ expected: ToolError, _ body: () async throws -> ToolOutcome) async {
     do {
         _ = try await body()
