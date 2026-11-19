@@ -1775,8 +1775,14 @@ Still owed, in order:
 
 1. The device pass below, on a phone on a real Wi-Fi network.
 2. A real client against the phone: `ollama -h http://<phone>:11434 list`, one streamed chat from the Ollama
-   CLI, one OpenAI-SDK completion, and one browser hitting `/api/version` (the `OPTIONS` answer is a stated
-   refusal, not a wildcard grant — that stays true and needs a real browser to confirm).
+   CLI, one OpenAI-SDK completion, and one browser hitting `/api/version`. **The preflight question is open,
+   and the record says so rather than pretending otherwise:** `ShareHTTPResponse.preflight(origin:)` answers
+   204 and echoes the requesting origin back in `Access-Control-Allow-Origin`, which is a *grant* — it is what
+   lets a browser-hosted client (Open WebUI and friends) use the phone as its Ollama, and it is also the one
+   place where "a local network is your network, not an empty one" is looser than it reads. Nothing is served
+   without the key, and no wildcard `*` is ever sent, so the exposure is bounded by the key. Whether to
+   narrow it — a switch, an origin list, or a plain refusal — needs a real browser in the loop to say what a
+   real web client requires, so it is listed here and not changed blind.
 3. Whether iOS reports `chosenAddress` or `deviceWide` — the caveat sentence is already written for both.
 
 ### The device pass, spelled out
