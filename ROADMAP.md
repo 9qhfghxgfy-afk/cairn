@@ -23,6 +23,7 @@ Gate for every milestone (from `.clinerules`):
 | P1 | Servers parity: active-server selection, one-tap switching with per-server last model, `lmStudio`/`ollamaCloud` kinds, guide sheet, user-initiated LAN scan | **done** — code + all five required suites green on `de0ec5a` | [44015633614](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/44015633614) |
 | P2 | Per-chat + default configuration, `configured` vs `unset`, capability-filtered payloads, injected context, themes | **done** — code + both new simulator suites and the domain suite green on `823bd86` | [44144881214](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/44144881214) |
 | P3 | Tool runtime + five built-ins + search routing (keyless / own SearXNG / Ollama Cloud key-gated) + `Thinking`/`Tools` chips + Statistics toggle | **done** — code + every tool suite green on `0b3e3fc` | [44242238211](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/44242238211) |
+| P3b | Task B — Web search providers: DuckDuckGo default, own SearXNG, Ollama Cloud; consent asked before the socket; the Web Search settings screen | **closed (code + CI)** — guards 53/53, host suites 492 domain + 170 remote + 60 on-device + 17 native, simulator build **SUCCEEDED** and 171 `CairnTests` green on `f7a4f77`; **not** on-device-verified, **not** real-network-verified | [44567976658](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/44567976658) |
 | P4 | LAN model sharing: `NWListener` surface answering Ollama's `/api/*` and OpenAI's `/v1/*`, per-session opt-in, generated key in its own Keychain service, foreground-only | **closed (code + CI)** — guards, all four host suites, simulator build and 147 `CairnTests` green on `b523ca9`; **not** on-device-verified, **not** real-network-verified | [44466484720](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/44466484720) |
 | P5 | Accessibility pass, AppIcon pipeline, licenses + privacy statement + issues link, doc refresh | todo | |
 
@@ -1802,9 +1803,16 @@ Still owed, in order:
    Cairn comes back the switch is off with the sentence that says why. Nothing re-opens itself.
 8. Share an engine that is a remote server: the laptop's request is answered by that server, and the screen
 
-## Task B — Web search providers: DuckDuckGo default, own SearXNG, Ollama Cloud (**in progress, 2026-11-19**)
+## Task B — Web search providers: DuckDuckGo default, own SearXNG, Ollama Cloud (**closed 2026-11-19**)
 
-Against `docs/CLEANROOM_SPEC.md` §7. Three slices; all three are coded, and **none of them is green yet.**
+Against `docs/CLEANROOM_SPEC.md` §7. Three slices, all coded, and now green: **CI
+[44567976658](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/44567976658)** over `f7a4f77` — guards
+53/53, host suites 492 domain + 170 remote + 60 on-device + 17 native, simulator build **SUCCEEDED** and 171
+`CairnTests` with 0 failures. It took **ten red runs** the same day — `44484030860`, `44490538639`,
+`44492059473`, `44498516568`, `44505415512`, `44508652621`, `44510185732`, `44513378138`, `44515633028`,
+`44518294831` — to get from the first Task B commit to that green one. The causes fall into six classes, and
+every one of them was invisible to a check this machine could run; they are recorded below rather than smoothed
+over.
 
 - **Slice 1 — `7f76c50`** (domain, persistence, failure taxonomy). Provider rows instead of one routing
   switch: exactly one row is active, there is no fallback, and a failure is named rather than answered with
@@ -1817,7 +1825,9 @@ Against `docs/CLEANROOM_SPEC.md` §7. Three slices; all three are coded, and **n
   them). `WebSearchSettingsScreen` (provider picker, own SearXNG address, result count, Test Connection),
   `WebSearchConsentSheet` + `WebSearchConsentModel` handed to `WebSearchConsentRequester`, and
   `App/WebSearchWiring.swift` binding settings, Keychain and the sheet. The SwiftData `webSearchJSON`
-  round-trip on the simulator lane is **still owed**, and CI is red across all three commits.
+  round-trip is now covered on the simulator lane by `WebSearchSettingsPersistenceTests`, and the join itself —
+  consent, provider rows and the two Keychain vaults meeting in one object — by
+  `WebSearchConsentWiringTests`.
 
 ### Why CI run 98 was red on `ef9e84e`, and what it changes
 
@@ -1860,10 +1870,54 @@ the shape while never being silent about the failure.
   server's API token is never handed to a search row, and a row that declares no credential is handed
   nothing at all.
 
+### The ten red runs before this green one, in six classes
+
+Ten runs were red between the first Task B commit and `44567976658`. The causes below are the ones I read in a CI
+log or reproduced myself. The three earliest runs (`44484030860`, `44490538639`, `44492059473`) are attributed
+from the fix commits they prompted (`8508a7b`, `dc9ed03`, `29b05b8`) rather than from a log opened in this
+session, and that difference is stated rather than glossed over. `swiftc -parse` accepts all of this code and the
+scratch-tree host build accepts most of it, which is the point: the lesson is the blind surface, not the fix.
+
+1. **`URLError.posix(_:_:)` does not exist** (run 98) — a line written here that could only ever compile here.
+   Now `URLError(domain:userInfo:code:)` with the code and `kPOSIXError_EPERM` carried in `userInfo`, which is
+   what `posix` used to do internally.
+2. **Swift 6 rejects a `catch` that swallows every error as unhandled** (run 44515633028) — nine sites, each of
+   which had to be given a typed reason of its own rather than a bare `catch { }`.
+3. **Actor isolation, not syntax** (run 44515633028) — `Sendable` boxes for the Keychain vaults handed across
+   the seam, and `@MainActor` on the objects that own UI state. Parsing cannot see either.
+4. **`private` and `private(set)` are file-scoped in Swift** (run 44518294831, build) — four AppUI files split
+   an extension across files and so could not see their own type's storage; the UI models now carry
+   `public internal(set)`, and an environment property declared in an extension had to lose its `private`.
+   `Section("title") { } footer: { }` is also not a signature SwiftUI offers; it is
+   `Section { } header: { } footer: { }`.
+5. **Two names that were never written** (run 44518294831, build) — a `GuideBlock` view and a
+   `CairnTheme.stone950` token, both called by the SearXNG guide sheet and neither defined anywhere.
+6. **Seven tests red inside a lane that finally ran** (run 44518294831, tests) — and only one of the three
+   causes was a product bug:
+   - **Four** came from a test helper that built its **own** `ThemeModel` from a settings snapshot, so the
+     consent seam answered through one model while the assertions read another. The grants and refusals really
+     were filed — into an object the test never looked at. The helper now takes the caller's model, which is how
+     the app installs it. That suite was never capable of noticing a missing join, which is the only bug it was
+     written to catch.
+   - **Two** asserted `.undecided` for a row on the example LAN address. `decision(for:)` reports any row that
+     does not reach the public internet as **granted**, because a box on your own network is not a third party
+     and asking about it trains people to tap through a warning that warns about nothing. The expected value was
+     therefore unreachable, and the tests were not testing revocation at all — they were reading a value the
+     design produces whatever the revoke logic does. Revocation was correct and untouched; the tests now use a
+     public `https` row, where a grant is a real grant and taking it back can be observed.
+   - **One** was a stale expectation about storage: a pre-P3 settings row used to read back with no web-tool
+     value, and Task B made the provider store unconditional. What mattered was never "the field is absent" but
+     "nothing the user never chose got invented", so the assertion says that field by field now. Comparing the
+     whole `WebSearchSettings` against `.default` was tried first and rejected: provider rows carry
+     `createdAt`/`updatedAt` defaulting to `Date()`, so two defaults built microseconds apart are unequal and the
+     test would have been measuring clocks.
+   - Two steps in the consent suite also settled async work with fixed sleeps, which is how a suite passes on a
+     quiet machine and hangs a loaded CI runner. They wait on the condition with a timeout now, not on the clock.
+
 ### Verification, by tier — the tiers do not substitute for each other
 
 - **Local, host:** `swift test --package-path Packages/CairnChatDomain` — 492 tests, 0 failures.
-  `Scripts/ci.sh guards` and `Scripts/test-guards.sh` — 53 ok, 0 failed. `Scripts/parse-check.sh` — 564 files
+  `Scripts/ci.sh guards` and `Scripts/test-guards.sh` — 53 ok, 0 failed. `Scripts/parse-check.sh` — 565 files
   parse clean.
 - **The remote module now does compile here, in a throwaway tree — and that is not a milestone.**
   `CairnProviderRemote` imports `Security` and uses Darwin-only `URLSession` spellings, so it cannot build in
@@ -1873,9 +1927,13 @@ the shape while never being silent about the failure.
   That tree proves Swift 6 concurrency and logic; it does **not** prove Keychain, SwiftUI, the simulator lane,
   or any Apple-only API spelling — which is exactly the class of error it hid once (see the run 98 note
   above), so its results are cited as host checks and never as a green lane.
-- **CI-verified:** not yet for this task. Run 98 on `ef9e84e` is **red** for the `URLError.posix` compile
-  error; the fix plus the new suite are pushed for the next run, and no milestone claim is made until a green
-  run number exists over `7f76c50…HEAD`.
+- **CI-verified:** **yes — [44567976658](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/44567976658)**
+  over `f7a4f77`, all three jobs green. Privacy guards 53/53. Host lane: `CairnChatDomain` 492 tests and
+  `CairnProviderRemote` 170 (XCTest), `CairnInferenceLocal` 60 tests in 14 suites and `CairnInferenceNative` 17
+  in 2 suites (Swift Testing — worth knowing that those two report in a different format, so a grep for
+  `Executed N tests` reads them as **0** and a suite that ran nothing would look identical). Simulator lane:
+  build **SUCCEEDED** and `CairnTests` **171 tests, 0 failures** on iPhone 17 / iOS 26.5. This is the first
+  green run any Task B suite has, so every citation above that predates it is host-verified, not CI-verified.
 - **A guard hardened, because it had a hole:** `parse-check.sh` scanned `App`, `Packages/*/Sources` and
   `Tests`, so nothing in `Packages/*/Tests` was parsed at all; and parsed as one module, a missing `}` at the
   end of a file is absorbed by the next file. It now scans the package test directories too, and re-parses
@@ -1884,6 +1942,14 @@ the shape while never being silent about the failure.
 - **What no host check on this machine can see:** Keychain behaviour, SwiftUI view behaviour, the simulator
   lane, and any Apple-only API spelling. Those belong to CI and to the phone, and the run 98 note above is
   what that blind surface cost once — a line that only ever compiled here.
-- **On-device-verified:** no. **Real-network-verified:** no — no real DuckDuckGo endpoint, no real SearXNG
-  instance, no real `POST /api/web_search` with a real key.
-   has already said that a client reaching this phone reaches that server too.
+- **On-device-verified:** no. **Real-network-verified:** no — no real DuckDuckGo endpoint was reached, no real
+  SearXNG instance was queried, and no real `POST /api/web_search` was sent with a real key. The checklist at the
+  end of this file is what closes those two tiers. A green simulator lane does not stand in for either: it never
+  shows the Local Network prompt, a badge in a real status bar, a `403` from a real bot check, or a Keychain item
+  that survives a reboot.
+- **Transport, restated because it is the part a reader will want to argue with:** nothing in Task B assumes a
+  mesh VPN or requires TLS to a private host. A server on the user's own network is reached over plain `http://`,
+  and a person who serves models on that network has already said that a client reaching this phone reaches that
+  server too. Away from home it is the tunnel, not a certificate, that protects the path — which is why the code
+  classifies destinations instead of encrypting them, and why a plaintext row carries a visible badge rather than
+  a silent ATS exception.
