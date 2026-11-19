@@ -26,9 +26,12 @@ public final class WebSearchSettingsModel {
     let testing: (any WebSearchConnectionTesting)?
 
     /// The last Test Connection answer, kept per row so testing one row cannot rewrite the line under
-    /// another one.
-    public private(set) var testStatuses: [UUID: WebSearchTestStatus] = [:]
-    public private(set) var isTestingID: UUID?
+    /// another one. `internal(set)`, not `private(set)`: the writes live in the editor's own file
+    /// (`WebSearchSettingsModel+Writes`), which is the same module but a different file, and a
+    /// `private` setter is visible only inside the file that declares it. Outside the module both stay
+    /// read-only, which is the point — a view reads a test result, it does not author one.
+    public internal(set) var testStatuses: [UUID: WebSearchTestStatus] = [:]
+    public internal(set) var isTestingID: UUID?
     /// Validation and storage problems, in the domain's own words. Never an address, never a token.
     public var lastError: String?
 

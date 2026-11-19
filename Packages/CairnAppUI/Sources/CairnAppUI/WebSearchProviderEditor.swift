@@ -37,7 +37,9 @@ struct WebSearchProviderEditor: View {
 
     let model: WebSearchSettingsModel
     let draft: WebSearchRowEdit
-    @Environment(\.dismiss) private var dismiss
+    /// Not `private`: `save()` closes this sheet from `WebSearchProviderEditor+Sections`, a different
+    /// file, and a `private` property is visible only in the file that declares it.
+    @Environment(\.dismiss) var dismiss
 
     @State var name: String
     @State var address: String
@@ -60,7 +62,7 @@ struct WebSearchProviderEditor: View {
         _name = State(initialValue: draft.name)
         _address = State(initialValue: draft.address)
         _categories = State(initialValue: draft.categories.joined(separator: ", "))
-        _language = State(initialValue: draft.language ?? "")
+        _language = State(initialValue: draft.language)
         _timeoutSeconds = State(initialValue: draft.timeoutSeconds)
         _choice = State(initialValue: Self.choice(for: draft.credentialShape))
         _secretHeaderName = State(initialValue: {

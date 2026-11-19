@@ -42,13 +42,18 @@ struct WebSearchSettingsScreen: View {
             resultsSection
             testSection
 
-            Section("Setting up your own instance") {
+            // The header goes in as a view, not as `Section("…")`: that initializer takes content only,
+            // so a `footer:` trailing clause has nothing to bind to and the compiler reports the title
+            // string as a missing `content:` argument.
+            Section {
                 Button {
                     showingGuide = true
                 } label: {
                     Label("How do I set up SearXNG?", systemImage: "questionmark.circle")
                 }
                 .font(.callout.weight(.semibold))
+            } header: {
+                Text("Setting up your own instance")
             } footer: {
                 footerText
             }
