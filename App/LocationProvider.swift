@@ -32,11 +32,21 @@ final class LocationProvider: NSObject, LocationFixProviding, CLLocationManagerD
         manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
     }
 
-    func currentFix() async throws -> LocationFix {
+    /// The protocol requirement is **nonisolated**, so this is the one line that admits what the class is:
+    /// a `@MainActor` method cannot satisfy a nonisolated requirement in Swift 6, and CoreLocation is
+    /// main-actor work — the manager is built here and delivers here. The requirement is therefore
+    /// implemented nonisolated and hops, which keeps `LocationFixProviding` free of `@MainActor` and leaves
+    /// every nonisolated test double in the domain module unchanged.
+    nonisolated func currentFix() async throws -> LocationFix {
+        try await awaitFix()
+    }
+
+    private func awaitFix() async throws -> LocationFix {
         if let running = inFlight { return try await running.value }
-        // Typed as a throwing task on purpose. `Task { }` over a throwing closure is `Task<Value, any Error>`,
-        // so the failure reaches the second caller as a value rather than as an unhandled error; spelling the
-        // type here means a later edit cannot silently narrow it and turn a thrown refusal into a crash.
+        // Typed as a throwing task on purpose: `Task { }` over a throwing closure is
+        // `Task<Value, any Error>`, so the failure reaches a second caller as a value rather than as an
+        // unhandled error. Spelling the type here means a later edit cannot silently narrow it and turn a
+        // thrown refusal into a crash.
         let request: Task<LocationFix, any Error> = Task {
             defer { inFlight = nil }
             return try await readOnce()
@@ -44,6 +54,7 @@ final class LocationProvider: NSObject, LocationFixProviding, CLLocationManagerD
         inFlight = request
         return try await request.value
     }
+
 
 
     /// One reading, end to end: services, permission, then the fix. Each wait is cancellable, because the

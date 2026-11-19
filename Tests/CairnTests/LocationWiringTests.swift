@@ -20,13 +20,21 @@ final class CountingLocationSource: LocationFixProviding {
         self.failure = failure
     }
 
-    func currentFix() async throws -> LocationFix {
+    /// Nonisolated because the protocol requirement is, and a main-actor method cannot satisfy one in
+    /// Swift 6 — the same hop the real `LocationProvider` makes, so the double matches the source it stands
+    /// in for instead of quietly differing from it in the one place the compiler checks.
+    nonisolated func currentFix() async throws -> LocationFix {
+        try await takeReading()
+    }
+
+    private func takeReading() async throws -> LocationFix {
         calls += 1
         if let failure { throw failure }
         guard let fix else { throw LocationFailureReason.unavailable }
         return fix
     }
 }
+
 
 /// The app-layer location join, run end to end on the simulator.
 ///
