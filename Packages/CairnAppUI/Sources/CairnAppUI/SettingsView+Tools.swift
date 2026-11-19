@@ -1,13 +1,18 @@
 import SwiftUI
 import CairnChatDomain
 
-/// The tools half of Settings: the acknowledgement that lets a tool reach the public internet, and the
-/// address of the user's own search instance.
+/// The tools half of Settings: the acknowledgement that lets a tool reach the public internet, and the way
+/// into the Web Search screen.
 ///
 /// Both live here rather than in a chat because both are decisions about the device, not about one
 /// conversation: they persist across chats, they are reversible, and a user who armed a chat from its
 /// composer should be able to find the switch again and turn it back off. The per-tool switches stay
 /// with the `Tools` chip, since which tools one conversation may use is a per-conversation choice.
+///
+/// The single SearXNG address field that used to sit here is gone. It could not say which provider was
+/// active, could not hold a credential, could not record what had been agreed to, and could not be tested —
+/// and its value is imported into a provider row the first time the settings row that holds it is read, so
+/// nothing typed into it is lost.
 extension SettingsView {
 
     var toolsSection: some View {
@@ -29,30 +34,37 @@ extension SettingsView {
             }
             .tint(CairnTheme.amber)
 
-            LabeledContent("Search endpoint") {
-                TextField(
-                    "Your SearXNG address",
-                    text: Binding(
-                        get: { theme.settings.searxngURL ?? "" },
-                        set: { theme.setSearXNGURL($0) }
-                    )
-                )
-                .multilineTextAlignment(.trailing)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .keyboardType(.URL)
+            if let webSearch {
+                // A screen of its own rather than one more field: which provider answers, whether it has been
+                // agreed to, and whether it answers at all are three questions a text box cannot hold.
+                NavigationLink {
+                    WebSearchSettingsScreen(model: webSearch)
+                } label: {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Web Search").font(.subheadline)
+                        Text(webSearch.active.displayName)
+                            .font(.caption)
+                            .foregroundStyle(CairnTheme.stoneLight)
+                    }
+                }
+            } else {
+                // No model wired means no vault and no tester in this build — so the row reports what is set
+                // instead of opening a screen that could not save a row or test one.
+                LabeledContent("Search provider") {
+                    Text(theme.settings.activeWebSearchProvider.displayName)
+                }
             }
         } header: {
             Text("Tools")
         } footer: {
             VStack(alignment: .leading, spacing: 6) {
                 Text(
-                    "With an address set, a search goes only to that instance, and a plain http address "
-                        + "is allowed for it because it is on your own network. With none set, search "
-                        + "uses Cairn's built-in keyless endpoint — a public service you did not choose "
-                        + "— unless this chat is on Ollama Cloud with a saved key, in which case it uses "
-                        + "Ollama's own search. Whichever ran is named in the result, and a badge stays "
-                        + "up while anything has left the phone."
+                    "One provider answers a search: the one picked under Web Search. If it fails, searching "
+                        + "fails with the reason named — Cairn never sends the same words to a different "
+                        + "provider, because a result from a provider you did not choose is a disclosure you "
+                        + "cannot see. Running your own SearXNG instance removes the third party from the "
+                        + "request entirely, and a plain http address is accepted for one on your own "
+                        + "network."
                 )
                 Text(
                     "The calculator and mail drafts need no acknowledgement: they run on this device and "

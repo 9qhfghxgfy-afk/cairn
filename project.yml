@@ -150,6 +150,11 @@ targets:
       # owns — the port lives only while the app is in the foreground — is a rule about the scene, which a
       # host build has no scene to model. No @main here either.
       - App/ShareWiring.swift
+      # P3b's web-search surface, for the same reason: it is the only place the settings store, the two
+      # Keychain vaults and the consent sheet meet. Two of the rules it owns can only be proved with all three
+      # present — that a public search stops in front of a sheet instead of running, and that a refusal is held
+      # rather than re-asked. No @main here either.
+      - App/WebSearchWiring.swift
     dependencies:
       - package: CairnChatDomain
       - package: CairnPersistence

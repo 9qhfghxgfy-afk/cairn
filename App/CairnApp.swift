@@ -26,6 +26,10 @@ struct CairnLaunchView: View {
     /// The tool assembly, kept alive for the life of the app: it holds the mail composer and reads
     /// Settings and the Keychain on behalf of the tools every chat gets.
     @State private var toolWiring: ToolWiring?
+    /// The web-search surface: the consent sheet both web tools stop in front of, the Web Search screen's
+    /// model, and the launch-time import of a pre-provider SearXNG address. Kept alive because the sheet's
+    /// answer has somewhere to go — a model deallocated mid-question would leave the turn waiting forever.
+    @State private var webSearchWiring: WebSearchWiring?
     /// A chat file that arrived before the workspace existed. iOS hands an opened file over in the same
     /// moment it launches the app, so the file is held for a beat and imported as soon as there is a store
     /// to import it into — rather than dropped on the floor because the launch lost a race.
@@ -46,7 +50,9 @@ struct CairnLaunchView: View {
                     workspace: workspace,
                     servers: servers,
                     settings: theme,
-                    imagePreparer: ImageIOPreparer()
+                    imagePreparer: ImageIOPreparer(),
+                    webSearch: webSearchWiring?.settings,
+                    consent: webSearchWiring?.consent
                 )
             } else if let startupFailure {
                 ContentUnavailableView(
@@ -156,7 +162,20 @@ struct CairnLaunchView: View {
                 // reach for any of them. The calculator and the mail draft are always offered; the three
                 // web tools join only once the outbound acknowledgement is up, which is a Settings value
                 // and not something a chat can grant itself.
-                let wiring = ToolWiring(settings: builtTheme, secrets: secrets, servers: builtServers)
+                // The web-search surface first, because the tools are built over it: `web_search` and
+                // `web_fetch` both stop and ask, and what they ask through is this object. The pre-provider
+                // SearXNG address is imported where the legacy column lives — in the settings record, on the
+                // first read after an upgrade — so an upgraded install's first search already goes to the
+                // instance that person set up, not back to a third party they never chose.
+                let webSearch = WebSearchWiring.install(theme: builtTheme, serverSecrets: secrets)
+                webSearchWiring = webSearch
+
+                let wiring = ToolWiring(
+                    settings: builtTheme,
+                    secrets: secrets,
+                    servers: builtServers,
+                    webSearch: webSearch
+                )
                 wiring.install(on: builtWorkspace)
                 toolWiring = wiring
 

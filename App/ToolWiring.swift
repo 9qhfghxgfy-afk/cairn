@@ -18,6 +18,10 @@ final class ToolWiring {
     /// Search credentials, in their own Keychain service. A SearXNG token is not a model server's token, and
     /// one vault for both would let a search row reach a server's bearer token by accident.
     private let searchSecrets: KeychainSecretStore
+    /// The app-layer web-search surface, which owns the consent sheet both web tools stop in front of. nil
+    /// leaves the consent seams out, and a tool with nobody to ask it refuses rather than assumes — see
+    /// `WebSearchConsentGate` and `WebFetchConsentGate`.
+    private let webSearch: WebSearchWiring?
     /// Held for the life of the app: the mail composer, and the delegate that composer calls back on. A
     /// presenter owned by a tool call would be released the moment that call returned, taking the sheet the
     /// user is still reading with it.
@@ -27,12 +31,14 @@ final class ToolWiring {
         settings: ThemeModel,
         secrets: KeychainSecretStore,
         servers: ServersModel?,
-        searchSecrets: KeychainSecretStore = WebSearchKeychain.store()
+        searchSecrets: KeychainSecretStore = WebSearchKeychain.store(),
+        webSearch: WebSearchWiring? = nil
     ) {
         self.settings = settings
         self.secrets = secrets
         self.servers = servers
         self.searchSecrets = searchSecrets
+        self.webSearch = webSearch
     }
 
     /// What one search reads at the moment it runs: the provider settings as they are now, and the one
@@ -87,12 +93,18 @@ final class ToolWiring {
 
     /// The registry as the settings stand right now: the on-device tools always, the three web tools only
     /// once the acknowledgement is up.
+    ///
+    /// The two consent seams travel with it, and a build that has nothing to ask with gets a refusal rather
+    /// than a free pass: `web_search` and `web_fetch` answer with the typed "Cairn has to ask first" failure
+    /// when nobody is there to ask, which is the only honest answer when nobody is there to answer.
     func registry() -> ToolRegistry {
         syncCloudRows()
         return BuiltInToolRegistry.make(
             searchState: { [self] in searchState() },
             mailPresenter: mail,
-            webToolsAllowed: settings.settings.outboundWebAllowed
+            webToolsAllowed: settings.settings.outboundWebAllowed,
+            consent: webSearch?.searchRequester,
+            fetchConsent: webSearch?.fetchRequester
         )
     }
 

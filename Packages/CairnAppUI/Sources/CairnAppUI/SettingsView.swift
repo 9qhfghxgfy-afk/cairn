@@ -12,6 +12,10 @@ struct SettingsView: View {
     /// Not `private`: the theme section lives in `SettingsView+Theme`, and `private` in Swift means
     /// file-private, which a second file cannot see.
     let theme: ThemeModel
+    /// The Web Search screen's view model. The app layer supplies it because it is the only place a
+    /// Keychain vault and a connection tester exist — this module may open neither. nil leaves the row out
+    /// rather than offering a screen that cannot save a row or prove a provider answers.
+    var webSearch: WebSearchSettingsModel?
     /// Lets this screen hand the workspace the new baseline the moment it is saved, so a chat started
     /// five seconds later is seeded from it without relaunching.
     private var workspace: ChatWorkspace?
@@ -19,9 +23,14 @@ struct SettingsView: View {
     /// and therefore which half the swatches and the preview card show.
     @Environment(\.colorScheme) private var deviceScheme
 
-    init(theme: ThemeModel, workspace: ChatWorkspace? = nil) {
+    init(
+        theme: ThemeModel,
+        workspace: ChatWorkspace? = nil,
+        webSearch: WebSearchSettingsModel? = nil
+    ) {
         self.theme = theme
         self.workspace = workspace
+        self.webSearch = webSearch
     }
 
     var body: some View {

@@ -11,6 +11,13 @@ public struct CairnRootView: View {
     /// App-wide settings: the theme painted on this screen, and the Default Configuration new chats
     /// start from. Optional so previews and tests can build a root view with no store behind it.
     private var settings: ThemeModel?
+    /// The Web Search screen's model, handed through to Settings. The app layer owns it because it is the only
+    /// place a Keychain vault and a connection tester exist.
+    private var webSearch: WebSearchSettingsModel?
+    /// The question both web tools stop in front of. Held here rather than in `ChatScreen` because the sheet
+    /// belongs to the device, not to one conversation: a search asked in a second chat while the first sheet is
+    /// still up must not put a second sheet on top of it.
+    private var consent: WebSearchConsentModel?
     /// The thing that can resize a photo before it joins a message. Handed through rather than reached for:
     /// `CairnAppUI` may draw an image, but the size a photo becomes is the domain's rule
     /// (`ImagePreparationPolicy`), and the codec that applies it belongs to the app.
@@ -24,12 +31,16 @@ public struct CairnRootView: View {
         workspace: ChatWorkspace,
         servers: ServersModel? = nil,
         settings: ThemeModel? = nil,
-        imagePreparer: (any ImagePreparing)? = nil
+        imagePreparer: (any ImagePreparing)? = nil,
+        webSearch: WebSearchSettingsModel? = nil,
+        consent: WebSearchConsentModel? = nil
     ) {
         self.workspace = workspace
         self.servers = servers
         self.settings = settings
         self.imagePreparer = imagePreparer
+        self.webSearch = webSearch
+        self.consent = consent
     }
 
     public var body: some View {
@@ -87,8 +98,20 @@ public struct CairnRootView: View {
         .sheet(isPresented: $showingSettings) {
             if let settings {
                 NavigationStack {
-                    SettingsView(theme: settings, workspace: workspace)
+                    SettingsView(theme: settings, workspace: workspace, webSearch: webSearch)
                 }
+            }
+        }
+        // The question a web tool cannot ask for itself. It is up here rather than beside the composer
+        // because the answer is about the device, and because two chats that ask at the same moment get one
+        // sheet: the model queues the second question behind the first, and the sheet always shows the head.
+        // There is no way to dismiss this without answering — swiping down is a refusal, recorded as one.
+        .sheet(isPresented: Binding(
+            get: { consent?.isAsking == true },
+            set: { asking in if !asking { consent?.declineUnanswered() } }
+        )) {
+            if let consent, let prompt = consent.pending {
+                WebSearchConsentSheet(model: consent, prompt: prompt)
             }
         }
         // The chosen theme, from the stored theme id: the accent actions take, the surface the app

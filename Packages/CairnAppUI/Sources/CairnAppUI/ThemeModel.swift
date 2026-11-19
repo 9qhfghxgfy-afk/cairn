@@ -102,6 +102,12 @@ public final class ThemeModel {
         mutate { $0.denyWebSearchConsent(for: profile) }
     }
 
+    /// Whether a page may be read off this device, as one answer for the whole tool. nil means the question
+    /// has never been put — which is not permission, and is why the first read asks.
+    public func setWebFetchAllowed(_ allowed: Bool?) {
+        mutate { $0.setWebFetchAllowed(allowed) }
+    }
+
     public func save(_ updated: AppSettings) { mutate { $0 = updated } }
 
     public func reload() {

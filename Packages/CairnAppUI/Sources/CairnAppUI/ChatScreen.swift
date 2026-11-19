@@ -79,10 +79,10 @@ public struct ChatScreen: View {
                             Text(provider.displayName)
                             NetworkBadge(networkClass: provider.networkClass)
                         }
-                        // Stays up for the rest of this conversation: one search two turns ago is
-                        // something the user can only be told about afterwards, which is exactly when a
-                        // badge that vanished would be useless.
-                        ToolsOutboundBadge(usedWebTools: session?.hasUsedWebTools == true)
+                        // Up before anything is sent, and still up for the rest of the conversation once
+                        // something has been: a query that already left is only visible afterwards, which is
+                        // exactly when a badge that vanished would be useless.
+                        outboundBadge
                     }
                     .font(.caption)
                     .foregroundStyle(CairnTheme.stoneLight)
