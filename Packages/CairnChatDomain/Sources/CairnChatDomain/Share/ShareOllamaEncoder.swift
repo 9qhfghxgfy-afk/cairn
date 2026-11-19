@@ -90,8 +90,8 @@ public enum ShareOllamaEncoder {
         model: String,
         createdAt: String,
         reason: FinishReason,
-        evalCount: Int,
-        evalDurationMicros: Int,
+        evalCount: Int?,
+        evalDurationMicros: Int?,
         promptEvalCount: Int?
     ) -> String {
         ShareJSON.encode(
@@ -106,8 +106,8 @@ public enum ShareOllamaEncoder {
         createdAt: String,
         text: String,
         reason: FinishReason,
-        evalCount: Int,
-        evalDurationMicros: Int,
+        evalCount: Int?,
+        evalDurationMicros: Int?,
         promptEvalCount: Int?
     ) -> String {
         ShareJSON.encode(

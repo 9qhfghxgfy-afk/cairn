@@ -118,10 +118,10 @@ public enum ShareOpenAIEncoder {
         model: String,
         text: String,
         reason: FinishReason,
-        completionTokens: Int,
+        completionTokens: Int?,
         promptTokens: Int?
     ) -> String {
-        let total = (promptTokens ?? 0) + completionTokens
+        let total: Int? = (promptTokens != nil && completionTokens != nil) ? (promptTokens ?? 0) + (completionTokens ?? 0) : nil
         let usage = Usage(promptTokens: promptTokens, completionTokens: completionTokens, totalTokens: total)
         return ShareJSON.encode(
             Answer(id: id, object: "chat.completion", created: created, model: model, choices: [Choice(index: 0, delta: nil, message: Message(role: "assistant", content: text), finishReason: finishReasonName(reason))], usage: usage),
