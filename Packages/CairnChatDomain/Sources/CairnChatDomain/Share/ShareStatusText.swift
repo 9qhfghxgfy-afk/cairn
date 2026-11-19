@@ -61,6 +61,15 @@ public enum ShareStatusText {
     /// The permission that really breaks this, not cosmetically.
     public static let permissionNote = "The first connection from another machine needs the Local Network permission. If it was denied, clients cannot reach this phone at all."
 
+    /// What the app says when it closes the port because it left the foreground — which is the same
+    /// limit as the suspension note, told at the moment the user will otherwise assume it broke.
+    public static let backgroundNote = "Cairn left the foreground, so the port is closed and the switch is off. A phone that kept listening while suspended would be reachable with nothing on screen to say so."
+
+    /// The empty picker's own sentence: sharing offers engines this app can actually run, so with nothing
+    /// loaded on the phone and nothing installed on a server there is genuinely nothing to offer — and an
+    /// empty shared list is not a safe port, it is the same port with nothing to show.
+    public static let noEnginesNote = "Nothing to share yet. An engine has to be running on this phone, or installed on a server you added, before it can appear here."
+
     /// What is served, and what that means for the engine behind it.
     public static func servingNote(_ status: ShareServerStatus) -> String {
         guard status.isSharing else {

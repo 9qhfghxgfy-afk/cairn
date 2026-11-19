@@ -24,6 +24,12 @@ public struct ServersView: View {
             // every server's loaded and installed models.
             OnDeviceEngineSection(model: model)
 
+            // Sharing is what this phone does with the engines listed around it, so it is a row here
+            // rather than a gear-menu screen: its status line is readable without opening anything.
+            if let share = model.share {
+                ShareEntryRow(model: share)
+            }
+
             if let notice = model.notice {
                 ServersNoticeBanner(text: notice)
             }

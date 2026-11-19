@@ -23,6 +23,10 @@ public final class ServersModel {
     /// The Model Manager's view model, injected by the App after init. nil means no Model Manager
     /// entry point is offered at all — a disabled button is worse than no button.
     public var modelManager: ModelManagerModel?
+    /// The LAN share surface's view model, injected by the App after init. nil means this build offers
+    /// no share row at all. The screen itself lives behind `ShareEntryRow`, and the model talks only to
+    /// domain protocols — this module still imports neither `Network` nor `Security`.
+    public var share: ShareModel?
 
     /// What the local-network scan has found in this session, and how far it got. Results are
     /// drafts: nothing here is a saved server until the user saves it.

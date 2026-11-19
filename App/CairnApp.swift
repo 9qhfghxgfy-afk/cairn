@@ -30,6 +30,11 @@ struct CairnLaunchView: View {
     /// moment it launches the app, so the file is held for a beat and imported as soon as there is a store
     /// to import it into — rather than dropped on the floor because the launch lost a race.
     @State private var pendingImportURL: URL?
+    /// P4's share surface, kept alive for the life of the app. It owns the listener, so nothing may
+    /// deallocate it while a laptop is mid-answer; and it is the object that knows the scene rule — leave
+    /// the foreground, close the port.
+    @State private var shareWiring: ShareWiring?
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         Group {
@@ -139,6 +144,13 @@ struct CairnLaunchView: View {
                 // watch is not deallocated the moment this closure returns.
                 onDeviceWatch = OnDeviceWiring.startMemoryWatch(onDeviceRegistry)
 
+                // The LAN share surface, installed before the Servers screen is put on screen so the row
+                // is there the first time the list draws. The key lives in its own Keychain service — not
+                // the one that holds the tokens this phone presents to other machines — and is generated
+                // rather than typed. Nothing opens here: the surface opens when the user moves the switch.
+                let shareTokens = ShareTokenHolding()
+                shareWiring = ShareWiring.install(on: builtServers, registry: registry, tokens: shareTokens)
+
                 // The tools a chat may reach. Built here because only this layer can hold a window (the
                 // mail composer), app-wide Settings, and the Keychain at once — and the domain must not
                 // reach for any of them. The calculator and the mail draft are always offered; the three
@@ -161,6 +173,14 @@ struct CairnLaunchView: View {
                 // Typed metadata only: never log prompt content, URLs, or paths.
                 startupFailure = error.localizedDescription
             }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            // Foreground-only sharing, enforced here because this is the only place that is told. iOS
+            // suspends the app minutes after it leaves the foreground and takes the listener with it
+            // whether or not anything was said first; saying it here means the switch and the port agree
+            // before the phone goes to sleep rather than after it wakes up confused.
+            guard let shareWiring else { return }
+            Task { await shareWiring.handlePhase(phase) }
         }
         .onChange(of: theme?.settings.outboundWebAllowed ?? false) { _, _ in
             // Re-assemble the registry when the acknowledgement moves. Without this, arming a chat

@@ -145,6 +145,11 @@ targets:
       # the session that asks for it. Neither has @main.
       - App/ImageIOPreparer.swift
       - App/AttachmentWiring.swift
+      # P4's share wiring, for the same reason and with the same reason to need a simulator: it is the only
+      # place the live engine registry, the Keychain-backed peer key and the listener meet, and the rule it
+      # owns — the port lives only while the app is in the foreground — is a rule about the scene, which a
+      # host build has no scene to model. No @main here either.
+      - App/ShareWiring.swift
     dependencies:
       - package: CairnChatDomain
       - package: CairnPersistence
