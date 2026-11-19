@@ -29,10 +29,14 @@ extension WebSearchFailure {
     /// A thrown error, mapped. Anything unmapped stays `unreachable` rather than becoming a crash or a
     /// blank result. Cancellation is not a search failure and is handled by the caller, which has the
     /// turn's own `.cancelled` to report.
+    ///
+    /// `as? URLError` is the whole read, deliberately: a URL failure that arrives as a bridged `NSError`
+    /// comes back through Swift's error bridging as a `URLError`, and there is no portable way to rebuild a
+    /// `URLError` from a raw `Int` — `URLError.Code(rawValue:)` is failable on one Foundation and not the
+    /// other, which is a compile difference, not a runtime one. So an error that is not a `URLError` is
+    /// simply not a URL failure, and gets the honest `unreachable`.
     static func transport(_ error: any Error) -> WebSearchFailure {
-        let urlError = (error as? URLError)
-            ?? ((error as NSError).domain == NSURLErrorDomain ? URLError((error as NSError).code) : nil)
-        guard let urlError else { return .unreachable }
+        guard let urlError = error as? URLError else { return .unreachable }
         switch urlError.code {
         case .timedOut: return .timedOut
         case .unsupportedURL, .badURL: return .invalidEndpoint
@@ -49,9 +53,24 @@ extension WebSearchFailure {
 
     /// The guessed half, kept in one function so the guess is easy to find and easy to delete.
     ///
-    /// `URLError.posix` is only populated for a failure that came back with a real errno, so a nil here
-    /// means "no evidence", which is answered as `unreachable` rather than as a permission claim.
+    /// `URLError` carries no errno of its own — there is no typed accessor for one — so the guess reads the
+    /// bridged `NSError`: the failure itself, or the error underneath it, under the POSIX domain with the
+    /// permission code. Absent either, there is no evidence, which is answered as `unreachable` rather than
+    /// as a permission claim.
     private static func isLocalNetworkDenial(_ error: URLError) -> Bool {
-        error.posix?.rawValue == 1   // EPERM: what a Local Network refusal has been reported as
+        let bridged = error as NSError
+        if isPermissionRefusal(bridged) { return true }
+        guard let underlying = bridged.userInfo[NSUnderlyingErrorKey] as? NSError else { return false }
+        return isPermissionRefusal(underlying)
     }
+
+    /// `EPERM` under the POSIX domain: the shape a Local Network refusal has been reported with. The errno
+    /// is spelled numerically on purpose — Apple's Foundation names this `POSIXError` case, the portable one
+    /// does not, so the number is the only spelling that compiles on both. It is read only beside the POSIX
+    /// domain, so a bare `1` from another domain never reads as a refusal. No error text is read or logged.
+    private static func isPermissionRefusal(_ candidate: NSError) -> Bool {
+        candidate.domain == NSPOSIXErrorDomain && candidate.code == permissionRefusalErrno
+    }
+
+    private static let permissionRefusalErrno = 1
 }

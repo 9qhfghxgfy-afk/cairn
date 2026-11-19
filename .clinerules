@@ -195,3 +195,21 @@ compatibility, not copied expression.
   branching and streaming are unit-testable without a simulator.
 - If a fact about Apple APIs cannot be verified from this machine, say so and gate the code
   behind a runtime check rather than assuming it.
+
+## Windows-to-macOS Swift & CI Delegation Rule
+- This machine runs Windows and only has `swiftc -parse` (syntax-only checking without Apple
+  frameworks like `Security`, `SwiftUI`, or `XCTest` on macOS).
+- **Mandatory `ask_gemini` usage.** Whenever macOS CI fails, whenever you edit
+  Apple-framework-dependent Swift code (`Packages/CairnProviderRemote`, `Packages/CairnAppUI`,
+  `App/`, or `Tests/`), or before pushing Swift changes that cannot be compiled locally on
+  Windows, you MUST call the `ask_gemini` MCP tool first.
+- Pass the relevant `git diff` or full Swift source/test files to `ask_gemini` and instruct
+  Gemini to act as a strict Swift 6 / Xcode macOS compiler and XCTest reviewer — checking for
+  `@MainActor` / `Sendable` actor-isolation errors, missing imports, type mismatches, and failing
+  test logic.
+- Say plainly what the local check could **not** see (stubbed Keychain, deleted `Share/`, deleted
+  loopback suites, Darwin-only `URLSessionConfiguration` setters, removed `URLError.posix`) so the
+  review is aimed at exactly that blind surface instead of the code that was already compiled.
+- Do not waste turns trying to scrape unauthenticated GitHub Actions check-run logs via `curl`
+  when they time out or return empty annotations. Read the failing step name once, then delegate.
+

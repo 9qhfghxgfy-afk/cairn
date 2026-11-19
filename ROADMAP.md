@@ -1804,16 +1804,41 @@ Still owed, in order:
 
 ## Task B — Web search providers: DuckDuckGo default, own SearXNG, Ollama Cloud (**in progress, 2026-11-19**)
 
-Against `docs/CLEANROOM_SPEC.md` §7. Three slices; two landed, one owed.
+Against `docs/CLEANROOM_SPEC.md` §7. Three slices; all three are coded, and **none of them is green yet.**
 
 - **Slice 1 — `7f76c50`** (domain, persistence, failure taxonomy). Provider rows instead of one routing
   switch: exactly one row is active, there is no fallback, and a failure is named rather than answered with
   "nothing found". `SettingsRecord` also stopped losing `webTools` on relaunch, and a pre-provider SearXNG
   address imports itself as a row on the first read after an upgrade.
-- **Slice 2 — this commit** (consent, the failure suites, the wiring that still pointed at the old model).
-- **Slice 3 — owed:** the Web Search settings screen (provider picker, SearXNG address, result count, Test
-  Connection), the consent sheet the app hands to `WebSearchConsentRequester`, and the SwiftData round-trip
-  for `webSearchJSON` on the simulator lane.
+- **Slice 2 — `c9187b8`, `87cc06c`** (consent, the failure suites, the wiring that still pointed at the old
+  model). Consent is asked before the request is built, a refusal costs no socket, nobody-to-ask is a denial,
+  a stored no is an answer, and a challenge page is `blocked`.
+- **Slice 3 — `7ce6cff`, `6b2a079`, `ef9e84e`** (the settings screen, the sheet, the app layer that joins
+  them). `WebSearchSettingsScreen` (provider picker, own SearXNG address, result count, Test Connection),
+  `WebSearchConsentSheet` + `WebSearchConsentModel` handed to `WebSearchConsentRequester`, and
+  `App/WebSearchWiring.swift` binding settings, Keychain and the sheet. The SwiftData `webSearchJSON`
+  round-trip on the simulator lane is **still owed**, and CI is red across all three commits.
+
+### Why CI run 98 was red on `ef9e84e`, and what it changes
+
+`WebSearchFailure+Transport.swift` read `error.posix?.rawValue == 1` to guess the Local Network refusal.
+**Apple's `URLError` has no `posix` accessor** — the symbol is absent from Apple's `URLError` symbol graph and
+`/documentation/foundation/urlerror/posix` is 404 — so that line has never compiled on macOS. It compiled
+here only because the local throwaway tree shims Apple-only spellings to get the module to build on Windows;
+the shim hid a real error instead of catching it. Two lessons, both now in the code:
+
+- The read is portable and honest: `error as? URLError`, then the bridged `NSError` — its own domain, or the
+  one under `NSUnderlyingErrorKey` — under `NSPOSIXErrorDomain` with errno `1` (EPERM). Still labelled a
+  guess, still the only guessing line in the file, and `URLError.Code(rawValue:)` is not used because it is
+  non-failable on Darwin and failable on the portable Foundation — a compile difference, not a runtime one.
+- `WebSearchFailureTransportTests` (9 assertions) pins the mapping: each certificate code says
+  `httpsRequired`, each status line says its own thing, a `EPERM` underneath says `localNetworkDenied`, and
+  the two ways it must **not** be claimed — right errno under the wrong domain, right domain with the wrong
+  errno (ECONNREFUSED) — stay `unreachable`.
+
+What remains unverified is the thing no host test can reach: **what iOS 26 actually returns when the Local
+Network permission is denied.** That stays on the device checklist, and the guess is allowed to be wrong about
+the shape while never being silent about the failure.
 
 ### What Slice 2 decided, and why
 
@@ -1837,23 +1862,28 @@ Against `docs/CLEANROOM_SPEC.md` §7. Three slices; two landed, one owed.
 
 ### Verification, by tier — the tiers do not substitute for each other
 
-- **Local, host:** `swift test --package-path Packages/CairnChatDomain` — 481 tests, 0 failures.
-  `Scripts/ci.sh guards` — 53 ok, 0 failed. `Scripts/parse-check.sh` — 541 files parse clean.
+- **Local, host:** `swift test --package-path Packages/CairnChatDomain` — 492 tests, 0 failures.
+  `Scripts/ci.sh guards` and `Scripts/test-guards.sh` — 53 ok, 0 failed. `Scripts/parse-check.sh` — 564 files
+  parse clean.
+- **The remote module now does compile here, in a throwaway tree — and that is not a milestone.**
+  `CairnProviderRemote` imports `Security` and uses Darwin-only `URLSession` spellings, so it cannot build in
+  place on Windows. A scratch copy outside the repo (`/tmp/rc/remote`) with `swift-tools-version` at 6.0, a
+  `#if canImport(FoundationNetworking)` import added per file, and the handful of Darwin-only setters
+  neutralised builds the module and runs **148 tests, 0 failures**, including the 9 new transport assertions.
+  That tree proves Swift 6 concurrency and logic; it does **not** prove Keychain, SwiftUI, the simulator lane,
+  or any Apple-only API spelling — which is exactly the class of error it hid once (see the run 98 note
+  above), so its results are cited as host checks and never as a green lane.
+- **CI-verified:** not yet for this task. Run 98 on `ef9e84e` is **red** for the `URLError.posix` compile
+  error; the fix plus the new suite are pushed for the next run, and no milestone claim is made until a green
+  run number exists over `7f76c50…HEAD`.
 - **A guard hardened, because it had a hole:** `parse-check.sh` scanned `App`, `Packages/*/Sources` and
   `Tests`, so nothing in `Packages/*/Tests` was parsed at all; and parsed as one module, a missing `}` at the
   end of a file is absorbed by the next file. It now scans the package test directories too, and re-parses
   every file the working tree has touched on its own. That second pass is what found the unclosed class
   `WebSearchToolTests.swift` had been carrying.
-- **Not compiled here, said plainly:** `CairnProviderRemote` imports `Security`, which does not exist in the
-  Windows Swift 6.4.2 SDK, so `swift test --package-path Packages/CairnProviderRemote` cannot run on this
-  machine. The six new remote suites are type-checked for the first time by CI. Every symbol they use was
-  read back out of the module first — `WebSearchRequests.apply`, `failureForUnusable`,
-  `WebSearchFailure.response(status:)` and `transport(_:)`, `DuckDuckGoHTML.pageKind`,
-  `WebSearchCourtesy.key`, `WebSearchTestStatus.detail` — but a type error is still possible, and it is a CI
-  fix to make, not a result to describe as passing.
-- **CI-verified:** not yet for this task. `7f76c50`'s simulator lane went red, which is what the stale
-  `ToolWiringTests` assertions (`.routing`, `.route`, `.cloudToken` — all removed with the routing model)
-  would do to the test target; they now assert the same promise against the provider-row model.
+- **What no host check on this machine can see:** Keychain behaviour, SwiftUI view behaviour, the simulator
+  lane, and any Apple-only API spelling. Those belong to CI and to the phone, and the run 98 note above is
+  what that blind surface cost once — a line that only ever compiled here.
 - **On-device-verified:** no. **Real-network-verified:** no — no real DuckDuckGo endpoint, no real SearXNG
   instance, no real `POST /api/web_search` with a real key.
    has already said that a client reaching this phone reaches that server too.
