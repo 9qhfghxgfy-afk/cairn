@@ -37,6 +37,8 @@ final class WebSearchProviderFailureTests: XCTestCase {
                 (thrown.detail ?? "").contains("Do not retry"),
                 "the model has to be told a better query will not help"
             )
+        } catch {
+            XCTFail("expected a typed failure, threw \(type(of: error))")
         }
     }
 
@@ -76,6 +78,8 @@ final class WebSearchProviderFailureTests: XCTestCase {
         } catch let thrown as ToolFailure {
             XCTAssertEqual(thrown.error, .endpointUnreachable)
             XCTAssertTrue((thrown.detail ?? "").contains("could not be reached"))
+        } catch {
+            XCTFail("expected a typed failure, threw \(type(of: error))")
         }
         XCTAssertEqual(transport.requestCount, 1, "one attempt at the row the user chose")
     }
@@ -118,6 +122,8 @@ final class WebSearchProviderFailureTests: XCTestCase {
                 (thrown.detail ?? "").contains("no working upstream engines"),
                 "the model must be able to tell 'your box is down' from 'nothing exists'"
             )
+        } catch {
+            XCTFail("expected a typed failure, threw \(type(of: error))")
         }
     }
 

@@ -25,6 +25,9 @@ final class WebSearchAddressAndKeyTests: XCTestCase {
         } catch let thrown as ToolFailure {
             XCTAssertEqual(thrown.error, .httpsRequired)
             XCTAssertTrue((thrown.detail ?? "").contains("was not sent"))
+        } catch {
+            // Named by type only: an error's own text can carry a host, and hosts do not belong in a log.
+            XCTFail("expected a typed failure, threw \(type(of: error))")
         }
         XCTAssertEqual(transport.requestCount, 0, "refused before the socket")
     }
@@ -53,6 +56,8 @@ final class WebSearchAddressAndKeyTests: XCTestCase {
                 (thrown.detail ?? "").contains("no request was sent"),
                 "a missing key is a configuration problem, not a search that found nothing"
             )
+        } catch {
+            XCTFail("expected a typed failure, threw \(type(of: error))")
         }
         XCTAssertEqual(transport.requestCount, 0, "no key, no request, no prompt mid-turn")
     }

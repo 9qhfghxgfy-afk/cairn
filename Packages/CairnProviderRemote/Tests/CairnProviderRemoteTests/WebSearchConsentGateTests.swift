@@ -52,6 +52,8 @@ final class WebSearchConsentGateTests: XCTestCase {
                 (thrown.detail ?? "").contains("has not allowed"),
                 "the model must read a person's decision, not a broken tool"
             )
+        } catch {
+            XCTFail("expected a typed failure, threw \(type(of: error))")
         }
         XCTAssertEqual(recorder.askedCount, 1, "asked once, as it should have been")
         XCTAssertEqual(transport.requestCount, 0, "refused before the socket")
@@ -69,6 +71,8 @@ final class WebSearchConsentGateTests: XCTestCase {
                 (thrown.detail ?? "").contains("has to ask"),
                 "an open question is named as one, so Settings is where the user goes"
             )
+        } catch {
+            XCTFail("expected a typed failure, threw \(type(of: error))")
         }
         XCTAssertEqual(transport.requestCount, 0)
     }

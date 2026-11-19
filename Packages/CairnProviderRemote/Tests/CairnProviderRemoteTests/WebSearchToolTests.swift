@@ -32,18 +32,10 @@ final class WebSearchToolTests: XCTestCase {
         return (built, transport)
     }
 
-    /// Asserts the typed failure the tool throws, so a change of case cannot slip through as "still fails".
-    private func expectFailure(
-        _ error: ToolError,
-        _ body: () async throws -> ToolOutcome
-    ) async {
-        do {
-            _ = try await body()
-            XCTFail("expected \(error.rawValue)")
-        } catch let thrown as ToolFailure {
-            XCTAssertEqual(thrown.error, error)
-        }
-    }
+    // The failure assertion is the shared `expectSearchFailure` in `WebSearchTestDoubles`: one place, and a
+    // catch list that closes over every error. A `do`/`catch` ending on `catch let thrown as ToolFailure` is
+    // not exhaustive, and Swift only permits that in a function that itself throws — a plain `async` test
+    // method gets a compile error instead of a second copy of the same shape.
 
     // MARK: one provider, no fallback
 
@@ -58,7 +50,7 @@ final class WebSearchToolTests: XCTestCase {
         let (search, transport) = tool(
             searchState(lanRow()), reply: .json("{}", status: 429)
         )
-        await expectFailure(.rateLimited) {
+        await expectSearchFailure(.rateLimited) {
             try await search.execute(self.call("rain in Paris"), context: self.context())
         }
         XCTAssertEqual(transport.requestCount, 1, "one provider, one request, no second attempt elsewhere")
@@ -116,7 +108,7 @@ final class WebSearchToolTests: XCTestCase {
         var state = searchState(consent: .denied)
         state.settings.consent.revoke(providerID: state.provider.id, kind: state.provider.kind)
         let (search, transport) = tool(state)
-        await expectFailure(.internetNotAllowed) {
+        await expectSearchFailure(.internetNotAllowed) {
             try await search.execute(self.call("rain in Paris"), context: self.context())
         }
         XCTAssertEqual(transport.requestCount, 0, "refused before the socket")
@@ -124,7 +116,7 @@ final class WebSearchToolTests: XCTestCase {
 
     func testADeniedProviderIsRefusedWithoutAskingAgain() async {
         let (search, transport) = tool(searchState(consent: .denied))
-        await expectFailure(.internetNotAllowed) {
+        await expectSearchFailure(.internetNotAllowed) {
             try await search.execute(self.call("rain in Paris"), context: self.context())
         }
         XCTAssertEqual(transport.requestCount, 0)
@@ -160,6 +152,8 @@ final class WebSearchToolTests: XCTestCase {
                 (thrown.detail ?? "").contains("not a report of nothing being found"),
                 "the model must be told the provider broke, not that nothing exists"
             )
+        } catch {
+            XCTFail("expected a typed failure, threw \(type(of: error))")
         }
     }
 

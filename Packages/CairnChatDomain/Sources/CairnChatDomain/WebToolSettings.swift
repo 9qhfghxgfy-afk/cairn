@@ -74,7 +74,7 @@ public extension AppSettings {
     /// **Legacy.** This no longer routes anything — the active provider row does — but the field and its
     /// writer stay until the import has run on every install, because deleting the row would take away the
     /// only record a pre-provider user has of their own instance.
-    public mutating func setSearXNGURL(_ url: String?) {
+    mutating func setSearXNGURL(_ url: String?) {
         var updated = webTools ?? .default
         let trimmed = url?.trimmingCharacters(in: .whitespacesAndNewlines)
         updated.searxngURL = (trimmed?.isEmpty == false) ? trimmed : nil
