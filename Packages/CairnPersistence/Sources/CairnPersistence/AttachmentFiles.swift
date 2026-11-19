@@ -35,7 +35,7 @@ public struct AttachmentFiles {
         var kind = ObjCBool(false)
         let present = FileManager.default.fileExists(atPath: directory.path, isDirectory: &kind)
         self.isWritable = present && kind.boolValue
-            && FileManager.default.isWritableFileAtPath(directory.path)
+            && FileManager.default.isWritableFile(atPath: directory.path)
     }
 
     /// The app's own attachment directory, or nil when this device will not give one out — in which case
