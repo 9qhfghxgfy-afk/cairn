@@ -9,10 +9,16 @@ import Foundation
 public enum HuggingFaceEndpoints {
     public static let host = "huggingface.co"
 
-    /// The published file listing for a repository's default branch.
+    /// The published file listing for a repository, with the digest each file publishes.
+    ///
+    /// `?blobs=true` is what makes this the right endpoint rather than a stylistic choice: it returns
+    /// every file's `size` and, for a large file, its `lfs.sha256`. The alternative
+    /// (`/api/models/<id>/tree/main`) returns a git object id, which is a hash of the pointer file, not
+    /// of the bytes — comparing a downloaded weight against it would either fail a good download or, if
+    /// skipped, leave every weight installed unverified.
     public static func fileListing(repoID: String) -> URL? {
         guard let id = HuggingFaceRepoID.parse(repoID).repoID else { return nil }
-        return URL(string: "https://\(Self.host)/api/models/\(id)/tree/main")
+        return URL(string: "https://\(Self.host)/api/models/\(id)?blobs=true")
     }
 
     /// A single raw file. Downloading resumes from this same URL with a stored resume block.

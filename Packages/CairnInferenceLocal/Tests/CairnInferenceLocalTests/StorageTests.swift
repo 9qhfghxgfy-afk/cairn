@@ -118,8 +118,18 @@ struct ModelFilePlanTests {
     @Test func listingDecoderToleratesBothPublishedShapes() {
         let modern = Data(#"[{"path":"config.json","size":12,"lsha":"ab"}]"#.utf8)
         let legacy = Data(#"[{"filename":"model.safetensors","size":99,"sha256":"cd"}]"#.utf8)
+        // The shape Cairn actually calls: a model record whose files sit under `siblings`, with the
+        // content digest of a large file published under `lfs.sha256` rather than as the git oid.
+        let record = Data(#"{"_id":"models/x","siblings":[{"rfilename":"config.json","size":11},{"rfilename":"model.safetensors","size":695,"lfs":{"sha256":"35e3","size":695}}]}"#.utf8)
+        // A git object id is a hash of the pointer file, never of the bytes, so it is not read as a digest.
+        let tree = Data(#"[{"type":"file","oid":"52373f","size":1570,"path":"config.json"}]"#.utf8)
         #expect(ModelFilePlan.listing(from: modern) == [ModelFileListing(name: "config.json", bytes: 12, sha256: "ab")])
         #expect(ModelFilePlan.listing(from: legacy) == [ModelFileListing(name: "model.safetensors", bytes: 99, sha256: "cd")])
+        #expect(ModelFilePlan.listing(from: record) == [
+            ModelFileListing(name: "config.json", bytes: 11),
+            ModelFileListing(name: "model.safetensors", bytes: 695, sha256: "35e3"),
+        ])
+        #expect(ModelFilePlan.listing(from: tree) == [ModelFileListing(name: "config.json", bytes: 1570)])
         #expect(ModelFilePlan.listing(from: Data("<html>".utf8)).isEmpty)
     }
 }

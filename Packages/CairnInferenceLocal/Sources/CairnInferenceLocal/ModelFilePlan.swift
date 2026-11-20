@@ -78,18 +78,30 @@ public enum ModelFilePlan {
         return plan.isEmpty ? nil : total
     }
 
-    /// Tolerant decode of the published listing. Both shapes the API has used are accepted
-    /// (`{path,size,lsha}` and `{filename,size,sha256}`); anything unrecognisable yields an empty
-    /// listing, which the caller shows as "this repository has no readable file list".
+    /// Tolerant decode of the published listing. Two envelope shapes are accepted: the model record
+    /// Cairn calls (`{"siblings":[{"rfilename","size","lfs":{"sha256"}}]}`) and a bare array (a tree
+    /// listing, `{path,size}` or the older `{filename,size,sha256}`). Anything unrecognisable yields an
+    /// empty listing, which the caller shows as "this repository has no readable file list".
     public static func listing(from data: Data) -> [ModelFileListing] {
-        guard let root = try? JSONSerialization.jsonObject(with: data),
-              let entries = root as? [[String: Any]]
-        else { return [] }
+        guard let root = try? JSONSerialization.jsonObject(with: data) else { return [] }
+        let entries = (root as? [[String: Any]])
+            ?? ((root as? [String: Any])?["siblings"] as? [[String: Any]])
+            ?? []
 
         return entries.compactMap { entry in
-            guard let name = (entry["path"] as? String) ?? (entry["filename"] as? String) else { return nil }
-            let bytes = (entry["size"] as? NSNumber)?.int64Value
-            let digest = (entry["lsha"] as? String) ?? (entry["sha256"] as? String)
+            // Three published field shapes: the model record's `rfilename`, a plain tree listing's
+            // `path`, and an older per-file record's `filename`.
+            let name = (entry["rfilename"] as? String) ?? (entry["path"] as? String)
+                ?? (entry["filename"] as? String)
+            guard let name else { return nil }
+            var bytes = (entry["size"] as? NSNumber)?.int64Value
+            // A large file's real digest and size live under `lfs`; the top-level `oid` is a git object
+            // id, which is a hash of the pointer, so it is never read as a content digest.
+            var digest = (entry["lsha"] as? String) ?? (entry["sha256"] as? String)
+            if let lfs = entry["lfs"] as? [String: Any] {
+                digest = (lfs["sha256"] as? String) ?? (lfs["oidSha256"] as? String) ?? digest
+                if bytes == nil { bytes = (lfs["size"] as? NSNumber)?.int64Value }
+            }
             return ModelFileListing(name: name, bytes: bytes, sha256: digest)
         }
     }
