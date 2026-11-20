@@ -13,6 +13,12 @@ import Foundation
 /// Markers can straddle a chunk boundary, so an ambiguous tail is held back until the next chunk
 /// decides whether it was a marker after all.
 public struct DeviceTemplateChunkParser: Sendable {
+    /// Whether this turn has tools the model was offered.
+    ///
+    /// A tool region naming one of them may be written in the flatter attribute form, which is only read
+    /// when the name was really offered — so the parser carries the list rather than guessing at it. An
+    /// empty list keeps the old, strict reading: JSON and function/parameter tags only.
+    public var offeredTools: [ToolDefinition]
     /// Some templates prefix the turn with a newline. It is dropped, but only before anything
     /// real has been said, so a genuine leading newline later in an answer survives.
     public var trimsLeadingWhitespace: Bool
@@ -22,16 +28,19 @@ public struct DeviceTemplateChunkParser: Sendable {
 
     var region: DeviceTemplateMarker?
     var buffer = ""
-    var regionText: [DeviceTemplateMarker: String] = [:]
     var emittedAnyContent = false
+    var regionText: [DeviceTemplateMarker: String] = [:]
 
     public init(
+        offeredTools: [ToolDefinition] = [],
         trimsLeadingWhitespace: Bool = true,
         unterminatedToolRegionBecomesContent: Bool = true
     ) {
+        self.offeredTools = offeredTools
         self.trimsLeadingWhitespace = trimsLeadingWhitespace
         self.unterminatedToolRegionBecomesContent = unterminatedToolRegionBecomesContent
     }
+
 
     /// Feeds one streamed piece and returns the chunks it settles.
     public mutating func ingest(_ token: String) -> [StreamChunk] {

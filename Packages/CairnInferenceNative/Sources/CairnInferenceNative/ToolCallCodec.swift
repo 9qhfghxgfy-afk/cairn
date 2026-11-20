@@ -16,6 +16,28 @@ public enum ToolCallCodec {
         return fromTagForm(trimmed, callID: callID)
     }
 
+    /// Reads a tool region against the tools the turn actually offered.
+    ///
+    /// The two shapes above need no tool list because they name the tool inside their own markup. A local
+    /// model also writes the flatter attribute form — `<get_weather city="Paris" />` — which is only safe
+    /// to read when the offered names gate it, so this overload asks for them. Typing comes from the
+    /// domain's own reader (`PromptToolProtocol.attributeCalls`), which both sides of the module boundary
+    /// may see: this island may not reach into the inference-local module, and the domain is the one
+    /// place the shape can be published once. `ToolCallCodecTests` is what keeps the two readers in step.
+    public static func decode(
+        _ body: String, offered: [ToolDefinition], callID: String = "device-call"
+    ) -> ToolCallRequest? {
+        let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        if trimmed.hasPrefix("{"), let json = fromJSON(trimmed) { return json }
+        if let tagged = fromTagForm(trimmed, callID: callID) { return tagged }
+        guard let call = PromptToolProtocol.attributeCalls(trimmed, offered: offered).first else {
+            return nil
+        }
+        return ToolCallRequest(id: callID, name: call.name, argumentsJSON: call.argumentsJSON)
+    }
+
+
     /// `{"name": "search", "arguments": {"query": "…"}}`, tolerating `function` /
     /// `parameters` and an arguments value already encoded as a string.
     static func fromJSON(_ text: String) -> ToolCallRequest? {

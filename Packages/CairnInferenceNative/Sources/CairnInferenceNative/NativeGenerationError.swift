@@ -12,6 +12,9 @@ public enum NativeGenerationError: Error, Equatable {
     case runtimeUnavailableOnSimulator
     /// The weights are not installed at the path this engine was given.
     case modelNotInstalled
+    /// The turn has no message in it to answer — an empty transcript is not something a model can be
+    /// pointed at, and pretending otherwise wastes a load of several gigabytes.
+    case nothingToAnswer
     /// The runtime refused to load the weights it was given.
     case loadFailed
     /// Generation stopped partway.
@@ -27,6 +30,8 @@ public enum NativeGenerationError: Error, Equatable {
             return "On-device MLX inference needs a real iPhone with Metal."
         case .modelNotInstalled:
             return "That model is not installed on this device yet."
+        case .nothingToAnswer:
+            return "There is no message in this turn to answer."
         case .loadFailed:
             return "The on-device runtime could not load that model."
         case .generationFailed:

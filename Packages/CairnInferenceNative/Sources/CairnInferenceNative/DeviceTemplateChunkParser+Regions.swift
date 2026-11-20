@@ -33,11 +33,18 @@ extension DeviceTemplateChunkParser {
             // An empty thinking region is reported as nothing at all. A panel reading "no
             // reasoning" is worse than no panel.
             if !body.isEmpty { out.append(.thinking(body)) }
-        } else if let call = ToolCallCodec.decode(body) {
+        } else if let call = decodeToolRegion(body) {
             out.append(.toolCall(call))
         } else if unterminatedToolRegionBecomesContent, !body.isEmpty {
             out.append(contentsOf: flush(body))
         }
+    }
+
+    /// The region's body, read with the tools this turn was offered when there were any.
+    func decodeToolRegion(_ body: String) -> ToolCallRequest? {
+        offeredTools.isEmpty
+            ? ToolCallCodec.decode(body)
+            : ToolCallCodec.decode(body, offered: offeredTools)
     }
 
     mutating func take(_ marker: DeviceTemplateMarker?) -> String? {

@@ -31,10 +31,15 @@ struct MLXNativeProviderTests {
         #expect(models.count == 1)
     }
 
-    @Test func noSamplingKnobsAreOfferedThatWereNeverObserved() {
-        // The config sheet renders from this table, so claiming support here would put a slider
-        // on screen that the runtime might silently ignore.
-        #expect(MLXNativeProvider().samplingSupport == .none)
+    @Test func onlyKnobsTheEngineHonestToTheRuntimeAreOffered() {
+        // The config sheet renders from this table, so a true row has to be a value the engine really
+        // hands the runtime — and a knob the runtime's own parameters do not carry stays false, which is
+        // the case where a slider would teach the user that Cairn's settings mean nothing.
+        let support = MLXNativeProvider().samplingSupport
+        #expect(support == NativeSampling.support)
+        #expect(support.temperature && support.topP && support.minP && support.topK)
+        #expect(support.maxTokens && support.repeatPenalty && support.repeatLastN)
+        #expect(!support.seed && !support.contextWindow)
     }
 
     @Test func availabilityIsDerivedFromTheBuildRatherThanAsserted() {
