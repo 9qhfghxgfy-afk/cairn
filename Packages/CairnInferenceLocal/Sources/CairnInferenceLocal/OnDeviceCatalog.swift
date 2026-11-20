@@ -15,7 +15,9 @@ import Foundation
 /// The list is scoped to builds an 8 GB iPhone can plausibly hold, which is why it is mostly 4-bit
 /// and small. Larger repos remain reachable through the exact-name field.
 public enum OnDeviceCatalog {
-    public static let entries: [OnDeviceCatalogEntry] = [
+    /// The library curated when this module was written. The later additions live in
+    /// `OnDeviceCatalog+MLX.swift`; `entries` is the one list every caller reads.
+    static let baseEntries: [OnDeviceCatalogEntry] = [
         OnDeviceCatalogEntry(
             repoID: "mlx-community/Llama-3.2-1B-Instruct-4bit",
             displayName: "Llama 3.2 1B Instruct",
