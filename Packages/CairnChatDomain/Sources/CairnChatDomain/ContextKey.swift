@@ -44,11 +44,13 @@ public enum ContextKey: String, Sendable, Equatable, Codable, CaseIterable, Iden
     public var explainer: String {
         switch self {
         case .date:
-            return "Today's date. The model has no clock of its own, so without this it guesses, "
-                + "and confidently guesses wrong."
+            return "Today's date. The model has no clock of its own, so without this it guesses, and "
+                + "confidently guesses wrong. One caveat: a small model can mistake the date for the subject "
+                + "and start answering about it rather than using it."
         case .timeAndTimezone:
-            return "The hour and the timezone name. Off by default: it is the most identifying item "
-                + "in this list, and most questions do not need the hour."
+            return "The hour and the timezone name. Off by default: it is the most identifying item in this "
+                + "list, most questions do not need the hour, and a small model is likelier to treat a live "
+                + "timestamp as part of the question than as a fact it was handed."
         case .platform:
             return "Tells the model it is answering inside Cairn on iPhone or iPad, so it stops "
                 + "offering desktop steps that do not exist here."
@@ -56,8 +58,9 @@ public enum ContextKey: String, Sendable, Equatable, Codable, CaseIterable, Iden
             return "The device language code, so the model can tell a translation request from a "
                 + "question asked in that language."
         case .localeRegion:
-            return "The region code only — never a name, never a location. Used for units and date "
-                + "conventions."
+            return "The region code only — never a name, never a location, never a coordinate. It is what "
+                + "makes a model write kilometres rather than miles, and day-month rather than month-day. "
+                + "Leave it off and nothing about where you are is stated at all."
         case .capabilitySummary:
             return "What this turn can actually do: streaming, thinking, tools, images, context "
                 + "size. Without it a model will claim abilities it has not been given."
