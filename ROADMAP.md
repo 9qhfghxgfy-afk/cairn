@@ -2615,19 +2615,32 @@ pages need JavaScript, but the JSON behind them (`developer.apple.com/tutorials/
 readable from this machine with `curl | grep`, which is how the first two were settled. A plausible Apple
 signature is not a verified one.
 
-**CI-verified:** owed, and the first run earned its red. Run **44818106128** failed the host job on three
-symbols that were plausible and wrong — an internal `static let` named from a public default argument, a
-`URLRequest` handed to something that wants a `URLSessionDownloadTask`, and `countOfBytesExpectedToWrite`,
-which is not a member of a task that receives bytes — and it stopped there, so the UI target and
-`Tests/CairnTests` were never compiled at all. The fix is the checking, not just the patch: `swiftc
--swift-version 6` against `FoundationNetworking` on this machine now typechecks the whole of
-`CairnInferenceLocal` except its Darwin-only files, and it catches all three of those locally. A second run is
-owed, and the UI half is still CI's first look.
+**CI-verified:** green on run **44823149525** (commit `353094d`) — Privacy guards, Linked MLX build, Host unit
+tests (macOS), and Build + test on simulator, all success. Two red runs came first and both were instructive.
+Run **44818106128** failed the host job on three symbols that were plausible and wrong: an internal `static let`
+named from a public default argument, a `URLRequest` handed to something that wants a `URLSessionDownloadTask`,
+and `countOfBytesExpectedToWrite`, which is not a member of a task that receives bytes — and it stopped there,
+so the UI target and `Tests/CairnTests` were never compiled at all. Run **44821559823** cleared the host job and
+died in the UI target on one line: `refreshPartials` consulted a `transfers` table that nothing ever writes,
+because this model carries one phone transfer at a time. The checking changed with the patches, which is the
+part worth keeping: `swiftc -swift-version 6` against `FoundationNetworking` on the Windows machine now
+typechecks the whole of `CairnInferenceLocal` except its Darwin-only files, and it catches all three of the
+first run's mistakes without a Mac. A name that is simply absent from a target only Xcode compiles is what CI
+is for.
+
+**Three defects review found that the compiler did not.** `ModelTokenModel` was Combine's `ObservableObject` in
+a module where every other view model is `@Observable`, and because Settings holds it as an optional value
+nothing was observing it — a refused write would not repaint. Three `CairnTheme` colors the token row reached
+for do not exist; the palette has amber, moss and rust. A Cancel followed straight by a Resume left the dying
+reader task free to clear the new transfer's handle and paint "Cancelled" over a bar that was moving again, so
+each transfer now carries a generation and only the one still owning the screen writes; and a cancel
+confirmation that outlived its transfer would cancel a model that had already landed, so it now says there is
+nothing to cancel.
 `Tests/CairnTests` compiles only on CI, so the four new transfer-control tests
 (`testPauseStopsTheTransferAndNeverTouchesTheDiscardPath`, `testCancelClosesTheTransferAndFreesWhatWasFetched`,
 `testAKeptTransferIsOfferedAsResumeRatherThanAsAFreshDownload`,
-`testACancelNamesWhatItCostsAndSaysSoWhenNothingWasFetched`) and both stub libraries get their first real
-compile there.
+`testACancelNamesWhatItCostsAndSaysSoWhenNothingWasFetched`) and both stub libraries got their first real
+compile, and their first run, in that same green build.
 
 **On-device-verified:** owed, and it is the point of this round: pause during a multi-gigabyte pull, kill the
 app, reopen it, and check the row still says what was kept; then resume, then cancel, and check the space comes
@@ -2639,6 +2652,8 @@ and the same request without one answering 401.
 
 Left open on purpose: `DownloadBridge.swift` is 310 lines, above the ~150-line house limit; splitting its
 delegate extension into a second file means relaxing `private` helpers to module visibility, a wider surface
-than the split buys, so that waits for its own change. `CairnProviderRemote` cannot be built on this machine at
-all — `SecurityKeychainOperator.swift` imports `Security`, Darwin-only — so `KeychainModelTokenStore` is
-reviewed and parsed, not compiled, until CI.
+than the split buys, so that waits for its own change. `ModelCatalogModel.swift` (198) and
+`ModelCatalogModel+Transfers.swift` (237) are over it too, and the split there is a third file — the pause and
+cancel half — which needs the same visibility widening. `CairnProviderRemote` cannot be built on this machine
+at all — `SecurityKeychainOperator.swift` imports `Security`, Darwin-only — so `KeychainModelTokenStore` was
+written, parsed and reviewed here, and first compiled on CI, where the host job built it green.
