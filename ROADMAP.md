@@ -2652,8 +2652,141 @@ and the same request without one answering 401.
 
 Left open on purpose: `DownloadBridge.swift` is 310 lines, above the ~150-line house limit; splitting its
 delegate extension into a second file means relaxing `private` helpers to module visibility, a wider surface
-than the split buys, so that waits for its own change. `ModelCatalogModel.swift` (198) and
+than the split buys, so that waits for its own change — **a wait that ended the same day**: the callbacks now have a
+file of their own (`DownloadBridge+Delegate.swift`), which is exactly where a reader looks when a callback does not
+fire. `ModelCatalogModel.swift` (198) and
 `ModelCatalogModel+Transfers.swift` (237) are over it too, and the split there is a third file — the pause and
 cancel half — which needs the same visibility widening. `CairnProviderRemote` cannot be built on this machine
 at all — `SecurityKeychainOperator.swift` imports `Security`, Darwin-only — so `KeychainModelTokenStore` was
 written, parsed and reviewed here, and first compiled on CI, where the host job built it green.
+## 2026-11-20 — the delegate that was never declared, which is why a weight file sat at 1 KB
+
+### What this round changed, and why
+
+A multi-gigabyte `.safetensors` pull parked at about a kilobyte with a bar that never moved, and the small files
+finished first so it read as the app hanging on the big one. The cause was one missing word in a declaration:
+`DownloadBridge` named `URLSessionDataDelegate` and nothing else, and `URLSessionDataDelegate` inherits
+`URLSessionTaskDelegate` but **not** `URLSessionDownloadDelegate`. A delegate callback is dispatched by asking the
+delegate object whether it answers a selector, and Swift exposes a method to the Objective-C runtime only when it
+satisfies a protocol the class actually declares. So `didWriteData` and `didFinishDownloadingTo` were ordinary
+Swift methods the session never saw: they compiled, they read correctly, they never ran. The bytes still arrived —
+a download task streams to a temporary file with no delegate in the loop — and nothing ever moved that file into
+the store or reported a number. That is exactly the shape of the stall: metadata files finishing and adding up to a
+kilobyte, weights landing in a temporary file nobody owns, and a bar parked where the metadata stopped. The
+conformance is now named on the class, with a note on the declaration saying it is not a style choice, because the
+next reader will otherwise tidy the redundant-looking line away.
+
+**The status is checked before a byte is stored.** A download task does not fail on a refusal: it reports a 401,
+403, 404 or 429 as a finished transfer with `error == nil` and writes the server's error page to the temporary file
+exactly as it would write weights. `HTTPTransferStatus` is now the one place that decides which answers are files
+(2xx, and 206 — a resumed file continuing, not an error) and which are error pages, and a refusal is carried as a
+case of its own (`ModelDownloadOutcome.refused(status:)`, `ModelDownloadFailure.refusedByServer(status:)`) instead
+of being flattened into "the download failed". A 401 wants a token and a 404 wants a different file; one sentence
+cannot tell those apart. Storing the error page was the other half of the same bug: fourteen bytes of JSON saved as
+`model.safetensors` is a model that loads as nothing and an install marked complete with nothing to load. 416 is
+the one refusal that is a restart rather than an end — the offset a stale resume block asked for is answered by
+taking that file again from its beginning, and the block is cleared first so the retry cannot pick it up again.
+
+**A transport break keeps its own words.** `NetworkFault` maps the network code to a sentence a person can act on:
+a stalled socket says what was fetched is kept and Resume carries on from it, a dropped route says the same, a host
+that will not answer says it will not answer, a full disk is called a storage problem rather than a network one.
+The certificate family is matched as a band of numbers (-1200…-1206) rather than by name, because the four Swift
+constant names an earlier draft used **do not exist in Foundation** — a local typecheck caught them — and a band
+cannot drift the way a guessed identifier can. A wrong number there only chooses a different sentence; it cannot
+break a download.
+
+**The redirect rule now sits next to the download.** Weights are handed out by a hop to a storage host nobody named,
+signed by the Hub's own query string, so `Authorization`, `X-API-Key`, `Api-Key` and `Cookie` come off on a
+cross-host hop and stay on a same-host one, while `Range` and every other header rides along untouched — losing
+`Range` is how a resumed four-gigabyte file silently starts over and pays for the same bytes twice. The source host
+is read off the redirect response rather than `task.currentRequest`, which is the weaker of the two: a nil there
+would drop a credential on a same-host hop and break an authenticated download.
+
+**Two ordering holes in the bridge closed.** A task starts before the caller reaches `wait(for:)`, and a refusal for
+a bad path comes back in microseconds — an answer that arrived with no continuation installed was marked finished
+and then lost, so the caller reported a reason it had never witnessed. An answer with nowhere to go is filed in
+`pendingOutcome` and `wait` drains it as its first act. And `resolve` is the only place the finished flag flips: a
+draft set it inside `answer` before calling `resolve`, whose own guard then returned early, which would have parked
+**every** download on a continuation nobody resumed. A delivered answer also leaves the table, so a forty-file
+repository does not carry forty answered waiters for the rest of the app's life. A completion with no file behind it
+is reported as a transfer that delivered nothing rather than as success with zero bytes, which would otherwise have
+reached the digest step and come back as a checksum problem.
+
+**The split this round closed its own "left open on purpose" note.** The callbacks live in
+`DownloadBridge+Delegate.swift` (108 lines) as thin adapters that decide nothing; the rules live in
+`DownloadBridge.swift`. The helpers went from `private` to module visibility, which is the price of the split and
+the one worth paying: every rule can now be driven with a token, a synthetic `HTTPURLResponse` and a temporary
+file, and the callback shapes sit where nobody has to guess them.
+
+
+### Verification, in the three categories, unblended
+
+**CI-verified:** owed by this commit; the run is what decides it. Two things make this round's CI run the first
+*execution* of the new code rather than a formality: `Packages/CairnInferenceLocal` cannot be built on the
+authoring machine at all — `SHA256Digest.swift` imports `CryptoKit` and `AppleModelAvailability.swift` imports
+`FoundationModels`, both Darwin-only, so `swift build --package-path Packages/CairnInferenceLocal` fails at the
+module level here — and swift-testing is not installed for this Windows toolchain, so the five new test files get
+their first compile and their first run on CI.
+
+What the machine did prove, before pushing:
+
+- `Scripts/ci.sh guards` equivalent, run directly: `check-logging.sh`, `check-no-paywall.sh`, `check-hostname.sh`,
+  `check-ats.sh`, `check-signing.sh` all pass, and `Scripts/test-guards.sh` reports **53 ok, 0 failed** — the
+  guards still reject planted values and still do not print what they caught.
+- `swiftc -swift-version 6 -typecheck` (Swift 6.4.2) over the whole module with the two Darwin imports stubbed.
+  `DownloadBridge.swift` and `DownloadBridge+Delegate.swift` are in that set: Windows `FoundationNetworking`
+  declares `URLSessionDownloadDelegate`, so the three download-delegate signatures and the redirect handler were
+  checked against a real protocol declaration rather than remembered ones, and the internal-witness rule was
+  settled the same way — a *public* class would have had to mark those methods `public`, and this one is internal,
+  which is what the existing `RemoteBodyDelegate` and `WebLoadDelegate` already rely on.
+- That same typecheck is what killed four invented Foundation constants: `NSURLErrorsecureConnectionFailed`,
+  `NSURLErrorserverCertificateUntrusted`, `NSURLErrorserverCertificateNotYetValid` and
+  `NSURLErrorserverCertificateExpired` are not in scope anywhere, which is why the certificate family is a numeric
+  band now. It also settled `withTaskCancellationHandler`'s labels locally — the `operation:` trailing label
+  resolves to the deprecated `handler:operation:` overload, and the new code uses `onCancel:`.
+- The two errors that remain in that typecheck are the documented Darwin-only surface and nothing else: the
+  `waitsForConnectivity` setter is get-only off Apple platforms, and `NSURLSessionDownloadTaskResumeData` exists
+  only in CFNetwork (the harness shims it to keep the rest of the file checking).
+
+**On-device-verified:** owed, and it is the whole point of the round — the bug only ever appeared on a phone.
+
+**Real-network-verified:** partly, and only for the shapes the code is written against: the Hub answers a weight
+request with a hop to a signed storage address, and a missing path answers 404 with a short body and no transport
+error, which is what `HTTPTransferStatus` exists for. Neither a resumed transfer's 206, nor a stale block's 416,
+nor a gated repository's 401 has been observed from this app.
+
+### Device checklist for this round — six lines, each says what it proves
+
+1. Start a large download and watch the bar move past the metadata files. A bar that reaches a weight file at all
+   proves `didWriteData` is being delivered, which is the bug.
+2. Let it finish and open the file's row: the byte count shown is the size on disk and the checksum verdict is
+   `verified`. Proves the temporary file was moved into the store rather than left in it.
+3. Pause mid-file, force-quit, reopen, resume. The row names what was kept and the transfer continues from partway
+   through. Proves the resume block and the 206 path; whether the block survives a quit is the open question this
+   line settles either way.
+4. Cancel mid-file. The space comes back and no resume block is offered.
+5. Turn on airplane mode for a minute mid-download. The row says **Waiting for the network** with the numbers
+   where it stopped, then carries on. If it says nothing at all, `taskIsWaitingForConnectivity` did not bind — the
+   one signature this machine cannot check.
+6. Ask for a file that is not there (or delete the saved token and retry a gated repository). The sheet says
+   "no file at that address (status 404)" or names 401, and nothing lands in Installed.
+
+### Known gaps
+
+- `urlSession(_:taskIsWaitingForConnectivity:)` is written from Apple's published spelling and cannot be checked
+  here: Windows Foundation does not declare that requirement at all, so the local typecheck treats the method as an
+  ordinary function. A wrong signature is a silent no-op rather than a build error — which is exactly the failure
+  class this round was about — so line 5 of the checklist is what settles it. The fallback is honest: the bar stops,
+  and the transport's own words arrive when the wait turns into a timeout.
+- Whether a resume block from a non-background session survives a quit-and-reopen is unchanged and still an
+  on-device fact; if it does not, the file is taken again and hashed at the end, which costs time and not
+  correctness.
+- No rate is shown. The sheet says stage · filename · bytes · percent; bytes-per-second needs a clock in
+  `LocalTransferState`, which every transfer state would then have to carry, so it is its own change rather than a
+  line added to a bug fix.
+- `DownloadBridge.swift` is 380 lines, still over the ~150-line house limit; the delegate half is out of it now and
+  what remains is one state machine whose callbacks must be ordered against each other. Splitting it further means
+  splitting the lock.
+- `HTTPTransferStatus.refusal(for:)` exists for the response-shaped call and is exercised by tests; the delegate
+  path reads the status itself so that a non-HTTP response cannot be mistaken for a file.
+

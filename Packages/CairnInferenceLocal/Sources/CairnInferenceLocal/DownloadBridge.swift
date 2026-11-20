@@ -7,12 +7,41 @@ import Foundation
 /// because the delegate callbacks are synchronous and their ordering matters: a progress callback
 /// that lands after its task finished must not be re-sequenced behind it.
 ///
-/// Only byte counts and tokens are ever touched here — no URL, no query string, no file contents.
-final class DownloadBridge: NSObject, URLSessionDataDelegate, @unchecked Sendable {
+/// **`URLSessionDownloadDelegate` has to be named on this declaration, and that is not a style choice.**
+/// URLSession dispatches a delegate callback by asking the delegate object whether it answers a selector, and
+/// Swift hands a method to the Objective-C runtime only when it satisfies a protocol the class actually
+/// declares. `URLSessionDataDelegate` inherits `URLSessionTaskDelegate` and not `URLSessionDownloadDelegate`,
+/// so a bridge naming only the data protocol keeps `didWriteData` and `didFinishDownloadingTo` as ordinary
+/// Swift methods the session never sees: they compile, they read correctly, they never run. That is the whole
+/// of the iPhone stall this file used to cause — the metadata files finished and added up to about a kilobyte,
+/// the weight file streamed into a temporary file with no progress callback delivered and no handoff to move it
+/// into the store, and the bar sat parked at 1 KB of four gigabytes. Measured rather than argued: the same code
+/// declaring only the data protocol reported a completion with no write and no finish callback, while the same
+/// code declaring `URLSessionDownloadDelegate` delivered the write, the file, and the status.
+///
+/// The callbacks themselves are thin adapters in `DownloadBridge+Delegate.swift`. Every decision about a
+/// waiter's state lives here, so the rules can be tested without a session.
+///
+/// Only byte counts, tokens and status codes are ever touched here — no prompt text, no file contents, and no
+/// URL beyond the host comparison the redirect rule needs.
+final class DownloadBridge: NSObject, URLSessionDownloadDelegate, @unchecked Sendable {
     /// Why this process asked for a transfer to stop, as distinct from a route dropping or the surrounding
     /// task being cancelled. The two are worth different things: a pause wants the resume block the system
     /// produces, a cancel wants nothing kept.
     enum StopMode: Sendable, Equatable { case pause, cancel }
+
+    /// The least number of bytes that must arrive before another progress update is worth sending.
+    ///
+    /// A four-gigabyte weight file reports a write every few hundred kilobytes, which is thousands of events
+    /// per transfer. Each one crosses into the view model and redraws a bar nobody can read that fast, and the
+    /// flood costs socket time — a progress stream that outruns the screen is how a fast download looks slow.
+    static let progressByteStride: Int64 = 256 * 1024
+    /// The longest a bar may sit still while bytes are genuinely arriving.
+    ///
+    /// The byte stride alone would leave a slow line silent for a quarter of a gigabyte, which reads as a hang;
+    /// the time ceiling alone would make a fast one redraw every packet. Both together give a screen that moves
+    /// about four times a second at any speed.
+    static let progressIntervalNanoseconds: UInt64 = 250_000_000
 
     private struct Waiter {
         let destination: URL
@@ -27,6 +56,13 @@ final class DownloadBridge: NSObject, URLSessionDataDelegate, @unchecked Sendabl
         /// reading the task's own counter, which can lag a write that has not landed yet — a bar that
         /// slides backwards mid-download reads as a corrupted file, and the number would be wrong.
         var reportedBytes: Int64 = 0
+        /// The byte count the last emitted update carried, which is where the next window is measured from.
+        /// Measuring from the newest write instead would make a window one buffer wide, and the throttle would
+        /// throttle nothing.
+        var sentBytes: Int64 = 0
+        /// When the last update went out, on the monotonic clock. A wall clock that steps back mid-transfer —
+        /// a time sync during a four-gigabyte pull is a normal thing — would otherwise stall the bar.
+        var sentAtNanos: UInt64?
         /// nil until something in this app presses Pause or Cancel on this file. A stop that came from
         /// anywhere else keeps the older behaviour, which is to hand back a resume block whenever the
         /// system offers one.
@@ -34,6 +70,15 @@ final class DownloadBridge: NSObject, URLSessionDataDelegate, @unchecked Sendabl
         /// The resume block a pause's cancellation handed back, filed here until the guaranteed completion
         /// callback is ready to answer with it. See `recordPauseBlock`.
         var pauseBlock: Data?
+        /// An answer that arrived before `wait(for:)` had installed its continuation.
+        ///
+        /// The task is started before the call site reaches `wait`, and a refusal for a bad URL or a refused
+        /// scheme can come back in microseconds — faster than the code that asked for the file gets to ask for
+        /// its result. An answer with nowhere to go is an answer that never arrives: the waiter is already
+        /// marked finished, so the continuation resumes with nothing of its own and a 404 reaches the sheet
+        /// wearing whatever sentence the fallback happens to carry. Filing it here means the first thing
+        /// `wait` does is hand back the real reason.
+        var pendingOutcome: ModelDownloadOutcome?
     }
 
     private let lock = NSLock()
@@ -49,7 +94,7 @@ final class DownloadBridge: NSObject, URLSessionDataDelegate, @unchecked Sendabl
     }
 
     func attach(_ token: Int, task: URLSessionDownloadTask) {
-        mutate(token) { $0.task = task }
+        _ = update(token) { $0.task = task }
     }
 
     func cancel(_ token: Int) {
@@ -108,15 +153,15 @@ final class DownloadBridge: NSObject, URLSessionDataDelegate, @unchecked Sendabl
     /// Files away the resume block a pause's cancellation produced, without answering the transfer.
     ///
     /// A pause produces two callbacks and Apple states no order between them: the block comes on this
-    /// completion handler, the matching error comes on `didCompleteWithError`. Answering from whichever got
+    /// completion handler, the matching error arrives on `didCompleteWithError`. Answering from whichever got
     /// there first is how four gigabytes get thrown away by a race nobody can see — the one that arrives
-    /// first may be the one carrying nothing. So this stores, and `didCompleteWithError` answers, because
+    /// first may be the one carrying nothing. So this stores, and `answer(token:failure:)` answers, because
     /// that callback is documented always to come. It takes the best block it can see: the one filed here if
     /// it has landed, else the one on its own error, else nothing, which means the next attempt starts this
     /// file over and still hashes it at the end.
     private func recordPauseBlock(token: Int, resumeData: Data?) {
         guard let resumeData, !resumeData.isEmpty else { return }
-        mutate(token) { waiter in
+        _ = update(token) { waiter in
             if waiter.pauseBlock == nil { waiter.pauseBlock = resumeData }
         }
     }
@@ -129,18 +174,37 @@ final class DownloadBridge: NSObject, URLSessionDataDelegate, @unchecked Sendabl
             == directory.standardizedFileURL.path
     }
 
+    /// The answer to the transfer this token was reserved for.
+    ///
+    /// Installed after the task starts, which is the order the caller has to use: register, attach, resume,
+    /// wait. That order leaves one hole, and `pendingOutcome` is what closes it — a refusal can be delivered
+    /// before this method runs, and an answer that arrives with no continuation waiting for it would otherwise
+    /// be lost, leaving the caller to report a reason it did not witness.
     func wait(for token: Int) async -> ModelDownloadOutcome {
         await withTaskCancellationHandler {
             await withCheckedContinuation { continuation in
                 lock.lock()
-                if var waiter = waiters[token], !waiter.finished {
-                    waiter.continuation = continuation
-                    waiters[token] = waiter
+                guard var waiter = waiters[token] else {
                     lock.unlock()
-                } else {
-                    lock.unlock()
-                    continuation.resume(returning: .failed(message: "The download was cancelled."))
+                    continuation.resume(returning: .failed(message: "The download ended before it started."))
+                    return
                 }
+                if let early = waiter.pendingOutcome {
+                    // The honest answer got here first. It is returned as it stands, and the waiter goes with it.
+                    waiters.removeValue(forKey: token)
+                    lock.unlock()
+                    continuation.resume(returning: early)
+                    return
+                }
+                guard !waiter.finished, waiter.continuation == nil else {
+                    waiters.removeValue(forKey: token)
+                    lock.unlock()
+                    continuation.resume(returning: .failed(message: "The download ended before it started."))
+                    return
+                }
+                waiter.continuation = continuation
+                waiters[token] = waiter
+                lock.unlock()
             }
         } onCancel: {
             // Cancelling the URLSession task is what yields a resume block, so a cancelled download
@@ -149,61 +213,63 @@ final class DownloadBridge: NSObject, URLSessionDataDelegate, @unchecked Sendabl
         }
     }
 
-    private func mutate(_ token: Int, _ change: (inout Waiter) -> Void) {
-        lock.lock()
-        if var waiter = waiters[token], !waiter.finished {
-            change(&waiter)
-            waiters[token] = waiter
+    // MARK: - What the delegate adapters ask this bridge to decide
+    //
+    // The callbacks in `DownloadBridge+Delegate.swift` read a task and call one of these. Every rule — when a
+    // progress number is worth sending, whether a response is a file, what a cancellation means — is here, so
+    // each one can be exercised without a session, a socket, or a simulator.
+
+    /// Records one write and sends a progress update when the window says it is worth sending one.
+    func emitProgress(token: Int, received: Int64, expectedFromServer: Int64) {
+        guard let waiter = read(token), !waiter.finished else { return }
+        let due = update(token) { state -> Bool in
+            // A hop that restarts — a redirect followed, a retry taken — starts its counter over. Measuring
+            // the window from the last number sent would then read as a negative stride and go quiet, so a
+            // counter that went backwards is treated as a new window measured from zero.
+            let window = received >= state.sentBytes ? received - state.sentBytes : received
+            let now = DispatchTime.now().uptimeNanoseconds
+            let idle = state.sentAtNanos.map { now > $0 ? now - $0 : 0 } ?? UInt64.max
+            guard state.sentAtNanos == nil
+                || window >= Self.progressByteStride
+                || idle >= Self.progressIntervalNanoseconds
+            else { return false }
+            state.sentBytes = received
+            state.sentAtNanos = now
+            if received > state.reportedBytes { state.reportedBytes = received }
+            return true
         }
-        lock.unlock()
+        guard due == true else { return }
+        waiter.onProgress(
+            DownloadProgressUpdate(receivedBytes: received,
+                                   expectedBytes: expectedFromServer > 0 ? expectedFromServer : nil)
+        )
     }
 
-    private func read(_ token: Int) -> Waiter? {
-        lock.lock()
-        defer { lock.unlock() }
-        return waiters[token]
+    /// Sends the waiting state: nothing is moving, and the numbers are the last honest ones.
+    func emitWaiting(token: Int, expectedFromServer: Int64) {
+        guard let waiter = read(token), !waiter.finished else { return }
+        waiter.onProgress(
+            DownloadProgressUpdate(receivedBytes: waiter.reportedBytes,
+                                   expectedBytes: expectedFromServer > 0 ? expectedFromServer : nil,
+                                   isWaiting: true)
+        )
     }
 
-    private func resolve(_ token: Int, with outcome: ModelDownloadOutcome) {
-        var resumed: CheckedContinuation<ModelDownloadOutcome, Never>?
-        lock.lock()
-        if var waiter = waiters[token], !waiter.finished {
-            waiter.finished = true
-            resumed = waiter.continuation
-            waiter.continuation = nil
-            waiters[token] = waiter
+    /// Moves the system's temporary file into the store — or refuses it, which comes first.
+    ///
+    /// The status is read before a byte is moved, because a refusal is not a file: the Hub answers a bad path or
+    /// a refused credential with a short body, and a download task reports that as a finished transfer with no
+    /// error at all. Storing it is how `model.safetensors` ends up holding fourteen bytes of prose and a
+    /// repository gets marked installed with nothing to load. URLSession deletes the temporary file as soon as
+    /// this callback returns, so refusing here also discards the body — nothing of it is kept, and none of it is
+    /// ever read.
+    func storeFile(_ temporaryFile: URL, for token: Int, response: URLResponse?) {
+        guard let waiter = read(token), !waiter.finished else { return }
+        if let http = response as? HTTPURLResponse, !HTTPTransferStatus.carriesFile(http.statusCode) {
+            resolve(token, with: .refused(status: http.statusCode))
+            return
         }
-        lock.unlock()
-        resumed?.resume(returning: outcome)
-    }
-
-    private func token(for task: URLSessionTask) -> Int? {
-        task.taskDescription.flatMap { Int($0) }
-    }
-}
-
-extension DownloadBridge {
-    func urlSession(
-        _ session: URLSession,
-        downloadTask: URLSessionDownloadTask,
-        didWriteData bytesWritten: Int64,
-        totalBytesWritten: Int64,
-        totalBytesExpectedToWrite: Int64
-    ) {
-        guard let token = token(for: downloadTask), let onProgress = read(token)?.onProgress else { return }
-        let expected = totalBytesExpectedToWrite > 0 ? totalBytesExpectedToWrite : nil
-        // Recorded before it is sent, so a later waiting update repeats the highest number this task has
-        // reached instead of whatever its own counter happens to say at that moment.
-        mutate(token) { if totalBytesWritten > $0.reportedBytes { $0.reportedBytes = totalBytesWritten } }
-        onProgress(DownloadProgressUpdate(receivedBytes: totalBytesWritten, expectedBytes: expected))
-    }
-
-    func urlSession(
-        _ session: URLSession,
-        downloadTask: URLSessionDownloadTask,
-        didFinishDownloadingTo location: URL
-    ) {
-        guard let token = token(for: downloadTask), let target = read(token)?.destination else { return }
+        let target = waiter.destination
         do {
             try FileManager.default.createDirectory(
                 at: target.deletingLastPathComponent(),
@@ -212,102 +278,103 @@ extension DownloadBridge {
             if FileManager.default.fileExists(atPath: target.path) {
                 try FileManager.default.removeItem(at: target)
             }
-            try FileManager.default.moveItem(at: location, to: target)
+            try FileManager.default.moveItem(at: temporaryFile, to: target)
         } catch {
             resolve(token, with: .failed(message: "The downloaded file could not be stored."))
         }
     }
 
-    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: (any Error)?) {
-        guard let token = token(for: task) else { return }
-        guard let error else {
-            var written: Int64 = 0
-            if let target = read(token)?.destination {
-                let attributes = try? FileManager.default.attributesOfItem(atPath: target.path)
-                written = (attributes?[.size] as? Int64) ?? 0
+    /// Answers the one waiter this task belongs to, from the callback a transfer always produces.
+    func answer(token: Int, failure: (any Error)?) {
+        guard let waiter = read(token), !waiter.finished else { return }
+        guard let failure else {
+            // The size on disk, not the number the socket counted: a resumed file is the bytes that landed, and
+            // the digest taken afterwards is what makes that claim true.
+            let attributes = try? FileManager.default.attributesOfItem(atPath: waiter.destination.path)
+            let stored = (attributes?[.size] as? Int64) ?? 0
+            guard stored > 0 else {
+                // A completion with no file behind it is not a completed download. The handoff callback is
+                // documented to always precede this one, so reaching here means either the file never arrived or
+                // something outside this app removed it between the two — and either way the honest answer is
+                // that there is nothing to verify. Reporting bytes-zero as success would let the manager hash a
+                // file that does not exist and call the failure a checksum problem.
+                resolve(token, with: .failed(message: "The transfer finished without delivering a file."))
+                return
             }
-            resolve(token, with: .complete(bytes: written))
+            resolve(token, with: .complete(bytes: stored))
             return
         }
 
-        let nsError = error as NSError
+        let nsError = failure as NSError
         let carried = nsError.userInfo[NSURLSessionDownloadTaskResumeData] as? Data
-        if nsError.code == NSURLErrorCancelled, read(token)?.stopMode == .cancel {
+        if nsError.code == NSURLErrorCancelled, waiter.stopMode == .cancel {
             // Given up on, so nothing that came out of this connection is kept — above all not the resume
             // block, which would let a later attempt carry on from bytes whose verification record has been
             // forgotten. The caller clears the file; this decides that the block never gets written.
             resolve(token, with: .cancelled)
             return
         }
-        if nsError.code == NSURLErrorCancelled, read(token)?.stopMode == .pause {
+        if nsError.code == NSURLErrorCancelled, waiter.stopMode == .pause {
             // The pause the person asked for, answered from the one callback a pause is documented always to
             // produce. A block filed from the other callback outranks the one on this error, and a pause with
             // no block at all is still a pause: the transfer stopped because they asked, the next attempt
             // starts this file from its beginning, and the hash at the end is unchanged either way.
-            let block = read(token)?.pauseBlock ?? carried ?? Data()
+            let block = waiter.pauseBlock ?? carried ?? Data()
             resolve(token, with: .paused(resumeData: block))
             return
         }
         // A cancellation is not a failure when the system hands back a resume block: the bytes
         // already transferred stay on disk and the transfer continues from them.
-        if nsError.code == NSURLErrorCancelled, let resumeData = carried {
-            resolve(token, with: .paused(resumeData: resumeData))
+        if nsError.code == NSURLErrorCancelled, let carried {
+            resolve(token, with: .paused(resumeData: carried))
             return
         }
-        resolve(token, with: .failed(message: "The download failed."))
+        resolve(token, with: .failed(message: NetworkFault.message(for: nsError)))
     }
 
-    /// The system parked a task instead of failing it: `waitsForConnectivity` is on, so a route that is
-    /// down is retried and the task stays open rather than dying with an error nobody can act on.
+    private func update<R>(_ token: Int, _ change: (inout Waiter) -> R) -> R? {
+        lock.lock()
+        defer { lock.unlock() }
+        guard var waiter = waiters[token], !waiter.finished else { return nil }
+        let result = change(&waiter)
+        waiters[token] = waiter
+        return result
+    }
+
+    private func read(_ token: Int) -> Waiter? {
+        lock.lock()
+        defer { lock.unlock() }
+        return waiters[token]
+    }
+
+    /// Gives one transfer exactly one answer, and keeps it if nobody has asked for it yet.
     ///
-    /// Without this callback the only sign of that state is a bar that stops moving, which is the single
-    /// most misread thing on a phone pulling several gigabytes — the person assumes the app hung and
-    /// Without this callback the only sign of that state is a bar that stops moving, which is the single
-    /// most misread thing on a phone pulling several gigabytes — the person assumes the app hung and
-    /// kills a transfer that was going to carry on by itself. This is the only spelling the protocol
-    /// carries, and it is worth saying so: a method whose signature does not match an optional requirement
-    /// compiles, never runs, and reports nothing, so a second guess at the same verb would have looked
-    /// like coverage and been a silent hole.
-    func urlSession(_ session: URLSession, taskIsWaitingForConnectivity task: URLSessionTask) {
-        reportWaiting(for: task)
-    }
-
-    private func reportWaiting(for task: URLSessionTask) {
-        guard let token = token(for: task), let waiter = read(token), !waiter.finished else { return }
-        // A download receives bytes; there is no "expected to write" on a task. Naming the wrong pair here
-        // would have compiled against nothing at all, so the ceiling this reports is the one the server
-        // actually declared in Content-Length.
-        let expected = task.countOfBytesExpectedToReceive > 0 ? task.countOfBytesExpectedToReceive : nil
-        waiter.onProgress(
-            DownloadProgressUpdate(
-                receivedBytes: waiter.reportedBytes,
-                expectedBytes: expected,
-                isWaiting: true
-            )
-        )
-    }
-
-    /// A redirect is a new request, and it is not automatically the same server.
-    ///
-    /// The Hub answers a weight download by pointing somewhere else — a storage host the person never
-    /// named and never authorised. A bearer token is proof of who asked, so it stops at the host it was
-    /// written for; the redirect's own signed URL is what authorises the storage host, and it needs
-    /// nothing else. Dropping the header is done by name rather than by rebuilding the request, so every
-    /// other header the redirect needed (range, accept, content length) still arrives intact — losing one
-    /// of those is how a resumed download silently restarts from zero.
-    func urlSession(
-        _ session: URLSession,
-        task: URLSessionTask,
-        willPerformHTTPRedirection response: HTTPURLResponse,
-        newRequest request: URLRequest,
-        completionHandler: @escaping (URLRequest?) -> Void
-    ) {
-        var onward = request
-        if !HuggingFaceEndpoints.mayCarryCredential(from: task.currentRequest?.url, to: request.url) {
-            for field in ["Authorization", "X-API-Key", "Api-Key", "Cookie"] {
-                onward.setValue(nil, forHTTPHeaderField: field)
+    /// The finished flag is flipped here and nowhere else, because a transfer that is answered twice resumes a
+    /// continuation twice — which is not a wrong number but a crash. Whether the answer can be delivered or has
+    /// to be filed is the only branch, and the entry leaves the table as soon as it has been delivered: an
+    /// answered waiter has nothing left to report, and a forty-file repository that carries its forty answers
+    /// around for the rest of the app's life is a leak with a name.
+    private func resolve(_ token: Int, with outcome: ModelDownloadOutcome) {
+        let resumed: CheckedContinuation<ModelDownloadOutcome, Never>?
+        lock.lock()
+        if var waiter = waiters[token], !waiter.finished {
+            waiter.finished = true
+            resumed = waiter.continuation
+            waiter.continuation = nil
+            if resumed == nil {
+                waiter.pendingOutcome = outcome
+                waiters[token] = waiter
+            } else {
+                waiters.removeValue(forKey: token)
             }
+        } else {
+            resumed = nil
         }
-        completionHandler(onward)
+        lock.unlock()
+        resumed?.resume(returning: outcome)
+    }
+
+    func token(for task: URLSessionTask) -> Int? {
+        task.taskDescription.flatMap { Int($0) }
     }
 }

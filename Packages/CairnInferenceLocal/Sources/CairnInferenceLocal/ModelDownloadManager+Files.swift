@@ -51,9 +51,22 @@ extension ModelDownloadManager {
             resumeStore.clear(repoID: repoID, file: file.name)
             return .cancelled(name: file.name)
 
-        case .failed:
-            onEvent(.failed(message: ModelDownloadFailure.transferFailed.message))
-            return .failed(.transferFailed)
+        case .refused(let status):
+            // The server said no, and the number is the whole message. Nothing was stored — the bridge refuses
+            // an error page before it reaches the store — so there is nothing here to undo, and the install stops
+            // rather than recording a model with a hole where its weights should be.
+            let failure = ModelDownloadFailure.refusedByServer(status: status)
+            onEvent(.failed(message: failure.message))
+            return .failed(failure)
+
+        case .failed(let message):
+            // The transport's own words travel all the way to the sheet. Replacing them with a generic sentence
+            // is what made every one of these failures indistinguishable: a dropped route, a stalled socket and a
+            // phone out of room are three different things a person can act on, and "the download failed" is a
+            // thing nobody can.
+            let failure = ModelDownloadFailure.transferFailed(message: message)
+            onEvent(.failed(message: failure.message))
+            return .failed(failure)
 
         case .complete(let bytes):
             // A published digest must match. An unpublished one is recorded as unverified rather
@@ -86,6 +99,13 @@ extension ModelDownloadManager {
         switch resumed {
         case .complete, .paused, .cancelled:
             return resumed
+        case .refused(let status):
+            // One refusal is a restart rather than a failure: 416 says the offset this block asks for is no
+            // longer in the file, which is a block that has gone stale, not a download that cannot be had. Every
+            // other refusal is the server's answer to the file itself and is reported as it stands.
+            guard HTTPTransferStatus.asksForARestart(status) else { return resumed }
+            resumeStore.clear(repoID: repoID, file: file.name)
+            return await downloader.fetch(file, to: destination, onProgress: onProgress)
         case .failed:
             // A resume block points into a temporary file the system owns and is free to reclaim, and
             // after a launch it usually has been. That is not the download failing — it is one file that

@@ -20,6 +20,21 @@ import Foundation
 /// - `waitsForConnectivity` makes a dropped route a wait rather than a failure. The bridge reports that
 ///   state so the screen can say "Waiting for the network" instead of leaving a bar parked with no
 ///   explanation.
+///
+/// The resource ceiling is six hours rather than the hour a documented default would give, and it is not the
+/// setting that protects a stalled transfer — `timeoutIntervalForRequest` does that. A ceiling tuned for an API
+/// call is what kills a weight file partway through, hours of bytes already paid for, which is the opposite of
+/// the failure this file is written against.
+///
+/// ## One session, every file of a manifest
+///
+/// A repository is fetched as several files in order — `config.json`, the tokenizer assets, then the weights —
+/// and all of them run on the one session built here. That is on purpose: a session per file means a session
+/// invalidated or leaked between them, and a download that stops after the first small file is exactly what a
+/// reader sees as "the app froze at 1 KB". The session is created once, at init, and closed when this object
+/// goes away, which cannot happen mid-transfer because the manager holds the downloader for the length of an
+/// install. Nothing here invalidates a session while a file is moving; stopping one file is the bridge's job and
+/// goes through `stopTransfers(in:pause:)`, which closes that file's socket and keeps its bytes.
 public final class URLSessionModelDownloader: ModelFileDownloading {
     /// Seconds without a single byte before a task is given up on.
     ///
@@ -53,6 +68,16 @@ public final class URLSessionModelDownloader: ModelFileDownloading {
         configuration.httpShouldSetCookies = false
         self.credential = credential
         self.session = URLSession(configuration: configuration, delegate: bridge, delegateQueue: nil)
+    }
+
+    /// Closes the connections when this downloader is the last thing holding them.
+    ///
+    /// A session keeps sockets and a delegate thread alive until it is told to stop, and a downloader that is
+    /// thrown away with one still open leaves both behind. This cannot fire mid-file: the manager holds this
+    /// object for the whole install, so by the time it runs nothing is in flight — and an orphaned transfer with
+    /// nobody left to wait for it is worth closing rather than finishing.
+    deinit {
+        session.finishTasksAndInvalidate()
     }
 
     public func fetch(

@@ -17,13 +17,25 @@ public enum ModelDownloadEvent: Sendable, Equatable {
     case failed(message: String)
 }
 
-public enum ModelDownloadFailure: String, Sendable, Error {
+/// Why a download stopped, with whatever the transport knew attached to it.
+///
+/// No raw value: two of these carry a payload — the status the server refused with, and the words the transfer
+/// produced — and a raw-value enum cannot hold either. Nothing ever read the raw value; the one thing read off
+/// this type is `message`.
+public enum ModelDownloadFailure: Sendable, Equatable, Error {
     case outboundNotOptedIn
     case invalidRepoID
     case noFilesListed
     case noStorage
     case verificationFailed
-    case transferFailed
+    /// The server refused the file, and kept the number rather than a generic sentence.
+    ///
+    /// A download task does not fail on a refusal — it reports a finished transfer whose bytes are the server's
+    /// error page — so without this case a 401, a 403 and a 404 all arrive at the sheet as "the download
+    /// failed", which is a sentence that sends a person to nowhere in particular.
+    case refusedByServer(status: Int)
+    /// The transfer itself broke, carrying the transport's own words (a network code, never a URL or a body).
+    case transferFailed(message: String)
 
     public var message: String {
         switch self {
@@ -33,10 +45,12 @@ public enum ModelDownloadFailure: String, Sendable, Error {
         case .noFilesListed: return "This repository has no readable file list."
         case .noStorage: return "Cairn cannot reach its model storage."
         case .verificationFailed: return "The downloaded file did not match its published checksum."
-        case .transferFailed: return "The download failed."
+        case .refusedByServer(let status): return HTTPTransferStatus.refusal(status)
+        case .transferFailed(let message): return message
         }
     }
 }
+
 
 /// The opt-in rule for pulling a model, kept next to the code that performs the pull.
 ///

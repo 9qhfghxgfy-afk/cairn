@@ -14,8 +14,15 @@ public enum ModelDownloadOutcome: Sendable, Equatable {
     case complete(bytes: Int64)
     case paused(resumeData: Data)
     case cancelled
+    /// The server answered a refusal, and the number is kept rather than flattened into a sentence.
+    ///
+    /// A 401 and a 404 need different things from the person reading the sheet — one wants a token, the other
+    /// wants a different repository — and a download task reports both as a finished transfer with no error, so
+    /// the status is the only fact that distinguishes them. It is typed metadata: no URL, no header, no body.
+    case refused(status: Int)
     case failed(message: String)
 }
+
 
 public struct DownloadProgressUpdate: Sendable, Equatable {
     public var receivedBytes: Int64
