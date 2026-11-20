@@ -274,7 +274,10 @@ extension DownloadBridge {
 
     private func reportWaiting(for task: URLSessionTask) {
         guard let token = token(for: task), let waiter = read(token), !waiter.finished else { return }
-        let expected = task.countOfBytesExpectedToWrite > 0 ? task.countOfBytesExpectedToWrite : nil
+        // A download receives bytes; there is no "expected to write" on a task. Naming the wrong pair here
+        // would have compiled against nothing at all, so the ceiling this reports is the one the server
+        // actually declared in Content-Length.
+        let expected = task.countOfBytesExpectedToReceive > 0 ? task.countOfBytesExpectedToReceive : nil
         waiter.onProgress(
             DownloadProgressUpdate(
                 receivedBytes: waiter.reportedBytes,

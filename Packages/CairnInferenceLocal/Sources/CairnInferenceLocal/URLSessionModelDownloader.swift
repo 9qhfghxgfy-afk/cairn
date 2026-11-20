@@ -22,7 +22,10 @@ import Foundation
 ///   explanation.
 public final class URLSessionModelDownloader: ModelFileDownloading {
     /// Seconds without a single byte before a task is given up on.
-    static let defaultRequestTimeout: TimeInterval = 60
+    ///
+    /// Public because the initializer's default argument names it, and a public default may only name a
+    /// public symbol — the value is the documented ceiling, not an internal detail worth hiding.
+    public static let defaultRequestTimeout: TimeInterval = 60
     /// The whole transfer's ceiling, measured from the moment the task starts.
     static let resourceTimeout: TimeInterval = 60 * 60 * 6
 
@@ -57,7 +60,12 @@ public final class URLSessionModelDownloader: ModelFileDownloading {
         to destination: URL,
         onProgress: @escaping @Sendable (DownloadProgressUpdate) -> Void
     ) async -> ModelDownloadOutcome {
-        await run(request(for: file.url), destination: destination, onProgress: onProgress)
+        // The task is created here, not inside `run`, because both entry points differ exactly at this
+        // line: a fresh file is a task built from a request, a resumed one is a task built from the block
+        // a pause produced. Everything after it — registration, the description the delegate reads, the
+        // wait — is the same for both.
+        let task = session.downloadTask(with: request(for: file.url))
+        return await run(task, destination: destination, onProgress: onProgress)
     }
 
     public func resume(
