@@ -16,6 +16,9 @@ extension AppSettings {
 
     /// Written as a new value rather than in place, so the whole settings row travels to the store the
     /// way every other switch here does and survives a relaunch instead of living in the view.
+    /// `@discardableResult` because the caller in `ThemeModel` wants the write, not the copy back —
+    /// without it every setter call is a warning, and a warned-about line is one someone later "fixes".
+    @discardableResult
     public func setDownloadCatalogShown(_ shown: Bool) -> AppSettings {
         var copy = self
         copy.showsDownloadCatalog = shown
@@ -26,6 +29,7 @@ extension AppSettings {
     /// granted, and a settings row that never granted it means the traffic has not been agreed to.
     public var modelDownloadsAreAllowed: Bool { modelDownloadsAllowed ?? false }
 
+    @discardableResult
     public func setModelDownloadsAllowed(_ allowed: Bool) -> AppSettings {
         var copy = self
         copy.modelDownloadsAllowed = allowed
