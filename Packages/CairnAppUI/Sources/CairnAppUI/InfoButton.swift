@@ -31,13 +31,26 @@ struct InfoButton: View {
         .buttonStyle(.plain)
         .accessibilityLabel("\(title): \(text)")
         .popover(isPresented: $showing, arrowEdge: .top) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(title).font(.subheadline.weight(.semibold))
-                Text(text).font(.callout)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(title).font(.subheadline.weight(.semibold))
+                    Text(text).font(.callout)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(12)
-            .frame(maxWidth: 300, alignment: .leading)
+            // A floor as well as a ceiling: a scroll view inside a popover has no intrinsic height of
+            // its own, and without a floor a short note can arrive as a sliver.
+            .frame(maxWidth: 320)
+            .frame(minHeight: 90, maxHeight: 380)
             .presentationDetents([.medium, .large])
+            // An explanation of a control has to stay attached to that control. On iPhone a `popover`
+            // is adapted to a full-screen sheet unless it is told otherwise, and a sheet that covers
+            // the screen reads as a new screen rather than as the note it is — with the keyboard
+            // dismissed and the composer gone with it. Apple's own usage puts this modifier on the
+            // presented content rather than on the control that presents it, which is why it sits
+            // inside the closure and not on the button.
+            .presentationCompactAdaptation(.popover)
         }
     }
 }

@@ -2128,3 +2128,98 @@ What closing this list would mean: `on-device-verified` could be cited for P6. I
 claim, and no amount of device checking turns the counting fake into a radio — that gap is the reason the two
 tiers are reported separately.
 
+
+## 2026-11-19 — five reported faults from using the app: a bare tool row, an empty model list, a mode that explains nothing, an on-device turn that dies, a keyboard that owns the screen
+
+**Host-verified** on the Windows authoring machine: 574 domain tests green (10 written for this pass), guard
+self-test 53/53, `Scripts/parse-check.sh` 604 files parse clean. That machine compiles none of the SwiftUI or
+FoundationModels code — no `SwiftUI`, no `CryptoKit`, no `FoundationModels`, no XCTest on macOS — so the on-device
+provider and every view edited here are **not compiled locally**, and `parse-check` is syntax only. A second reviewer
+pass checked the Apple-framework surface for the things a parse cannot see; two of its findings were taken (the
+`presentationCompactAdaptation` modifier belongs on the presented content, not on the presenting control; a keyboard
+accessory bar item is collected from the screen's toolbar, not from a nested subview) and two were rejected against
+evidence in the tree — the pre-existing, CI-green call site already passed a `String?` into
+`LanguageModelSession(instructions:)` and a `String` into `streamResponse(to:)`, so those two shapes are proven here
+and were left alone.
+
+**CI-verified: no.** Nothing in this pass is claimed as a milestone; there is no run number to cite yet.
+**On-device-verified: no.** **Real-network-verified: no** — the routing change repoints a chat at a server, and only a
+phone on a real LAN can prove that tap.
+
+### The five faults, and what each one turned out to be
+
+1. **A tool row with no mark.** `BuiltInTool.getLocation` mapped to `location.pin`, which is not an SF Symbol name. A
+   wrong symbol name is a string that compiles, runs, and draws nothing — so the row arrived as a switch with no
+   glyph and no explanation. It is `location.fill` now, and `ToolSwitchLabels.allSymbols` exists so a test can ask
+   UIKit whether every name this type can return actually resolves. That is the only way this class of bug is
+   catchable without eyes on a screen.
+2. **A model list with nothing in it.** `OnDeviceEngineReport` now says which engine choices exist and why an empty
+   one is empty; `LocalModelLibrary` and `LocalCatalogQuery` hold the Hugging Face rows and the query rules (a repo
+   with no `gguf` is not offered, and a repo already pulled is named as already pulled). An empty list is a state with
+   a reason, not a spinner that never resolves.
+3. **A mode that says four words and means nothing.** `InferenceMode+Explainer` carries a title, a one-line note and a
+   full explanation per mode — who runs the answer, and whether a byte leaves the phone. The switcher menu shows the
+   note under the name; the `(i)` beside the pill opens the full text as a popover that stays a popover on iPhone.
+4. **An Apple on-device turn that fails with a red line.** `PromptContextFit` fits the prompt to a declared 4,096-token
+   ceiling before the request is built — oldest turns first, then the tool block, never the question just asked — and
+   `contextTokenCeiling` on `InferenceProvider` is what makes the ceiling a fact the composer can state rather than a
+   number the settings sheet implies. A turn that cannot fit at all refuses with its own sentence; availability reasons
+   stay distinct (`Apple Intelligence is switched off` and `this iPhone cannot run it` have different fixes), and
+   `OnDeviceGenerationError` conforms to `LocalizedError` so the reason survives the trip to the composer's error
+   line instead of arriving as `error 3`.
+5. **A keyboard that cannot be closed.** The composer grows to four lines and no further, scrolling the transcript
+   dismisses the keyboard with the finger already moving, and there are two ways to close it: `Done` in the keyboard's
+   own bar, and a chevron in the row that only exists while the keyboard is up.
+
+### The fault underneath four of them: a control that does not do what it says
+
+`ModeRouting` is new and pure. A mode is a routing decision, so `On device` now repoints the session at an engine whose
+declared `engineKind` is `.localModel`, and `Remote server` at the engine built from the *chosen* profile — not the
+first server in a list. `ChatWorkspace+ModeRouting` carries out that decision through the same call a hand-tap on the
+model menu takes, so the model list, the outbound badge and the saved per-server model behave exactly as they do when a
+person taps. Hybrid modes repoint nothing: a hybrid turn names both engines in its own plan. A mode with nothing behind
+it changes nothing and invents no engine; the existing refusal is what the user reads. The distinction `NetworkClass`
+cannot make — a stand-in and a real on-device model are both honestly `.onDevice`, and only one of them runs a
+model — is why `EngineKind` exists at all.
+
+
+### What the 574 green host tests actually cover here
+
+`ModeRoutingTests` (8) — that `On device` names the on-device engine and never the stand-in, that `Remote server`
+names the *chosen* profile rather than the first server, that a mode with nothing behind it and a mode already honoured
+both repoint nothing, that hybrid modes repoint nothing, and that an unknown engine id reads as a stand-in.
+`PromptContextFitTests` — the fit order (oldest turn first, tool block before the question just asked), the
+512-token response reserve, and the refusal when nothing can be dropped and it still does not fit.
+`EngineCapabilityNoteTests` (10) — that a thinking switch on an engine with no reasoning trace says so and names the
+engine, that a tools switch on an engine with no tool schema says the tools arrive as text, that switches at rest say
+nothing, and that the window note appears for an asked window above the ceiling and for an unset window, and never for
+an engine that states no ceiling.
+`InferenceModeExplainerTests`, `LocalCatalogQueryTests` — the copy and the catalog rules they are named for.
+
+What no host test can reach: that the popover stays a popover on a phone, that the keyboard bar item appears at all,
+that the fitted prompt is the one Apple accepts, and that a repointed session answers from the machine it now names.
+
+### Device checklist — five lines, each says what it proves
+
+1. **Open the Tools switch list on an iPhone 15 Pro.** Every row carries a mark. A row with no glyph means an SF Symbol
+   name that does not resolve, which is the fault being closed; `Scripts` cannot see this and `allSymbols` in a UI test
+   can.
+2. **Start a chat on a server, then choose `On device` in the mode menu and ask something.** The answer must come from
+   Apple's model — the model pill changes, and the composer's capability line appears saying that engine emits no
+   reasoning trace. If the pill still names the laptop, the mode is a label again and `ModeRouting` did not fire.
+3. **Choose `Remote server` with two servers saved and the second one active.** The pill must name the second server's
+   engine, not the first, and the model that server was last used with must come back.
+4. **On device, paste a long document into a chat with Tools on and ask a question.** The turn must either answer, or
+   refuse with the context sentence naming the 4,096-token ceiling — never a red line that says nothing. Then shorten
+   it and watch it answer: the trimming is supposed to be visible, and the ceiling note in the header has to match what
+   the turn actually did.
+5. **Type a message with the keyboard up, then scroll the transcript down.** The keyboard travels with the finger;
+   `Done` in the keyboard bar closes it; the chevron in the composer row closes it; and after closing, the keyboard does
+   not come back until the field is tapped again. The composer must not push the newest answer off the top of the
+   screen at four lines of typing.
+
+What closing this list would mean: `on-device-verified` could be cited for this pass, and a CI run number on the same
+commit for the half the Windows machine cannot compile. Neither turns the 4,096 figure into a measured number — it is a
+declared ceiling, because the framework offers no way to ask, and it stays a declared ceiling in every sentence the app
+says about it.
+

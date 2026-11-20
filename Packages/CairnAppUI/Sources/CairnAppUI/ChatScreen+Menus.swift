@@ -14,16 +14,30 @@ extension ChatScreen {
                 Button {
                     workspace.mode = mode
                 } label: {
-                    if workspace.mode == mode {
-                        Label(modeTitle(mode), systemImage: "checkmark")
-                    } else {
-                        Text(modeTitle(mode))
+                    // The name alone is four guesses. The line under it says who runs the answer and
+                    // whether a byte leaves the phone, which is the whole decision; the full note is
+                    // one more tap on the `(i)` beside the pill.
+                    VStack(alignment: .leading, spacing: 2) {
+                        if workspace.mode == mode {
+                            Label(modeTitle(mode), systemImage: "checkmark")
+                        } else {
+                            Text(modeTitle(mode))
+                        }
+                        Text(mode.shortNote)
+                            .font(.caption)
+                            .foregroundStyle(CairnTheme.stoneLight)
                     }
                 }
             }
         } label: {
             pill(symbol: "square.2.layers.3d", title: modeTitle(workspace.mode))
         }
+    }
+
+    /// What the mode in force actually does, on tap, next to the mode's own name.
+    var modeInfo: some View {
+        InfoButton(title: workspace.mode.explainerTitle, text: workspace.mode.explainer)
+            .accessibilityLabel("What \(workspace.mode.displayName) does")
     }
 
     /// The server and model switcher. A server row here is the same one tap as on the Servers

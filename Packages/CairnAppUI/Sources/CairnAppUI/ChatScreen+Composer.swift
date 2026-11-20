@@ -19,10 +19,27 @@ import CairnChatDomain
 /// statements later. This is not a second rule with its own opinion about engines; it is the same rule read
 /// early enough to keep the user's files when it says no.
 extension ChatScreen {
+    /// The composer, sized so the answer above it can still be read.
+    ///
+    /// Three things keep the keyboard from owning the screen. It grows to four lines and no further,
+    /// so a long message scrolls inside its own field instead of pushing the transcript off the top;
+    /// scrolling the transcript dismisses it with the finger already moving; and there is a control
+    /// that closes it, both in the keyboard's own bar and in the row itself, because a bar item a user
+    /// has never seen before is not a control they will find under a keyboard they want gone.
     var composer: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: 5) {
             if let session {
                 ComposerChips(session: session, theme: settings)
+                // What this engine will not do, said beside the switch that asked for it. The switch
+                // stays live — a backend still gets the tools through the prompt protocol — but an
+                // empty reasoning panel next to a switch that says "on" reads as a fault unless the
+                // screen has already said what this engine emits.
+                ForEach(session.engineCapabilityNotes, id: \.self) { note in
+                    Text(note)
+                        .font(.caption2)
+                        .foregroundStyle(CairnTheme.stoneLight)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
             ComposerAttachments(
                 draft: draft,
@@ -40,13 +57,33 @@ extension ChatScreen {
                 AttachmentPickerMenu(draft: draft)
                 TextField("Ask Cairn…", text: $composerText, axis: .vertical)
                     .textFieldStyle(.plain)
-                    .padding(10)
+                    // One line at rest, four at most: a field that grows without limit is a field that
+                    // eventually fills the screen with itself.
+                    .lineLimit(1...4)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
                     .background(
                         RoundedRectangle(cornerRadius: 12, style: .continuous)
                             .fill(CairnTheme.slate)
                     )
                     .foregroundStyle(.white)
+                    .focused($composerFocused)
+                    .submitLabel(.send)
                     .onSubmit(send)
+
+                if composerFocused {
+                    // Only while the keyboard is up — a dismiss control for a keyboard that is not
+                    // there is a button that does nothing, and this app does not ship those.
+                    Button {
+                        composerFocused = false
+                    } label: {
+                        Image(systemName: "chevron.down.circle.fill")
+                            .font(.title3)
+                            .padding(2)
+                    }
+                    .foregroundStyle(CairnTheme.stoneLight)
+                    .accessibilityLabel("Hide the keyboard")
+                }
 
                 if session?.isBusy == true {
                     Button(action: stop) {
@@ -72,7 +109,9 @@ extension ChatScreen {
                 }
             }
         }
-        .padding(12)
+        .padding(.horizontal, 10)
+        .padding(.top, 6)
+        .padding(.bottom, 8)
     }
 
     func send() {

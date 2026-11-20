@@ -13,6 +13,10 @@ public struct ChatScreen: View {
     /// file in the composer without a simulator: see `ComposerDraft`.
     let draft: ComposerDraft
     @State var composerText = ""
+    /// Where the keyboard is. Internal, not `private`: the composer in `ChatScreen+Composer.swift` is a
+    /// second file of the same type and has to be able to put the focus back, because "Done" on a
+    /// keyboard that stays on screen is a button that did nothing.
+    @FocusState var composerFocused: Bool
     @State private var showingConfig = false
 
     /// `imagePreparer` is the thing that can resize a photo — UIKit and ImageIO, which the domain cannot
@@ -54,6 +58,25 @@ public struct ChatScreen: View {
                 .cairnPresentation(theme: settings)
             }
         }
+        .toolbar {
+            // The keyboard's own bar is where a "Done" belongs. It is declared here, on the screen
+            // rather than on the composer subview, because a keyboard accessory item is collected from
+            // the screen's toolbar — an item buried in a nested subview is the version that silently
+            // fails to appear. There is a second copy of the control down in the composer row itself:
+            // the bar is the one iOS teaches people to use, and the row is the one they find when they
+            // have not been taught.
+            ToolbarItem(placement: .keyboard) {
+                HStack {
+                    Spacer()
+                    Button {
+                        composerFocused = false
+                    } label: {
+                        Label("Done", systemImage: "keyboard.chevron.compact.down")
+                    }
+                    .accessibilityLabel("Hide the keyboard")
+                }
+            }
+        }
     }
 
     /// Present only when a settings store is wired: the chat still saves its own configuration, and a
@@ -68,10 +91,16 @@ public struct ChatScreen: View {
 
     // MARK: - Header
 
+    /// The top of the screen, sized to leave room for the answer.
+    ///
+    /// Tight on purpose. Every row here is a row the transcript cannot show while the keyboard is up,
+    /// and on a phone with the keyboard open the transcript is the whole point of the screen — so the
+    /// header's paddings and gaps are measured against the two lines it has to hold, not against how
+    /// much room the chrome could take.
     var header: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 10) {
-                CairnMark().frame(width: 26, height: 26)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                CairnMark().frame(width: 24, height: 24)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(session?.conversation.title ?? "Cairn")
                         .font(.headline)
@@ -119,11 +148,20 @@ public struct ChatScreen: View {
                 .foregroundStyle(CairnTheme.amber)
             }
 
-            HStack(spacing: 8) {
+            HStack(spacing: 6) {
                 modeMenu
+                modeInfo
                 modelMenu
                 Spacer(minLength: 0)
                 temporaryToggle
+            }
+
+            // The window the turn really has, said next to the controls that imply a bigger one.
+            if let note = session?.contextCeilingNote {
+                Text(note)
+                    .font(.caption2)
+                    .foregroundStyle(CairnTheme.stoneLight)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
 
             if let hybrid = liveHybridSnapshot {
@@ -144,7 +182,9 @@ public struct ChatScreen: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .padding(12)
+        .padding(.horizontal, 10)
+        .padding(.top, 8)
+        .padding(.bottom, 6)
     }
 
     /// The panel a hybrid turn drives: a live snapshot only while a hybrid turn is really in flight.
@@ -186,8 +226,16 @@ public struct ChatScreen: View {
                         emptyState
                     }
                 }
-                .padding(12)
+                .padding(.horizontal, 10)
+                .padding(.top, 8)
+                .padding(.bottom, 4)
             }
+            // The keyboard is drawn over the transcript, and the last thing read is the thing it
+            // covers. Dismissing it has to be part of the gesture the hand is already making —
+            // scrolling — rather than a control to hunt for. `.interactively` means the keyboard
+            // travels with the finger the whole way down, so the motion that hides a message also
+            // brings it back.
+            .scrollDismissesKeyboard(.interactively)
             .onChange(of: session?.path.count ?? 0) { _, _ in
                 if let last = session?.path.last { proxy.scrollTo(last.id, anchor: .bottom) }
             }

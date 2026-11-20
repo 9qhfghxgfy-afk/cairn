@@ -28,8 +28,19 @@ public enum ToolSwitchLabels {
         // with a minus after it.
         case BuiltInTool.calculator: return "plus.forwardslash.minus"
         case BuiltInTool.composeMail: return "envelope"
-        case BuiltInTool.getLocation: return "location.pin"
+        // `location.pin` does not exist, and a name that does not exist draws nothing — which is how
+        // this row came up as a switch with no mark at all. `location.fill` is the location glyph the
+        // system itself uses, and the test in ToolSymbolTests is what stops the next one of these.
+        case BuiltInTool.getLocation: return "location.fill"
         default: return "wrench"
         }
+    }
+
+    /// Every mark this type can return, for the test that asks UIKit whether each name resolves.
+    ///
+    /// An SF Symbol name is a string: a wrong one compiles, runs, and renders an empty space. That is
+    /// the one failure mode a view cannot be asked about, and the one a test can.
+    public static var allSymbols: [String] {
+        BuiltInTool.allNames.map(symbol) + ["wrench"]
     }
 }
