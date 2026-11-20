@@ -2142,7 +2142,12 @@ evidence in the tree — the pre-existing, CI-green call site already passed a `
 `LanguageModelSession(instructions:)` and a `String` into `streamResponse(to:)`, so those two shapes are proven here
 and were left alone.
 
-**CI-verified: no.** Nothing in this pass is claimed as a milestone; there is no run number to cite yet.
+**CI-verified: yes — run [44652196582](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/44652196582) on `e203fca`,
+completed success.** Privacy guards green with the guard self-test at 53/53; Host unit tests on macOS — **574 domain +
+170 remote + 60 on-device + 17 native, 0 failures**; Build + test on iPhone 17 / iOS 26.5 — build green, **193
+`CairnTests`, 0 failures**. The claim is pinned to `e203fca` and not to `1412473`: the run on that commit
+(`44652085134`) was **cancelled** 1 m 13 s in when this commit landed, so nothing before `e203fca` finished a suite at
+all, and the only citable number for this pass is the one above.
 **On-device-verified: no.** **Real-network-verified: no** — the routing change repoints a chat at a server, and only a
 phone on a real LAN can prove that tap.
 
