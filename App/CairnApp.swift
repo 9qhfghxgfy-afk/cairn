@@ -43,6 +43,10 @@ struct CairnLaunchView: View {
     /// deallocate it while a laptop is mid-answer; and it is the object that knows the scene rule — leave
     /// the foreground, close the port.
     @State private var shareWiring: ShareWiring?
+    /// The optional model-source tokens, kept alive for the life of the app so the Settings rows have
+    /// somewhere to write. It holds a Keychain boundary, not a token: what the screen can read from it is
+    /// whether a credential exists, never what it says.
+    @State private var modelTokens: ModelTokenModel?
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -58,7 +62,8 @@ struct CairnLaunchView: View {
                     imagePreparer: ImageIOPreparer(),
                     webSearch: webSearchWiring?.settings,
                     consent: webSearchWiring?.consent,
-                    location: locationWiring?.consent
+                    location: locationWiring?.consent,
+                    modelTokens: modelTokens
                 )
             } else if let startupFailure {
                 ContentUnavailableView(
@@ -86,6 +91,12 @@ struct CairnLaunchView: View {
             do {
                 let persistent = try SwiftDataStore()
                 let secrets = KeychainSecretStore()
+                // The two optional model-source tokens, in a Keychain service of their own. Built here, next
+                // to the store that holds them, because the two readers are the app's own: the download path,
+                // which spends a token when it builds a request, and the Settings rows, which may say that a
+                // token exists and may never see its value.
+                let modelTokenStore = KeychainModelTokenStore()
+                let builtModelTokens = ModelTokenModel(store: modelTokenStore)
                 let factory = RemoteProviderFactory(secrets: secrets)
                 // The registry is the live engine list: saving or disabling a profile changes
                 // what the next turn can use, without rebuilding conversations. The mock stays
@@ -166,7 +177,10 @@ struct CairnLaunchView: View {
                     setGranted: { builtTheme.setModelDownloadsAllowed($0) }
                 )
                 builtServers.modelCatalog = ModelCatalogModel(
-                    library: OnDeviceModelLibrary.installed(traffic: weightTraffic),
+                    library: OnDeviceModelLibrary.installed(
+                        traffic: weightTraffic,
+                        tokens: modelTokenStore
+                    ),
                     servers: builtServers.modelManager,
                     traffic: weightTraffic,
                     // The Ollama servers a tag may be pulled onto, read at the moment the sheet asks so a
@@ -226,6 +240,7 @@ struct CairnLaunchView: View {
                 workspace = builtWorkspace
                 servers = builtServers
                 theme = builtTheme
+                modelTokens = builtModelTokens
 
                 // The file the app was launched with, if one arrived before there was anywhere to put it.
                 if let pending = pendingImportURL {

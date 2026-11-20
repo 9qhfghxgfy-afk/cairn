@@ -26,6 +26,9 @@ public struct CairnRootView: View {
     /// `CairnAppUI` may draw an image, but the size a photo becomes is the domain's rule
     /// (`ImagePreparationPolicy`), and the codec that applies it belongs to the app.
     private var imagePreparer: (any ImagePreparing)?
+    /// The optional model-source tokens, handed through to Settings. The app layer owns it because a Keychain
+    /// is the app's; this module may only ask whether a credential exists, and may never be handed one.
+    private var modelTokens: ModelTokenModel?
     @Environment(\.scenePhase) private var scenePhase
     @State private var showingServers = false
     @State private var showingSettings = false
@@ -38,7 +41,8 @@ public struct CairnRootView: View {
         imagePreparer: (any ImagePreparing)? = nil,
         webSearch: WebSearchSettingsModel? = nil,
         consent: WebSearchConsentModel? = nil,
-        location: LocationConsentModel? = nil
+        location: LocationConsentModel? = nil,
+        modelTokens: ModelTokenModel? = nil
     ) {
         self.workspace = workspace
         self.servers = servers
@@ -47,6 +51,7 @@ public struct CairnRootView: View {
         self.webSearch = webSearch
         self.consent = consent
         self.location = location
+        self.modelTokens = modelTokens
     }
 
     public var body: some View {
@@ -108,7 +113,8 @@ public struct CairnRootView: View {
         .sheet(isPresented: $showingSettings) {
             if let settings {
                 CairnSheet(theme: settings) {
-                    SettingsView(theme: settings, workspace: workspace, webSearch: webSearch)
+                    SettingsView(theme: settings, workspace: workspace, webSearch: webSearch,
+                                 modelTokens: modelTokens)
                 }
             }
         }

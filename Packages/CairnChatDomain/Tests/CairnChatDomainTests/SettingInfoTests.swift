@@ -51,7 +51,7 @@ final class SettingInfoTests: XCTestCase {
     /// itself: a suite that only proves "some entry exists" passes while a whole screen stays unlabelled.
     func testEverySurfaceIsCovered() {
         let expected: [SettingInfoGroup: Int] = [
-            .settings: 8, .chat: 5, .webSearch: 11, .server: 7, .sharing: 4,
+            .settings: 10, .chat: 5, .webSearch: 11, .server: 7, .sharing: 4,
         ]
         for group in SettingInfoGroup.allCases {
             let found = SettingInfoKey.allCases.filter { $0.group == group }
@@ -61,7 +61,7 @@ final class SettingInfoTests: XCTestCase {
                 "\(group) does not have the expected number of entries"
             )
         }
-        XCTAssertEqual(SettingInfoKey.allCases.count, 35)
+        XCTAssertEqual(SettingInfoKey.allCases.count, 37)
     }
 
     /// The controls the audit names by hand, so a rename that silently drops one out of the catalog fails
@@ -76,6 +76,7 @@ final class SettingInfoTests: XCTestCase {
             .serverName, .serverBackend, .serverAddress, .serverUseEnabled, .serverPublicOptIn,
             .serverToken, .serverCustomHeaders,
             .shareOnLocalNetwork, .sharePeerKey, .sharePort, .shareEngines,
+            .huggingFaceToken, .ollamaRegistryToken,
         ]
         for key in required {
             XCTAssertTrue(SettingInfoKey.allCases.contains(key), "\(key) is missing from the catalog")
@@ -98,6 +99,14 @@ final class SettingInfoTests: XCTestCase {
         XCTAssertTrue(SettingInfoKey.serverAddress.info.detail.lowercased().contains("https"))
         XCTAssertTrue(SettingInfoKey.shareOnLocalNetwork.info.detail.lowercased().contains("foreground"))
         XCTAssertTrue(SettingInfoKey.sharePeerKey.info.detail.lowercased().contains("key"))
+        // Both token cards have to say they are optional before they say what they buy, or the row reads
+        // as a wall in front of a library that downloads perfectly well without either one.
+        XCTAssertTrue(SettingInfoKey.huggingFaceToken.info.detail.lowercased().contains("optional"))
+        XCTAssertTrue(SettingInfoKey.huggingFaceToken.info.detail.contains("Keychain"))
+        XCTAssertTrue(SettingInfoKey.huggingFaceToken.info.detail.contains("huggingface.co"))
+        XCTAssertTrue(SettingInfoKey.ollamaRegistryToken.info.detail.lowercased().contains("optional"))
+        XCTAssertTrue(SettingInfoKey.ollamaRegistryToken.info.detail.contains("Keychain"))
+        XCTAssertTrue(SettingInfoKey.ollamaRegistryToken.info.detail.lowercased().contains("own network"))
         XCTAssertTrue(SettingInfoKey.toolSwitches.info.detail.lowercased().contains("badge"))
         XCTAssertTrue(SettingInfoKey.temporaryChat.info.detail.lowercased().contains("disk"))
         XCTAssertTrue(SettingInfoKey.webSearchSafeSearch.info.detail.lowercased().contains("explicit"))

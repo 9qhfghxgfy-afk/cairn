@@ -16,6 +16,9 @@ struct SettingsView: View {
     /// Keychain vault and a connection tester exist — this module may open neither. nil leaves the row out
     /// rather than offering a screen that cannot save a row or prove a provider answers.
     var webSearch: WebSearchSettingsModel?
+    /// The optional model-source tokens. The app layer supplies it because only the app has a Keychain; nil
+    /// leaves the rows out rather than offering fields that would have nowhere to be written.
+    var modelTokens: ModelTokenModel?
     /// Lets this screen hand the workspace the new baseline the moment it is saved, so a chat started
     /// five seconds later is seeded from it without relaunching.
     private var workspace: ChatWorkspace?
@@ -26,11 +29,13 @@ struct SettingsView: View {
     init(
         theme: ThemeModel,
         workspace: ChatWorkspace? = nil,
-        webSearch: WebSearchSettingsModel? = nil
+        webSearch: WebSearchSettingsModel? = nil,
+        modelTokens: ModelTokenModel? = nil
     ) {
         self.theme = theme
         self.workspace = workspace
         self.webSearch = webSearch
+        self.modelTokens = modelTokens
     }
 
     var body: some View {
@@ -40,6 +45,7 @@ struct SettingsView: View {
             turnSection
             toolsSection
             modelsSection
+            modelTokensSection
             aboutSection
         }
         .navigationTitle("Settings")

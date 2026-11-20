@@ -19,6 +19,8 @@ public enum SettingInfoKey: String, Sendable, Equatable, Codable, CaseIterable, 
     case webToolsOutbound
     case downloadCatalogShown
     case modelDownloadsOutbound
+    case huggingFaceToken
+    case ollamaRegistryToken
 
     // One conversation's own configuration form.
     case persona
@@ -61,7 +63,8 @@ public enum SettingInfoKey: String, Sendable, Equatable, Codable, CaseIterable, 
     public var group: SettingInfoGroup {
         switch self {
         case .appearance, .colorTheme, .defaultConfiguration, .injectedContext,
-             .generationStats, .webToolsOutbound, .downloadCatalogShown, .modelDownloadsOutbound:
+             .generationStats, .webToolsOutbound, .downloadCatalogShown, .modelDownloadsOutbound,
+             .huggingFaceToken, .ollamaRegistryToken:
             return .settings
         case .persona, .answerStyle, .askForReasoning, .toolSwitches, .temporaryChat:
             return .chat
@@ -88,6 +91,8 @@ public enum SettingInfoKey: String, Sendable, Equatable, Codable, CaseIterable, 
         case .webToolsOutbound: return Self.webToolsOutboundInfo
         case .downloadCatalogShown: return Self.downloadCatalogShownInfo
         case .modelDownloadsOutbound: return Self.modelDownloadsOutboundInfo
+        case .huggingFaceToken: return Self.huggingFaceTokenInfo
+        case .ollamaRegistryToken: return Self.ollamaRegistryTokenInfo
         case .persona: return Self.personaInfo
         case .answerStyle: return Self.answerStyleInfo
         case .askForReasoning: return Self.askForReasoningInfo

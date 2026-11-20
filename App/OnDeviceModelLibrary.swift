@@ -24,25 +24,43 @@ final class OnDeviceModelLibrary: LocalModelLibraryServicing {
     let downloader: any ModelFileDownloading
     let traffic: ModelTrafficSwitch
     let fileManager: FileManager
+    /// The optional Hub credential, or nil when this build wired no Keychain.
+    ///
+    /// Held as the domain's boundary rather than as a concrete store, and read only where a request is
+    /// built. Nothing in this file hands a token to a view, a string, or a log line: the one place it is
+    /// used is the `Authorization` header of a request to the host it was written for.
+    let tokens: (any ModelTokenStoring)?
 
     init(
         layout: ModelStoreLayout?,
         downloader: any ModelFileDownloading,
         traffic: ModelTrafficSwitch,
-        fileManager: FileManager = .default
+        fileManager: FileManager = .default,
+        tokens: (any ModelTokenStoring)? = nil
     ) {
         self.layout = layout
         self.downloader = downloader
         self.traffic = traffic
         self.fileManager = fileManager
+        self.tokens = tokens
     }
 
     /// Builds the real one, or nil-shaped service when the store's root cannot be reached.
-    static func installed(traffic: ModelTrafficSwitch) -> OnDeviceModelLibrary {
+    ///
+    /// The credential is handed over as a reader rather than as a value, because the question "may this
+    /// request be authenticated" has to be answered when the request is built: a token pasted in Settings
+    /// an hour into a download has to reach the next file, and a token taken back off has to stop reaching
+    /// it. A value copied here at launch would do neither, and a person who deleted their credential would
+    /// watch Cairn go on using it until the next relaunch.
+    static func installed(
+        traffic: ModelTrafficSwitch,
+        tokens: (any ModelTokenStoring)? = nil
+    ) -> OnDeviceModelLibrary {
         OnDeviceModelLibrary(
             layout: ModelStoreLayout.defaultRoot(),
-            downloader: URLSessionModelDownloader(),
-            traffic: traffic
+            downloader: URLSessionModelDownloader(credential: { tokens?.token(for: .huggingFace) }),
+            traffic: traffic,
+            tokens: tokens
         )
     }
 
@@ -95,23 +113,8 @@ final class OnDeviceModelLibrary: LocalModelLibraryServicing {
         ModelResumeStore.forStore(layout).clearAll(repoID: model.repoID)
     }
 
-    /// The published file list for one repository.
-    ///
-    /// The listing is what makes a checksum verifiable, so it is fetched rather than assumed — a download
-    /// without it cannot be checked, and the manager refuses to call those bytes installed.
-    func fetchListing(_ repoID: String) async throws -> [ModelFileListing] {
-        guard let url = HuggingFaceEndpoints.fileListing(repoID: repoID) else {
-            throw CairnLibraryError.badRepository
-        }
-        var request = URLRequest(url: url)
-        request.timeoutInterval = 30
-        let (data, response) = try await URLSession.shared.data(for: request)
-        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard (200..<300).contains(status) else {
-            throw CairnLibraryError.listingRefused(status)
-        }
-        return ModelFilePlan.listing(from: data)
-    }
+    /// The published file list for one repository is fetched in `OnDeviceModelLibrary+Listing.swift`,
+    /// which is also the only place a Hub credential is attached to a request that is not a file transfer.
 }
 
 /// The reasons this library refuses, in words a person can act on. No response body and no URL beyond the
