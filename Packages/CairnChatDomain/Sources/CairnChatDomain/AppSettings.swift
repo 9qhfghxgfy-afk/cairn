@@ -17,19 +17,34 @@ public struct AppSettings: Sendable, Equatable, Codable {
     /// user's theme and default configuration on the floor. Absent means the shipped answer — no
     /// outbound web tools, no self-hosted search endpoint.
     public var webTools: WebToolSettings?
+    /// Whether the Models screen shows Cairn's curated download library. **Optional** for the same
+    /// reason `webTools` is: a synthesized decoder reads a missing optional key as nil, while a
+    /// missing non-optional `Bool` would fail the whole row and drop the person's theme and default
+    /// configuration with it. nil means the shipped answer — the library is shown.
+    public var showsDownloadCatalog: Bool?
+    /// The acknowledgement for pulling model weights, which is public-internet traffic whether the
+    /// repository is fetched by this phone or by a server on the public internet. **Off until granted**
+    /// — the opposite default from the library switch, because this one is a permission rather than a
+    /// preference: a screen that shows a list asks nothing of anyone, while a gigabyte of weights
+    /// leaving the device does. Optional for the same decoding reason as `webTools`.
+    public var modelDownloadsAllowed: Bool?
 
     public init(
         defaultChatConfig: ChatConfig = .default,
         themeID: String = AppSettings.defaultThemeID,
         appearance: AppearanceMode = .system,
         showsGenerationStats: Bool = true,
-        webTools: WebToolSettings? = nil
+        webTools: WebToolSettings? = nil,
+        showsDownloadCatalog: Bool? = nil,
+        modelDownloadsAllowed: Bool? = nil
     ) {
         self.defaultChatConfig = defaultChatConfig
         self.themeID = themeID
         self.appearance = appearance
         self.showsGenerationStats = showsGenerationStats
         self.webTools = webTools
+        self.showsDownloadCatalog = showsDownloadCatalog
+        self.modelDownloadsAllowed = modelDownloadsAllowed
     }
 
     /// The palette that matches Cairn's original identity, and the fallback for any stored id this

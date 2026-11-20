@@ -21,6 +21,13 @@ public final class SettingsRecord {
     public var themeID: String?
     public var appearanceRaw: String?
     public var showsGenerationStats: Bool?
+    /// Whether the Download tab shows the curated library. Optional so a row written before the screen
+    /// existed reads as "never answered" and takes the shipped answer — on — instead of a column default
+    /// that silently restates a preference nobody set.
+    public var showsDownloadCatalog: Bool?
+    /// The acknowledgement for pulling model weights. Optional, and read as **not granted** when unset:
+    /// a row that never granted it has not agreed to the traffic.
+    public var modelDownloadsAllowed: Bool?
     public var updatedAt: Date
     /// The outbound web acknowledgement. A switch the user granted once, and a switch that is not stored is
     /// a switch that either re-asks forever or silently stops working.
@@ -43,7 +50,9 @@ public final class SettingsRecord {
         updatedAt: Date = Date(),
         outboundWebAllowed: Bool? = nil,
         searxngURL: String? = nil,
-        webSearchJSON: Data? = nil
+        webSearchJSON: Data? = nil,
+        showsDownloadCatalog: Bool? = nil,
+        modelDownloadsAllowed: Bool? = nil
     ) {
         self.slot = slot
         self.defaultConfigJSON = defaultConfigJSON
@@ -54,6 +63,8 @@ public final class SettingsRecord {
         self.outboundWebAllowed = outboundWebAllowed
         self.searxngURL = searxngURL
         self.webSearchJSON = webSearchJSON
+        self.showsDownloadCatalog = showsDownloadCatalog
+        self.modelDownloadsAllowed = modelDownloadsAllowed
     }
 }
 
@@ -78,7 +89,11 @@ extension SettingsRecord {
                 outboundAllowed: outboundWebAllowed ?? false,
                 searxngURL: searxngURL,
                 search: search
-            )
+            ),
+            // Both pass through as stored, including `nil`: the accessors on `AppSettings` are what turn
+            // "never answered" into the shipped answer, and one of those answers is "not granted".
+            showsDownloadCatalog: showsDownloadCatalog,
+            modelDownloadsAllowed: modelDownloadsAllowed
         )
     }
 
@@ -97,6 +112,8 @@ extension SettingsRecord {
         // `toSettings()` keys off — writing a default blob here would erase the signal and lose an existing
         // SearXNG address instead of importing it.
         webSearchJSON = tools.search.flatMap { JSONCodec.encode($0) }
+        showsDownloadCatalog = settings.showsDownloadCatalog
+        modelDownloadsAllowed = settings.modelDownloadsAllowed
         updatedAt = now
     }
 }

@@ -78,6 +78,32 @@ extension SettingInfoKey {
         )
     }
 
+    static var downloadCatalogShownInfo: SettingInfo {
+        SettingInfo(
+            title: "Download Library",
+            detail: """
+            Whether the Model Manager's Download tab shows the library Cairn curates — model names, \
+            publishers, stated sizes and stated capabilities, written into the app rather than fetched. \
+            Turning it off leaves the older shape of that tab: a name to type by hand, and nothing to \
+            browse. Nothing is downloaded by showing the list, and no request is made to any catalog \
+            service to build it, so the sizes here are the ones a publisher states for these files.
+            """
+        )
+    }
+
+    static var modelDownloadsOutboundInfo: SettingInfo {
+        SettingInfo(
+            title: "Model Downloads May Reach the Internet",
+            detail: """
+            The acknowledgement that lets model weights be fetched — either by this phone from Hugging \
+            Face, or by a server Cairn tells to pull a tag. It is off until you turn it on, because a \
+            few gigabytes leaving the device is a different decision from searching the web. While it is \
+            on, the outbound badge stays up for as long as that traffic can flow. A server on your own \
+            network pulls over that network; this switch is what allows the pull at all.
+            """
+        )
+    }
+
     static var personaInfo: SettingInfo {
         SettingInfo(
             title: "System Prompt",

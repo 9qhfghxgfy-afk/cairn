@@ -17,6 +17,8 @@ public enum SettingInfoKey: String, Sendable, Equatable, Codable, CaseIterable, 
     case injectedContext
     case generationStats
     case webToolsOutbound
+    case downloadCatalogShown
+    case modelDownloadsOutbound
 
     // One conversation's own configuration form.
     case persona
@@ -59,7 +61,7 @@ public enum SettingInfoKey: String, Sendable, Equatable, Codable, CaseIterable, 
     public var group: SettingInfoGroup {
         switch self {
         case .appearance, .colorTheme, .defaultConfiguration, .injectedContext,
-             .generationStats, .webToolsOutbound:
+             .generationStats, .webToolsOutbound, .downloadCatalogShown, .modelDownloadsOutbound:
             return .settings
         case .persona, .answerStyle, .askForReasoning, .toolSwitches, .temporaryChat:
             return .chat
@@ -84,6 +86,8 @@ public enum SettingInfoKey: String, Sendable, Equatable, Codable, CaseIterable, 
         case .injectedContext: return Self.injectedContextInfo
         case .generationStats: return Self.generationStatsInfo
         case .webToolsOutbound: return Self.webToolsOutboundInfo
+        case .downloadCatalogShown: return Self.downloadCatalogShownInfo
+        case .modelDownloadsOutbound: return Self.modelDownloadsOutboundInfo
         case .persona: return Self.personaInfo
         case .answerStyle: return Self.answerStyleInfo
         case .askForReasoning: return Self.askForReasoningInfo

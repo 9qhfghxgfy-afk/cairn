@@ -51,7 +51,7 @@ final class SettingInfoTests: XCTestCase {
     /// itself: a suite that only proves "some entry exists" passes while a whole screen stays unlabelled.
     func testEverySurfaceIsCovered() {
         let expected: [SettingInfoGroup: Int] = [
-            .settings: 6, .chat: 5, .webSearch: 11, .server: 7, .sharing: 4,
+            .settings: 8, .chat: 5, .webSearch: 11, .server: 7, .sharing: 4,
         ]
         for group in SettingInfoGroup.allCases {
             let found = SettingInfoKey.allCases.filter { $0.group == group }
@@ -61,7 +61,7 @@ final class SettingInfoTests: XCTestCase {
                 "\(group) does not have the expected number of entries"
             )
         }
-        XCTAssertEqual(SettingInfoKey.allCases.count, 33)
+        XCTAssertEqual(SettingInfoKey.allCases.count, 35)
     }
 
     /// The controls the audit names by hand, so a rename that silently drops one out of the catalog fails

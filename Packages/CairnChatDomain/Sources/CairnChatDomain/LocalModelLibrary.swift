@@ -11,47 +11,8 @@ import Foundation
 ///
 /// Sizes travel as bytes and are formatted by the view, because "8.2 GB" written here would be a
 /// string a test cannot check the arithmetic of.
-
-/// One catalogue entry the phone could hold.
-public struct LocalCatalogRow: Identifiable, Sendable, Equatable {
-    /// The repository as its publisher names it — also the key the store keeps its files under.
-    public var repoID: String
-    public var displayName: String
-    public var parameterSize: String?
-    public var quantization: String?
-    /// Bytes the publisher states for the download; nil when the entry states none, which the row
-    /// shows as "size not stated" rather than as a number nobody measured.
-    public var downloadBytes: Int64?
-    public var contextLength: Int?
-    /// The published capability names, already in the words the badges use ("Tools", "Vision").
-    public var capabilityLabels: [String]
-    public var addedOn: Date
-    public var isInstalled: Bool
-
-    public init(
-        repoID: String,
-        displayName: String,
-        parameterSize: String? = nil,
-        quantization: String? = nil,
-        downloadBytes: Int64? = nil,
-        contextLength: Int? = nil,
-        capabilityLabels: [String] = [],
-        addedOn: Date = Date(timeIntervalSince1970: 0),
-        isInstalled: Bool = false
-    ) {
-        self.repoID = repoID
-        self.displayName = displayName
-        self.parameterSize = parameterSize
-        self.quantization = quantization
-        self.downloadBytes = downloadBytes
-        self.contextLength = contextLength
-        self.capabilityLabels = capabilityLabels
-        self.addedOn = addedOn
-        self.isInstalled = isInstalled
-    }
-
-    public var id: String { repoID }
-}
+///
+/// `LocalCatalogRow`, the row the Download list is built from, lives in its own file.
 
 /// A model this phone already holds.
 public struct InstalledLocalModel: Identifiable, Sendable, Equatable {
@@ -135,6 +96,11 @@ public struct EngineChoice: Identifiable, Sendable, Equatable {
 /// Streams rather than completion handlers so the screen can show progress and Stop can cancel the
 /// task that holds the connection. Nothing here returns a byte of model content: a download reports
 /// sizes and states, never file contents, which keeps a model file out of every log.
+///
+/// `@MainActor` because every conformer's job is feeding one screen, and because the real one hands
+/// back a stream whose task the view model has to own. The bytes still move off the main actor,
+/// inside the downloader, where they already do.
+@MainActor
 public protocol LocalModelLibraryServicing: Sendable {
     /// The curated list, with `isInstalled` already settled against what is on disk.
     func catalogRows() async throws -> [LocalCatalogRow]

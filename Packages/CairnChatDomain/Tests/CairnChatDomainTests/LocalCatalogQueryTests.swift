@@ -77,8 +77,15 @@ final class LocalCatalogQueryTests: XCTestCase {
             LocalCatalogQuery.rows(library, sort: .smallest).map(\.repoID),
             ["small/capable", "mid/vision", "big/plain", "mystery/unknown"]
         )
+        // And the same entry does not lead the *largest* order either. Reading "nobody stated a size"
+        // as an enormous number would put the entry Cairn knows least about at the top of the list of
+        // biggest commitments, which is the worst place in the app to guess.
         XCTAssertEqual(
             LocalCatalogQuery.rows(library, sort: .largest).map(\.repoID).first,
+            "big/plain"
+        )
+        XCTAssertEqual(
+            LocalCatalogQuery.rows(library, sort: .largest).map(\.repoID).last,
             "mystery/unknown"
         )
     }

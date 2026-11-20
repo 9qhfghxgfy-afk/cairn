@@ -39,6 +39,7 @@ public enum LocalFilterChip: String, Sendable, Equatable, CaseIterable, Identifi
 }
 
 public enum LocalSortOrder: String, Sendable, Equatable, CaseIterable, Identifiable {
+    case popular
     case recommended
     case smallest
     case newest
@@ -49,13 +50,18 @@ public enum LocalSortOrder: String, Sendable, Equatable, CaseIterable, Identifia
 
     public var label: String {
         switch self {
-        case .recommended: return "Recommended"
+        case .popular: return "Popular"
+        case .recommended: return "Best for this phone"
         case .smallest: return "Smallest download"
         case .newest: return "Newest"
         case .largest: return "Largest"
         case .name: return "Name"
         }
     }
+
+    /// The four orders the Download tab offers. `recommended` and `name` stay available to any other
+    /// list built on these rows without adding a fifth choice to a menu a thumb has to reach.
+    public static let downloadOrders: [LocalSortOrder] = [.popular, .newest, .smallest, .largest]
 }
 
 public enum LocalCatalogQuery {
@@ -67,20 +73,32 @@ public enum LocalCatalogQuery {
         _ rows: [LocalCatalogRow],
         chip: LocalFilterChip = .all,
         search: String = "",
-        sort: LocalSortOrder = .recommended
+        sort: LocalSortOrder = .popular
     ) -> [LocalCatalogRow] {
-        let needle = search.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let kept = rows.filter { row in
             if let label = chip.requiredLabel, !row.capabilityLabels.contains(label) { return false }
             // An entry that states no size is kept by the size chip: "unknown" is not "too big", and
             // dropping it would hide a model the person could perfectly well download.
             if chip == .small, let bytes = row.downloadBytes, bytes >= smallCeilingBytes { return false }
-            if needle.isEmpty { return true }
-            return row.displayName.lowercased().contains(needle)
-                || row.repoID.lowercased().contains(needle)
-                || row.capabilityLabels.contains { $0.lowercased().contains(needle) }
+            return matches(row, search: search)
         }
         return sorted(kept, sort: sort)
+    }
+
+    /// Whether a row is what a search box is asking for. Display name and repository first, then the
+    /// family and publisher names, because someone typing `gemma` or `Qwen` means the family.
+    ///
+    /// Public because the Download tab filters by several capabilities on top of this, and one
+    /// matching rule shared by both paths is the only reason the two cannot disagree about what the
+    /// same words mean.
+    public static func matches(_ row: LocalCatalogRow, search: String) -> Bool {
+        let needle = search.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if needle.isEmpty { return true }
+        let haystack = [
+            row.displayName, row.repoID, row.capabilityLabels.joined(separator: " "),
+            row.series ?? "", row.provider ?? "", row.summary
+        ].joined(separator: " ").lowercased()
+        return haystack.contains(needle)
     }
 
     /// A search that looks like a repository and matches nothing in the curated list, returned as the
@@ -102,6 +120,20 @@ public enum LocalCatalogQuery {
 
     static func sorted(_ rows: [LocalCatalogRow], sort: LocalSortOrder) -> [LocalCatalogRow] {
         switch sort {
+        case .popular:
+            // Cairn's curated rank first. Where two entries carry the same rank — which is every row
+            // nobody ranked, since 0 is the default — the phone-first heuristic below decides, so an
+            // unranked list still orders usefully instead of arriving in whatever order the list
+            // happened to be built in.
+            return rows.sorted { lhs, rhs in
+                let left = curation(lhs), right = curation(rhs)
+                if left != right { return left < right }
+                let leftFit = rank(lhs), rightFit = rank(rhs)
+                if leftFit != rightFit { return leftFit < rightFit }
+                if size(lhs) != size(rhs) { return size(lhs) < size(rhs) }
+                return lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName)
+                    == .orderedAscending
+            }
         case .recommended:
             // Capable and small first: what a phone can hold and what a phone can use with tools *is*
             // the recommendation for a phone. An entry that states no size sorts last, because
@@ -112,17 +144,27 @@ public enum LocalCatalogQuery {
                 return size(lhs) < size(rhs)
             }
         case .smallest:
-            return rows.sorted { size($0) < size($1) }
+            return bySize(rows, descending: false)
         case .largest:
-            return rows.sorted { size($0) > size($1) }
+            return bySize(rows, descending: true)
         case .newest:
-            return rows.sorted { $0.addedOn > $1.addedOn }
+            // Two entries added on the same day are ordered by name rather than by whatever position
+            // the curated list happened to put them in, so the same library always draws the same list.
+            return rows.sorted {
+                if $0.addedOn != $1.addedOn { return $0.addedOn > $1.addedOn }
+                return nameFirst($0, $1)
+            }
         case .name:
             return rows.sorted {
                 $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
             }
         }
     }
+
+    /// Cairn's curated rank for the `Popular` order. A row that was never ranked carries 0, which is
+    /// a real rank for whoever curated it — so the tie-break in `.popular` is what keeps an unranked
+    /// list from ordering by file position.
+    static func curation(_ row: LocalCatalogRow) -> Int { row.sortOrder }
 
     /// 0 for something small that publishes tools, 1 for something small that does not, 2 for a
     /// capable-but-large entry, 3 for an entry whose size nobody stated.
@@ -133,9 +175,32 @@ public enum LocalCatalogQuery {
         return capable ? 2 : 3
     }
 
-    /// An unstated size is never read as zero bytes: it sorts after every stated size when the list
-    /// goes up and before every stated size when it goes down. Either way it is not offered as the
-    /// cheapest thing in the library, which is what treating "nobody said" as zero would do.
+    /// Size order with the unstated size pinned to the bottom in *both* directions.
+    ///
+    /// Reading "nobody stated a size" as `Int64.max` would put such an entry first in a Largest list,
+    /// which offers the person the one entry Cairn knows least about as the biggest commitment in the
+    /// library — the worst possible moment to guess. A stated size always gets offered first; the
+    /// unknown ones keep their own order by name.
+    static func bySize(_ rows: [LocalCatalogRow], descending: Bool) -> [LocalCatalogRow] {
+        rows.sorted { lhs, rhs in
+            switch (lhs.downloadBytes, rhs.downloadBytes) {
+            case (let left?, let right?):
+                if left != right { return descending ? left > right : left < right }
+                return nameFirst(lhs, rhs)
+            case (.some, nil): return true
+            case (nil, .some): return false
+            case (nil, nil): return nameFirst(lhs, rhs)
+            }
+        }
+    }
+
+    static func nameFirst(_ lhs: LocalCatalogRow, _ rhs: LocalCatalogRow) -> Bool {
+        lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
+    }
+
+    /// An unstated size is never read as zero bytes: it sorts after every stated size, in every order
+    /// that uses this. Either reading of "nobody said" as a number would offer the entry as the
+    /// cheapest or the dearest thing in the library, and neither is known.
     static func size(_ row: LocalCatalogRow) -> Int64 {
         row.downloadBytes ?? Int64.max
     }
