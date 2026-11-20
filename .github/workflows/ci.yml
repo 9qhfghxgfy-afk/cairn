@@ -84,12 +84,58 @@ jobs:
         run: swift test --package-path Packages/CairnInferenceLocal
       # The Swift 5 isolation island: template marker parsing (thinking regions and tool fences),
       # the actor boundary's typed failures, and the no-Metal fallback. Run with the runtime
-      # excluded on purpose — linking mlx-swift-lm compiles swift-syntax macros and a vendored C++
-      # engine from source, which is not a CI-time-box cost. The gap is recorded in ROADMAP.md.
+      # excluded on purpose — linking mlx-swift-lm compiles a vendored C++ and Metal core from source,
+      # which does not belong in a lane that runs on every push. The linked build has its own lane
+      # (`native-linked`) and its own clock.
       - name: Native runtime isolation and template-marker parsing tests
         env:
           CAIRN_SKIP_MLX: "1"
         run: swift test --package-path Packages/CairnInferenceNative
+
+  # The one lane that links MLX, so the claim "`MLXNativeEngine.swift` compiles against the pinned
+  # runtime" is something a machine checked rather than something a comment asserts. It is its own job
+  # and not a step in `domain` for two reasons: it costs real wall-clock (a vendored C++ and Metal core
+  # compiled from source), and a failure here means something different from a failure there — here it
+  # means the runtime link is broken, not that Cairn's logic is wrong.
+  #
+  # Build, not test: with the runtime linked, `MLXNativeEngine.isCompiledIn` flips to true and the
+  # fallback tests in the lane above are asserting the excluded shape on purpose. Running them twice
+  # under two different link configurations would make one of them lie.
+  #
+  # `--jobs 3` rather than the default: the C++ translation units in the MLX core are heavy and the
+  # runner's memory is not unlimited, so the default parallelism is a way to lose this job to the OOM
+  # killer rather than to a compiler error. The local equivalent is `CAIRN_MLX=1 Scripts/ci.sh native`.
+  native-linked:
+    name: Linked MLX build (mlx-swift-lm 2.31.3)
+    needs: guards
+    runs-on: macos-26
+    timeout-minutes: 45
+    env:
+      CAIRN_MLX: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - name: Select Xcode ${{ env.XCODE_VERSION }}
+        run: sudo xcode-select -s "/Applications/Xcode_${XCODE_VERSION}.app/Contents/Developer"
+      - name: Build CairnInferenceNative with the MLX runtime linked
+        run: swift build --package-path Packages/CairnInferenceNative --jobs 3
+      # The point of the step: prove the link is real, not that the manifest was parsed. A manifest that
+      # merely parsed is not a runtime that linked — `MLXNativeEngine.isCompiledIn` reads the same fact as
+      # the `canImport` above, so a build that quietly fell back to the excluded shape would pass the step
+      # above and still ship a binary that cannot run a downloaded model.
+      - name: Prove the runtime was resolved and linked
+        run: |
+          set -euo pipefail
+          BUILD="Packages/CairnInferenceNative/.build"
+          STATE="$BUILD/workspace-state.json"
+          test -f "$STATE" || { echo "FAIL: the package never resolved, so nothing was built"; exit 1; }
+          grep -qE '"version"[[:space:]]*:[[:space:]]*"2\.31\.3"' "$STATE" \
+            || { echo "FAIL: mlx-swift-lm 2.31.3 is not what resolved"; exit 1; }
+          grep -qE '"version"[[:space:]]*:[[:space:]]*"0\.31\.4"' "$STATE" \
+            || { echo "FAIL: mlx-swift 0.31.4 is not what resolved — the pinned manifest is unreadable or the pin moved"; exit 1; }
+          find "$BUILD" -name 'MLXLLM.swiftmodule' -print -quit | grep -q . \
+            || { echo "FAIL: MLXLLM was not built, so this build has no runtime to run a model with"; exit 1; }
+          echo "ok: mlx-swift-lm 2.31.3 with mlx-swift 0.31.4 resolved, built, and linked"
+
 
   app:
     name: Build + test on simulator

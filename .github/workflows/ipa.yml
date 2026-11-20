@@ -12,12 +12,20 @@ on:
 
 env:
   XCODE_VERSION: "26.6"
+  # The on-device MLX runtime, linked into the shipped binary. This is the build that must carry it: with
+  # the flag absent, `CairnInferenceNative/Package.swift` resolves WITHOUT mlx-swift-lm, the provider says
+  # in its own words that the runtime is not in this build, and a model the user downloaded has nothing on
+  # the phone that can run it. The simulator lanes in ci.yml keep it out deliberately — Metal is absent on
+  # the simulator, and the C++ core would be compiled from source on every push.
+  CAIRN_MLX: "1"
 
 jobs:
   ipa:
     name: Unsigned device IPA
     runs-on: macos-26
-    timeout-minutes: 30
+    # 30 was enough while MLX was excluded. Linking it means compiling a vendored C++ and Metal core from
+    # source inside this job, so the clock has to cover the runtime as well as the app.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
 
@@ -58,6 +66,25 @@ jobs:
             exit 1
           fi
           echo "ok: arm64 binary, parseable Info.plist, unsigned"
+
+      # The runtime has to be in the artifact, not merely in the manifest. A build that resolved without
+      # mlx-swift-lm still produces a signed-shaped .ipa that installs and runs; it just has no engine that
+      # can load a downloaded model, and the Servers screen says so. Failing here is cheaper than finding
+      # that out on the phone.
+      - name: Fail if the MLX runtime was not resolved
+        run: |
+          set -euo pipefail
+          CHECKOUTS="DerivedData/SourcePackages/checkouts"
+          test -d "$CHECKOUTS" || { echo "FAIL: no package checkouts — nothing resolved"; exit 1; }
+          for name in mlx-swift mlx-swift-lm; do
+            if ! ls "$CHECKOUTS" | grep -qx "$name"; then
+              echo "FAIL: $name did not resolve, so the shipped binary cannot run an on-device model"
+              ls "$CHECKOUTS" | head -12
+              exit 1
+            fi
+          done
+          printf 'ok: MLX runtime resolved; app binary bytes: %s\n' \
+            "$(stat -f%z DerivedData/Build/Products/Release-iphoneos/Cairn.app/Cairn)"
 
       - name: Package the .ipa
         run: |
