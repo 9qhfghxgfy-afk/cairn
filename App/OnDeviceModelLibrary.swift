@@ -52,7 +52,7 @@ final class OnDeviceModelLibrary: LocalModelLibraryServicing {
     /// there is shown as downloadable even though the repository is famous, and a half-downloaded model
     /// with no manifest is shown as not installed, because it cannot be loaded.
     func catalogRows() async throws -> [LocalCatalogRow] {
-        let held = Set(try installedRows().map(\.repoID))
+        let held = Set(try await installedRows().map(\.repoID))
         return ModelCatalog.onDevice.map { $0.marking(installed: held.contains($0.repoID)) }
     }
 
