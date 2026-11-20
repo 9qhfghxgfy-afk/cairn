@@ -80,7 +80,9 @@ struct ShareView: View {
                 ServersNoticeBanner(text: notice)
             }
         } header: {
-            Text("Local model sharing")
+            // The `(i)` sits on the header: the row under it is a single toggle whose label already carries the
+            // live status line, and a button inside a toggle's label sits inside the toggle's own tap area.
+            InfoSectionHeader("Local model sharing", key: .shareOnLocalNetwork)
         } footer: {
             Text(ShareStatusText.servingNote(model.status))
         }
@@ -111,7 +113,7 @@ struct ShareView: View {
                 Label("Regenerate key", systemImage: "arrow.clockwise")
             }
         } header: {
-            Text("Key")
+            InfoSectionHeader("Key", key: .sharePeerKey)
         } footer: {
             Text(ShareStatusText.tokenNote)
         }

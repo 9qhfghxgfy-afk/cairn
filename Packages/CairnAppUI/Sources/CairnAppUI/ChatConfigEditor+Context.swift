@@ -23,7 +23,7 @@ extension ChatConfigEditor {
             .font(.caption)
             .foregroundStyle(CairnTheme.stoneLight)
         } header: {
-            SectionHeader("Injected context", count: config.context.enabledCount)
+            InfoSectionHeader("Injected context", count: config.context.enabledCount, key: .injectedContext)
         }
     }
 

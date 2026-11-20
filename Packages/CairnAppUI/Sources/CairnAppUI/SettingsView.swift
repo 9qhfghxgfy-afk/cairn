@@ -75,7 +75,10 @@ struct SettingsView: View {
                 }
             }
         } header: {
-            Text("Default Configuration")
+            // The `(i)` goes on the header rather than inside the row: a navigation link makes the whole row
+            // its own tap target, and a button inside that row would be a button whose tap the link may take
+            // instead. The header names the same control and sits directly above it.
+            InfoSectionHeader("Default Configuration", key: .defaultConfiguration)
         } footer: {
             Text(
                 "New chats only. A chat you already had keeps the settings it started with — otherwise "
@@ -86,22 +89,20 @@ struct SettingsView: View {
 
     var turnSection: some View {
         Section {
-            Toggle(
-                isOn: Binding(
-                    get: { theme.settings.showsGenerationStats },
-                    set: { theme.setShowsGenerationStats($0) }
-                )
+            InfoRow(
+                key: .generationStats,
+                caption: "Show elapsed time, tokens generated, and tokens per second under every answer."
             ) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Generation Statistics").font(.subheadline)
-                    Text(
-                        "Show elapsed time, tokens generated, and tokens per second under every answer."
+                Toggle(
+                    isOn: Binding(
+                        get: { theme.settings.showsGenerationStats },
+                        set: { theme.setShowsGenerationStats($0) }
                     )
-                    .font(.caption)
-                    .foregroundStyle(CairnTheme.stoneLight)
+                ) {
+                    Text("Generation Statistics")
                 }
+                .tint(CairnTheme.amber)
             }
-            .tint(CairnTheme.amber)
         } header: {
             Text("Turns")
         } footer: {

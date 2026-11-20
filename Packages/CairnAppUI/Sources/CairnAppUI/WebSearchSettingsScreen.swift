@@ -104,7 +104,10 @@ struct WebSearchSettingsScreen: View {
             .font(.caption)
             .foregroundStyle(CairnTheme.stoneLight)
         } header: {
-            Text("Active provider")
+            // The `(i)` sits on the header, not inside the picker's label: a navigation-link picker makes the
+            // whole row its own tap target, and a button inside that label is a button whose tap the picker
+            // may take instead.
+            InfoSectionHeader("Active provider", key: .webSearchProvider)
         } footer: {
             Text(
                 "One provider answers, the one selected here. If it fails, searching fails with the reason "
@@ -145,15 +148,15 @@ struct WebSearchSettingsScreen: View {
 
     var resultsSection: some View {
         Section {
-            Stepper(value: Binding(
-                get: { model.resultCount },
-                set: { model.setResultCount($0) }
-            ), in: WebSearchSettingsModel.resultCountRange) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Results per search: \(model.resultCount)").font(.subheadline)
-                    Text("The same number for whichever provider is active.")
-                        .font(.caption)
-                        .foregroundStyle(CairnTheme.stoneLight)
+            InfoRow(
+                key: .webSearchResultCount,
+                caption: "The same number for whichever provider is active."
+            ) {
+                Stepper(value: Binding(
+                    get: { model.resultCount },
+                    set: { model.setResultCount($0) }
+                ), in: WebSearchSettingsModel.resultCountRange) {
+                    Text("Results per search: \(model.resultCount)")
                 }
             }
         } header: {

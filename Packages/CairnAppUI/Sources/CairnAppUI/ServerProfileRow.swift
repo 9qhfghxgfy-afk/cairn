@@ -68,13 +68,17 @@ struct ServerProfileRow: View {
                 CredentialInClearWarning()
             }
 
-            Toggle("Enabled", isOn: enabledBinding)
-                .font(.callout)
+            InfoRow(key: .serverUseEnabled) {
+                Toggle("Enabled", isOn: enabledBinding)
+                    .font(.callout)
+            }
 
             if profile.networkClass.requiresOptIn {
-                Toggle("Allow requests to leave this device", isOn: optInBinding)
-                    .font(.callout)
-                    .tint(CairnTheme.rust)
+                InfoRow(key: .serverPublicOptIn) {
+                    Toggle("Allow requests to leave this device", isOn: optInBinding)
+                        .font(.callout)
+                        .tint(CairnTheme.rust)
+                }
                 if !profile.publicInternetOptIn {
                     Text("Inert until you allow outbound requests.")
                         .font(.caption)

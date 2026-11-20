@@ -2228,3 +2228,70 @@ commit for the half the Windows machine cannot compile. Neither turns the 4,096 
 declared ceiling, because the framework offers no way to ask, and it stays a declared ceiling in every sentence the app
 says about it.
 
+## 2026-11-19 — every changeable setting gets an `(i)`: a catalogue in the domain, a card that floats, and two controls that never existed
+
+**Host-verified** on the Windows authoring machine: **585 domain tests green** (the previous pass's 574 plus the catalogue's
+own assertions), guard self-test **53/53**, `Scripts/parse-check.sh` **617 files parse clean**, and the logging, signing,
+ATS, hostname and zero-paywall guards green. That machine compiles none of the SwiftUI code — `CairnAppUI` is iOS/macOS
+only, so **nothing edited here is type-checked locally** and `parse-check` is syntax only. A reviewer pass over the
+Apple-framework surface took four findings and rejected none outright: the glyph's tap area needed
+`contentShape(Rectangle())` over a 28-point frame, because a fifteen-point hit sitting beside a toggle is worse than a miss
+in empty space — the miss lands on something that changes state; a bare `ScrollView` has no intrinsic height and a popover
+sizes to what it is given, so a two-line explanation arrived as a full-height card, now `ViewThatFits` with the scroll view
+as the fallback; `presentationDetents` is ignored the moment the content adapts to a popover, so it was deleted rather than
+left as a modifier that does nothing; and `accessibilityElement(children: .combine)` came off the port stepper's label
+because a stepper already synthesizes the adjustable element VoiceOver increments.
+
+**CI-verified: not yet.** This entry is written before the run; the run number gets appended here when it is green, and the
+milestone is not claimed until then. **On-device-verified: no.** **Real-network-verified: no.**
+
+### The catalogue, not the view, holds the words
+
+`SettingInfoKey` (33 keys across five groups: Settings, Chat, Web Search, Server, Sharing) and `SettingInfo`
+(`title` + `detail`) live in `CairnChatDomain`, so the explanation of a knob is a domain fact with the same status as the
+knob itself. `SettingInfoTests` holds the copy to account: the key count per group, a floor of 160 characters of detail per
+entry, and named claims inside the prose — "Keychain" where a credential is described, "disk" where storage is described,
+"badge" where the outbound indicator is described, "recency" where the search window is described. Copy that drifts away
+from what the code does fails a test instead of quietly becoming marketing.
+
+### Three primitives, and the rule about where the `(i)` may sit
+
+* `InfoButton` — the glyph and its popover. `.presentationCompactAdaptation(.popover)` sits on the **presented content**
+  (`InfoPopoverContent`), not on the presenting button: on iPhone a popover is adapted to a full-screen sheet unless the
+  content itself says otherwise, and a sheet covering the screen is a new screen, with the keyboard dismissed and the
+  composer gone under it. The whole point of the note is that it stays attached to the control while the control is still
+  reachable.
+* `InfoRow` — a control plus an optional caption plus the `(i)` as a **sibling below it**, so the tap cannot be swallowed by
+  the control it explains.
+* `InfoSectionHeader` — the header form, for the rows that cannot carry the button inside them.
+
+That last clause is the rule worth keeping: a `NavigationLink` row and a menu-`Picker` row make the **entire row** the tap
+target, so an `(i)` placed in their label is a button inside a button and loses. Those get the header. Toggles, text
+fields, steppers and secure fields take `InfoRow`. Where a section used to be disabled as a whole (Share's engine list when
+no engine is offered), the `.disabled` moved onto a `Group` inside the section so the header's `(i)` still opens — the note
+about what is shared has to be readable precisely when nothing can be changed.
+
+### Wired, and two controls that had no UI at all
+
+`ChatConfigEditor` (+`Persona`, +`Context`), `SettingsView` (+`Theme`, +`Tools`), `WebSearchSettingsScreen`,
+`WebSearchProviderEditor` (+`Basics`, split out so the instance-field section keeps its own wiring apart from the
+credential section), +`Sections`, `ServerProfileEditor+Sections`, `ServerProfileRow`, `ShareView` (+`Selection`),
+`ToolSwitchMenu`, `ChatScreen+Menus`. Two of the 33 keys described knobs the app could not actually set: **Safe Search** and
+the search **window** (`Only From`). Both now have controls, both persist through `WebSearchSettingsModel.save`, and
+`Tests/CairnTests/WebSearchSettingsModelTests.swift` gained the two tests that prove it — a saved row carries the stricter
+filter and the window it was given, and a fresh draft keeps the middle filter and **no window at all**, because a default
+recency window answers a question nobody asked. `WebSearchTimeRange` is honest about its limits in the domain comment and in
+the card: DuckDuckGo's endpoint has no such parameter, so that route drops the value instead of inventing a substitute.
+
+### Known gaps
+
+* No test hosts a popover, so nothing proves on a screen that the card floats rather than sheets. `CairnAppUI` has no test
+  target and `Tests/CairnTests` is logic-and-wiring only; the copy itself is asserted in the domain, which is where it is
+  defined. A view test would need a new pattern in that suite — deliberately deferred rather than guessed at from a machine
+  that cannot run it.
+* The card's height bounds (`minimumHeight` 90, `maximumHeight` 380) are declared, not measured; only a screen can show
+  whether a long card at a large text size scrolls instead of clipping.
+* On iPad and Mac the popover is already a popover, so the adaptation clause changes nothing there — asserted by reading
+  Apple's documented behaviour, not by running the iPad build.
+* `InfoSectionHeader` in a `Section` header has not been seen on a device: a control inside a header view is exactly the
+  kind of container SwiftUI has opinions about.

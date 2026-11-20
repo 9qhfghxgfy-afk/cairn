@@ -113,4 +113,36 @@ extension SettingInfoKey {
             """
         )
     }
+
+    static var toolSwitchesInfo: SettingInfo {
+        SettingInfo(
+            title: "Tool Switches",
+            detail: """
+            Which tools this conversation may put in front of the model. A tool you untick is never offered, \
+            so the model cannot reach for it. The list belongs to the conversation you are in; the choice \
+            about the internet belongs to the whole app and is made under Settings.
+
+            Arithmetic, the clock, unit conversion and a mail draft run on this device — and a draft is only \
+            a draft, which you send. Search, reading a page, and Wikipedia send a query, an address, or the \
+            image you asked about off the phone, so they stay off and greyed until you allow that, and an \
+            answer that used one keeps a badge beside it in the transcript.
+            """
+        )
+    }
+
+    static var temporaryChatInfo: SettingInfo {
+        SettingInfo(
+            title: "Temporary Chat",
+            detail: """
+            A temporary conversation lives in memory only: nothing of it is written to disk, and when the \
+            app closes the chat is gone. A saved conversation is written to this device's store and comes \
+            back in the chat list.
+
+            Flipping the pill starts a new conversation in the other store rather than moving the one you \
+            are reading between them. Nothing you have written carries over, a saved chat is not pushed to \
+            disk because the pill changed, and a temporary one cannot be recovered afterwards. Attachments \
+            follow the same rule.
+            """
+        )
+    }
 }

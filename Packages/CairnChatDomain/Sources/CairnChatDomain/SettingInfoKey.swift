@@ -22,6 +22,8 @@ public enum SettingInfoKey: String, Sendable, Equatable, Codable, CaseIterable, 
     case persona
     case answerStyle
     case askForReasoning
+    case toolSwitches
+    case temporaryChat
 
     // The Web Search screen and its provider editor.
     case webSearchProvider
@@ -59,7 +61,7 @@ public enum SettingInfoKey: String, Sendable, Equatable, Codable, CaseIterable, 
         case .appearance, .colorTheme, .defaultConfiguration, .injectedContext,
              .generationStats, .webToolsOutbound:
             return .settings
-        case .persona, .answerStyle, .askForReasoning:
+        case .persona, .answerStyle, .askForReasoning, .toolSwitches, .temporaryChat:
             return .chat
         case .webSearchProvider, .webSearchResultCount, .webSearchInstanceName, .webSearchAddress,
              .webSearchCategories, .webSearchLanguage, .webSearchSafeSearch, .webSearchTimeRange,
@@ -85,6 +87,8 @@ public enum SettingInfoKey: String, Sendable, Equatable, Codable, CaseIterable, 
         case .persona: return Self.personaInfo
         case .answerStyle: return Self.answerStyleInfo
         case .askForReasoning: return Self.askForReasoningInfo
+        case .toolSwitches: return Self.toolSwitchesInfo
+        case .temporaryChat: return Self.temporaryChatInfo
         case .webSearchProvider: return Self.webSearchProviderInfo
         case .webSearchResultCount: return Self.webSearchResultCountInfo
         case .webSearchInstanceName: return Self.webSearchInstanceNameInfo

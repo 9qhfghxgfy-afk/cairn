@@ -91,9 +91,11 @@ extension SettingInfoKey {
         SettingInfo(
             title: "Time Range",
             detail: """
-            Restricts results to the past day, week, month or year when recency matters more than relevance. \
-            SearXNG applies it directly, and a week is sent as its closest supported rung rather than being \
-            dropped. Choosing no range sends nothing at all, so an older-but-better result can still win.
+            Restricts a search to the past day, week, month or year when recency matters more than \
+            relevance. Left at any time, nothing date-shaped is sent at all, so an older but better result \
+            can still win. An instance you run applies the range directly; the built-in DuckDuckGo row is \
+            sent that service's own equivalent parameter, and an endpoint that ignores a parameter it does \
+            not know still answers, so the worst case there is a search that simply did not narrow.
             """
         )
     }

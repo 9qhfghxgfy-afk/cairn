@@ -17,42 +17,19 @@ extension SettingsView {
 
     var toolsSection: some View {
         Section {
-            Toggle(
-                isOn: Binding(
-                    get: { theme.settings.outboundWebAllowed },
-                    set: { theme.setOutboundWebAllowed($0) }
-                )
+            InfoRow(
+                key: .webToolsOutbound,
+                caption: "Search, page reading and Wikipedia send a query or an address off this device."
             ) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Web tools may reach the internet").font(.subheadline)
-                    Text(
-                        "Search, page reading and Wikipedia send a query or an address off this device."
+                Toggle(
+                    isOn: Binding(
+                        get: { theme.settings.outboundWebAllowed },
+                        set: { theme.setOutboundWebAllowed($0) }
                     )
-                    .font(.caption)
-                    .foregroundStyle(CairnTheme.stoneLight)
+                ) {
+                    Text("Web tools may reach the internet")
                 }
-            }
-            .tint(CairnTheme.amber)
-
-            if let webSearch {
-                // A screen of its own rather than one more field: which provider answers, whether it has been
-                // agreed to, and whether it answers at all are three questions a text box cannot hold.
-                NavigationLink {
-                    WebSearchSettingsScreen(model: webSearch)
-                } label: {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("Web Search").font(.subheadline)
-                        Text(webSearch.active.displayName)
-                            .font(.caption)
-                            .foregroundStyle(CairnTheme.stoneLight)
-                    }
-                }
-            } else {
-                // No model wired means no vault and no tester in this build — so the row reports what is set
-                // instead of opening a screen that could not save a row or test one.
-                LabeledContent("Search provider") {
-                    Text(theme.settings.activeWebSearchProvider.displayName)
-                }
+                .tint(CairnTheme.amber)
             }
         } header: {
             Text("Tools")
@@ -76,6 +53,33 @@ extension SettingsView {
             }
             .font(.caption)
             .foregroundStyle(CairnTheme.stoneLight)
+        }
+        // The provider row sits in its own section so its `(i)` has a header to rest on. A navigation link
+        // makes the entire row its tap target, and a button inside that label is a button the link may take
+        // the tap from. The header names the same thing the row opens.
+        Section {
+            if let webSearch {
+                // A screen of its own rather than one more field: which provider answers, whether it has been
+                // agreed to, and whether it answers at all are three questions a text box cannot hold.
+                NavigationLink {
+                    WebSearchSettingsScreen(model: webSearch)
+                } label: {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Web Search").font(.subheadline)
+                        Text(webSearch.active.displayName)
+                            .font(.caption)
+                            .foregroundStyle(CairnTheme.stoneLight)
+                    }
+                }
+            } else {
+                // No model wired means no vault and no tester in this build — so the row reports what is set
+                // instead of opening a screen that could not save a row or test one.
+                LabeledContent("Search provider") {
+                    Text(theme.settings.activeWebSearchProvider.displayName)
+                }
+            }
+        } header: {
+            InfoSectionHeader("Search provider", key: .webSearchProvider)
         }
     }
 }

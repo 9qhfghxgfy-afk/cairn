@@ -9,30 +9,36 @@ import SwiftUI
 extension ShareView {
     var selectionSection: some View {
         Section {
-            portRow
+            // The disable goes on the content, not on the Section. A disabled Section disables its header too,
+            // which would switch off the `(i)` that explains why the rows under it are locked — and that note
+            // is the one thing worth reading exactly then.
+            Group {
+                portRow
 
-            if model.offered.isEmpty {
-                Text(ShareStatusText.noEnginesNote)
-                    .font(.caption)
-                    .foregroundStyle(CairnTheme.stoneLight)
-            } else {
-                ForEach(model.offered) { engine in
-                    Toggle(isOn: Binding(
-                        get: { model.settings.sharedEngineIDs.contains(engine.id) },
-                        set: { _ in model.toggleEngine(id: engine.id) }
-                    )) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(engine.displayName.isEmpty ? engine.id : engine.displayName)
-                            Text(engine.id)
-                                .font(.caption)
-                                .foregroundStyle(CairnTheme.stoneLight)
+                if model.offered.isEmpty {
+                    Text(ShareStatusText.noEnginesNote)
+                        .font(.caption)
+                        .foregroundStyle(CairnTheme.stoneLight)
+                } else {
+                    ForEach(model.offered) { engine in
+                        Toggle(isOn: Binding(
+                            get: { model.settings.sharedEngineIDs.contains(engine.id) },
+                            set: { _ in model.toggleEngine(id: engine.id) }
+                        )) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(engine.displayName.isEmpty ? engine.id : engine.displayName)
+                                Text(engine.id)
+                                    .font(.caption)
+                                    .foregroundStyle(CairnTheme.stoneLight)
+                            }
                         }
+                        .tint(CairnTheme.amber)
                     }
-                    .tint(CairnTheme.amber)
                 }
             }
+            .disabled(!model.canEditSelection)
         } header: {
-            Text("What is shared")
+            InfoSectionHeader("What is shared", key: .shareEngines)
         } footer: {
             Text(
                 "Only the engines ticked here are offered, and only under the names you ticked. A name with "
@@ -40,28 +46,29 @@ extension ShareView {
                     + "so it cannot move under a client that is already talking to this phone."
             )
         }
-        .disabled(!model.canEditSelection)
     }
 
     /// The port, bounded by the policy floor rather than by a text field: a number below 1024 is a
     /// system port, and a port that will not bind is reported by the surface as `portUnusable`.
     var portRow: some View {
-        Stepper(value: Binding(
-            get: { model.settings.port },
-            set: { model.setPort($0) }
-        ), in: SharePolicy.portFloor...65_535, step: 1) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Port").font(.subheadline)
-                    Text("Ollama's usual port is 11434. Anything 1024 or above that nothing else is using.")
-                        .font(.caption)
-                        .foregroundStyle(CairnTheme.stoneLight)
+        InfoRow(
+            key: .sharePort,
+            caption: "Ollama's usual port is 11434. Anything 1024 or above that nothing else is using."
+        ) {
+            Stepper(value: Binding(
+                get: { model.settings.port },
+                set: { model.setPort($0) }
+            ), in: SharePolicy.portFloor...65_535, step: 1) {
+                HStack {
+                    Text("Port")
+                    Spacer()
+                    Text("\(model.settings.port)")
+                        .font(.system(.body, design: .monospaced))
                 }
-                Spacer()
-                Text("\(model.settings.port)")
-                    .font(.system(.body, design: .monospaced))
+                // No `accessibilityElement(children: .combine)` here: a stepper already synthesizes one
+                // adjustable element from its label and its value, and combining on top of that replaces the
+                // value VoiceOver can increment with a static group.
             }
         }
-        .accessibilityElement(children: .combine)
     }
 }

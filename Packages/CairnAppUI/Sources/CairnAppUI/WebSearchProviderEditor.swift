@@ -45,6 +45,9 @@ struct WebSearchProviderEditor: View {
     @State var address: String
     @State var categories: String
     @State var language: String
+    @State var safeSearch: WebSearchSafeSearch
+    /// nil means no date filter: the provider decides how far back a search reaches.
+    @State var timeRange: WebSearchTimeRange?
     @State var timeoutSeconds: Int
     @State var choice: CredentialChoice
     @State var secretHeaderName: String
@@ -63,6 +66,8 @@ struct WebSearchProviderEditor: View {
         _address = State(initialValue: draft.address)
         _categories = State(initialValue: draft.categories.joined(separator: ", "))
         _language = State(initialValue: draft.language)
+        _safeSearch = State(initialValue: draft.safeSearch)
+        _timeRange = State(initialValue: draft.timeRange)
         _timeoutSeconds = State(initialValue: draft.timeoutSeconds)
         _choice = State(initialValue: Self.choice(for: draft.credentialShape))
         _secretHeaderName = State(initialValue: {
@@ -92,42 +97,6 @@ struct WebSearchProviderEditor: View {
         }
     }
 
-    // MARK: - The row itself
-
-    var basicsSection: some View {
-        Section {
-            TextField("Name", text: $name)
-                .textInputAutocapitalization(.never)
-            TextField("Address", text: $address, prompt: Text("http://192.168.1.20:8888"))
-                .keyboardType(.URL)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-            TextField("Categories", text: $categories, prompt: Text("general, news"))
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-            TextField("Language", text: $language, prompt: Text("en"))
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-            Stepper(value: $timeoutSeconds, in: WebSearchProviderProfile.timeoutRange) {
-                Text("Timeout: \(timeoutSeconds) s")
-            }
-        } header: {
-            Text("Instance")
-        } footer: {
-            Group {
-                Text(
-                    "A private address — a LAN address, a tunnel address, a .local name — may use http, "
-                        + "because that network is the thing protecting it. Anything on the public internet "
-                        + "must be https, and Cairn refuses it otherwise rather than badging it."
-                )
-                if let error = model.lastError {
-                    Text(error).foregroundStyle(CairnTheme.rust)
-                }
-            }
-            .font(.caption)
-            .foregroundStyle(CairnTheme.stoneLight)
-        }
-    }
 }
 
 

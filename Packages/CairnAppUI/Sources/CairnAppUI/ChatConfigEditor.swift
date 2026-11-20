@@ -56,35 +56,26 @@ struct ChatConfigEditor<Extra: View>: View {
     // MARK: - Answer style and thinking
 
     var answerStyleRow: some View {
-        Picker("Answer style", selection: $config.responseFormat) {
-            ForEach(ResponseFormatPreference.allCases) { format in
-                Text(format.displayName).tag(format)
+        InfoRow(key: .answerStyle) {
+            Picker("Answer Style", selection: $config.responseFormat) {
+                ForEach(ResponseFormatPreference.allCases) { format in
+                    Text(format.displayName).tag(format)
+                }
             }
+            .tint(CairnTheme.amber)
         }
-        .tint(CairnTheme.amber)
     }
 
     var thinkingRow: some View {
-        Toggle(isOn: $config.thinkingEnabled) {
-            HStack(alignment: .top, spacing: 6) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Ask for reasoning").font(.subheadline)
-                    Text(
-                        "The panel appears only if this model actually returns reasoning."
-                    )
-                    .font(.caption)
-                    .foregroundStyle(CairnTheme.stoneLight)
-                }
-                Spacer(minLength: 4)
-                InfoButton(
-                    title: "Ask for reasoning",
-                    text: "Cairn asks this backend for its reasoning and shows it only if the backend "
-                        + "actually returns any. Cairn never writes a thinking display around an answer "
-                        + "it has no reasoning for, and never invents one."
-                )
+        InfoRow(
+            key: .askForReasoning,
+            caption: "The panel appears only if this model actually returns reasoning."
+        ) {
+            Toggle(isOn: $config.thinkingEnabled) {
+                Text("Ask for Reasoning")
             }
+            .tint(CairnTheme.amber)
         }
-        .tint(CairnTheme.amber)
     }
 }
 

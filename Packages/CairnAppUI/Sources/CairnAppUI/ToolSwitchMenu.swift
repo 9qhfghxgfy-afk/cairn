@@ -13,26 +13,33 @@ struct ToolSwitchMenu: View {
     @Environment(\.cairnTokens) private var tokens
 
     var body: some View {
-        Menu {
-            ForEach(BuiltInTool.allNames, id: \.self) { name in
-                Toggle(
-                    isOn: Binding(
-                        get: { session.conversation.config.toolToggle.isOn(name) },
-                        set: { session.setTool(name, on: $0) }
-                    )
-                ) {
-                    Label(ToolSwitchLabels.title(name), systemImage: ToolSwitchLabels.symbol(name))
+        HStack(spacing: 4) {
+            Menu {
+                ForEach(BuiltInTool.allNames, id: \.self) { name in
+                    Toggle(
+                        isOn: Binding(
+                            get: { session.conversation.config.toolToggle.isOn(name) },
+                            set: { session.setTool(name, on: $0) }
+                        )
+                    ) {
+                        Label(ToolSwitchLabels.title(name), systemImage: ToolSwitchLabels.symbol(name))
+                    }
+                    .disabled(!outboundAllowed && BuiltInTool.isWebTool(name))
                 }
-                .disabled(!outboundAllowed && BuiltInTool.isWebTool(name))
+            } label: {
+                Image(systemName: "slider.horizontal.below.rectangle")
+                    .font(.caption)
+                    .padding(6)
+                    .background(Capsule().fill(tokens.onCanvasMuted.opacity(0.16)))
+                    .foregroundStyle(tokens.accent)
             }
-        } label: {
-            Image(systemName: "slider.horizontal.below.rectangle")
-                .font(.caption)
-                .padding(6)
-                .background(Capsule().fill(tokens.onCanvasMuted.opacity(0.16)))
-                .foregroundStyle(tokens.accent)
+            .accessibilityLabel("Tool switches")
+
+            // A sibling of the menu, not an item inside it. Menu content cannot present anything — a control
+            // in there would close the menu and go nowhere — and what a tick costs is worth reading before
+            // the first tool is reached for.
+            InfoButton(key: .toolSwitches)
         }
-        .accessibilityLabel("Tool switches")
     }
     /// The words and the marks are `ToolSwitchLabels`, where a test can check that a name
     /// really is a symbol. An unknown name draws nothing, which is how a row once came up blank.

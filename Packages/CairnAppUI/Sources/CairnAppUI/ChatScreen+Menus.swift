@@ -101,20 +101,27 @@ extension ChatScreen {
     }
 
     var temporaryToggle: some View {
-        Button {
-            workspace.temporaryChat.toggle()
-        } label: {
-            HStack(spacing: 4) {
-                Image(systemName: workspace.temporaryChat ? "flame.fill" : "tray.and.arrow.down")
-                Text(workspace.temporaryChat ? "Temporary" : "Saved")
+        HStack(spacing: 4) {
+            Button {
+                workspace.temporaryChat.toggle()
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: workspace.temporaryChat ? "flame.fill" : "tray.and.arrow.down")
+                    Text(workspace.temporaryChat ? "Temporary" : "Saved")
+                }
+                .font(.caption.weight(.semibold))
+                .padding(.horizontal, 9)
+                .padding(.vertical, 6)
+                .background(
+                    Capsule().fill((workspace.temporaryChat ? CairnTheme.amber : CairnTheme.moss).opacity(0.22))
+                )
+                .foregroundStyle(workspace.temporaryChat ? CairnTheme.amber : CairnTheme.moss)
             }
-            .font(.caption.weight(.semibold))
-            .padding(.horizontal, 9)
-            .padding(.vertical, 6)
-            .background(
-                Capsule().fill((workspace.temporaryChat ? CairnTheme.amber : CairnTheme.moss).opacity(0.22))
-            )
-            .foregroundStyle(workspace.temporaryChat ? CairnTheme.amber : CairnTheme.moss)
+
+            // The pill flips which store the conversation lives in, and it starts a new conversation when it
+            // flips. That is worth one tap of reading before the tap that does it — said beside the pill,
+            // because a note under a header the user is not looking at is a note nobody finds.
+            InfoButton(key: .temporaryChat)
         }
     }
 

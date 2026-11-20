@@ -19,6 +19,12 @@ public struct WebSearchRowEdit: Equatable, Sendable {
     public var address: String
     public var categories: [String]
     public var language: String
+    /// How strict the result filter is. The profile carries it, so the editor can set it; both transports
+    /// Cairn speaks number it the same way.
+    public var safeSearch: WebSearchSafeSearch
+    /// How far back a search may reach. nil leaves the decision to the provider — recency is not a default,
+    /// and a search that quietly narrows itself to the past year is a search that changed the question.
+    public var timeRange: WebSearchTimeRange?
     public var timeoutSeconds: Int
     /// How a stored secret would travel, or nil for "this instance needs no credential".
     public var credentialShape: WebSearchCredentialShape?
@@ -33,6 +39,8 @@ public struct WebSearchRowEdit: Equatable, Sendable {
         address: String = "",
         categories: [String] = [],
         language: String = "",
+        safeSearch: WebSearchSafeSearch = .default,
+        timeRange: WebSearchTimeRange? = nil,
         timeoutSeconds: Int = WebSearchProviderProfile.defaultTimeoutSeconds,
         credentialShape: WebSearchCredentialShape? = nil,
         token: String? = nil,
@@ -43,6 +51,8 @@ public struct WebSearchRowEdit: Equatable, Sendable {
         self.address = address
         self.categories = categories
         self.language = language
+        self.safeSearch = safeSearch
+        self.timeRange = timeRange
         self.timeoutSeconds = timeoutSeconds
         self.credentialShape = credentialShape
         self.token = token
@@ -59,6 +69,8 @@ public struct WebSearchRowEdit: Equatable, Sendable {
             address: row.baseURLString,
             categories: row.categories,
             language: row.language ?? "",
+            safeSearch: row.safeSearch,
+            timeRange: row.timeRange,
             timeoutSeconds: row.timeoutSeconds,
             credentialShape: row.credentialShape,
             token: nil,

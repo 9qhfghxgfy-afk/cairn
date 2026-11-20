@@ -175,4 +175,34 @@ final class WebSearchSettingsModelTests: XCTestCase {
         box.model.setResultCount(0)
         XCTAssertEqual(box.model.resultCount, WebSearchProviderProfile.resultCountRange.lowerBound)
     }
+
+    /// The two filters the editor shows are only worth having if they survive the save. Safe Search is the one
+    /// a provider applies whether or not anyone asked, so a row that cannot say "stricter" is a row that hides
+    /// a decision; and a window that silently became "the past year" would answer a question nobody asked.
+    /// Both are read back off the stored row rather than off the draft.
+    func testTheSearchFiltersTravelWithTheSavedRow() throws {
+        let box = fixtures()
+        var edit = boxEdit()
+        edit.safeSearch = .strict
+        edit.timeRange = .year
+        XCTAssertTrue(box.model.save(edit))
+
+        let saved = try XCTUnwrap(box.model.rows.first { $0.displayName == "Box" })
+        XCTAssertEqual(saved.safeSearch, .strict)
+        XCTAssertEqual(saved.timeRange, .year)
+    }
+
+    /// A row saved without touching either filter keeps the middle strictness and **no** window at all. The
+    /// absent window is the assertion that matters: recency is a choice the provider should be left to, not a
+    /// default Cairn invents, and a draft that arrived with `.year` in it would narrow every later search.
+    func testAFreshDraftKeepsTheMiddleFilterAndNoWindow() throws {
+        let box = fixtures()
+        XCTAssertTrue(
+            box.model.save(WebSearchRowEdit(name: "Plain", address: "http://192.168.1.20:8888"))
+        )
+
+        let saved = try XCTUnwrap(box.model.rows.first { $0.displayName == "Plain" })
+        XCTAssertEqual(saved.safeSearch, .moderate)
+        XCTAssertNil(saved.timeRange, "a default window would answer a question nobody asked")
+    }
 }

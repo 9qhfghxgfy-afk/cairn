@@ -24,6 +24,8 @@ public extension WebSearchSettingsModel {
             categories: edit.categories,
             language: edit.language.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 ? nil : edit.language,
+            safeSearch: edit.safeSearch,
+            timeRange: edit.timeRange,
             timeoutSeconds: edit.timeoutSeconds,
             credentialShape: edit.credentialShape,
             hasCredential: hasSecretAfter(edit),

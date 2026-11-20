@@ -43,7 +43,9 @@ extension WebSearchProviderEditor {
                 }
             }
         } header: {
-            Text("Credential")
+            // One card for the whole section: the shape, the header name and the token are three ends of the
+            // same decision, and three buttons opening the same text is three chances to misread it.
+            InfoSectionHeader("Credential", key: .webSearchCredential)
         } footer: {
             Text(
                 "The value goes to the Keychain and nowhere else — not into the settings store, not back onto "
@@ -87,7 +89,7 @@ extension WebSearchProviderEditor {
                 Label("Add header", systemImage: "plus")
             }
         } header: {
-            Text("Extra headers")
+            InfoSectionHeader("Extra headers", key: .webSearchCustomHeaders)
         } footer: {
             Text(
                 "For an instance that needs something ordinary sent with every request — a proxy's routing "
@@ -115,6 +117,8 @@ extension WebSearchProviderEditor {
         edit.address = address
         edit.categories = splitCategories(categories)
         edit.language = language
+        edit.safeSearch = safeSearch
+        edit.timeRange = timeRange
         edit.timeoutSeconds = timeoutSeconds
         edit.credentialShape = shape(for: choice, headerName: secretHeaderName)
         edit.token = tokenState

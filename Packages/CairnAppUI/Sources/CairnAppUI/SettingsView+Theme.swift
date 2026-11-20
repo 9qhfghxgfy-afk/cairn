@@ -15,17 +15,21 @@ extension SettingsView {
                 themeRow(palette)
             }
             ThemePreviewCard(palette: theme.palette, scheme: previewScheme)
-            Picker("Appearance", selection: Binding(
-                get: { theme.settings.appearance },
-                set: { theme.select(appearance: $0) }
-            )) {
-                ForEach(AppearanceMode.allCases) { mode in
-                    Text(mode.displayName).tag(mode)
+            InfoRow(key: .appearance) {
+                Picker("Appearance", selection: Binding(
+                    get: { theme.settings.appearance },
+                    set: { theme.select(appearance: $0) }
+                )) {
+                    ForEach(AppearanceMode.allCases) { mode in
+                        Text(mode.displayName).tag(mode)
+                    }
                 }
+                .tint(CairnTheme.amber)
             }
-            .tint(CairnTheme.amber)
         } header: {
-            Text("Theme")
+            // The theme rows are buttons — each one selects a palette — so the `(i)` for "which palette" sits
+            // on the header rather than inside a row the palette button owns.
+            InfoSectionHeader("Theme", key: .colorTheme)
         } footer: {
             Text(
                 "A theme changes what Cairn looks like, in light and in dark. It changes nothing about "

@@ -51,7 +51,7 @@ final class SettingInfoTests: XCTestCase {
     /// itself: a suite that only proves "some entry exists" passes while a whole screen stays unlabelled.
     func testEverySurfaceIsCovered() {
         let expected: [SettingInfoGroup: Int] = [
-            .settings: 6, .chat: 3, .webSearch: 11, .server: 7, .sharing: 4,
+            .settings: 6, .chat: 5, .webSearch: 11, .server: 7, .sharing: 4,
         ]
         for group in SettingInfoGroup.allCases {
             let found = SettingInfoKey.allCases.filter { $0.group == group }
@@ -61,7 +61,7 @@ final class SettingInfoTests: XCTestCase {
                 "\(group) does not have the expected number of entries"
             )
         }
-        XCTAssertEqual(SettingInfoKey.allCases.count, 31)
+        XCTAssertEqual(SettingInfoKey.allCases.count, 33)
     }
 
     /// The controls the audit names by hand, so a rename that silently drops one out of the catalog fails
@@ -69,11 +69,12 @@ final class SettingInfoTests: XCTestCase {
     func testTheNamedControlsAreAllPresent() {
         let required: [SettingInfoKey] = [
             .appearance, .colorTheme, .defaultConfiguration, .injectedContext, .generationStats,
-            .webToolsOutbound, .persona, .answerStyle, .askForReasoning,
-            .webSearchProvider, .webSearchResultCount, .webSearchAddress, .webSearchCategories,
-            .webSearchLanguage, .webSearchSafeSearch, .webSearchTimeRange, .webSearchTimeout,
-            .webSearchCredential, .webSearchCustomHeaders,
-            .serverBackend, .serverAddress, .serverToken, .serverCustomHeaders,
+            .webToolsOutbound, .persona, .answerStyle, .askForReasoning, .toolSwitches, .temporaryChat,
+            .webSearchProvider, .webSearchResultCount, .webSearchInstanceName, .webSearchAddress,
+            .webSearchCategories, .webSearchLanguage, .webSearchSafeSearch, .webSearchTimeRange,
+            .webSearchTimeout, .webSearchCredential, .webSearchCustomHeaders,
+            .serverName, .serverBackend, .serverAddress, .serverUseEnabled, .serverPublicOptIn,
+            .serverToken, .serverCustomHeaders,
             .shareOnLocalNetwork, .sharePeerKey, .sharePort, .shareEngines,
         ]
         for key in required {
@@ -97,5 +98,10 @@ final class SettingInfoTests: XCTestCase {
         XCTAssertTrue(SettingInfoKey.serverAddress.info.detail.lowercased().contains("https"))
         XCTAssertTrue(SettingInfoKey.shareOnLocalNetwork.info.detail.lowercased().contains("foreground"))
         XCTAssertTrue(SettingInfoKey.sharePeerKey.info.detail.lowercased().contains("key"))
+        XCTAssertTrue(SettingInfoKey.toolSwitches.info.detail.lowercased().contains("badge"))
+        XCTAssertTrue(SettingInfoKey.temporaryChat.info.detail.lowercased().contains("disk"))
+        XCTAssertTrue(SettingInfoKey.webSearchSafeSearch.info.detail.lowercased().contains("explicit"))
+        XCTAssertTrue(SettingInfoKey.webSearchTimeRange.info.detail.lowercased().contains("recency"))
+        XCTAssertTrue(SettingInfoKey.serverUseEnabled.info.detail.lowercased().contains("server"))
     }
 }

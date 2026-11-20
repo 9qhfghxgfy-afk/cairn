@@ -4,24 +4,34 @@ import CairnChatDomain
 extension ServerProfileEditor {
     @ViewBuilder var serverSection: some View {
         Section {
-            TextField("Name", text: $name)
-                .textInputAutocapitalization(.never)
-            Picker("Type", selection: $kind) {
-                ForEach(ServerProfileKind.allCases) { option in
-                    Text(option.displayName).tag(option)
-                }
+            InfoRow(key: .serverName) {
+                TextField("Name", text: $name)
+                    .textInputAutocapitalization(.never)
             }
-            .onChange(of: kind) { _, chosen in
-                applyKindChange(chosen)
+            InfoRow(key: .serverBackend) {
+                Picker("Type", selection: $kind) {
+                    ForEach(ServerProfileKind.allCases) { option in
+                        Text(option.displayName).tag(option)
+                    }
+                }
+                .tint(CairnTheme.amber)
+                .onChange(of: kind) { _, chosen in
+                    applyKindChange(chosen)
+                }
             }
             Text(kindEndpointsSummary)
                 .font(.caption.monospaced())
                 .foregroundStyle(CairnTheme.stoneLight)
-            TextField("Base URL", text: $urlString)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .keyboardType(.URL)
-                .font(.body.monospaced())
+            InfoRow(
+                key: .serverAddress,
+                caption: "http is accepted for a machine on your own network; https for anything public."
+            ) {
+                TextField("Base URL", text: $urlString)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .keyboardType(.URL)
+                    .font(.body.monospaced())
+            }
             if let issue = validationIssue {
                 Text(issue)
                     .font(.caption)
@@ -49,10 +59,15 @@ extension ServerProfileEditor {
 
     @ViewBuilder var trafficSection: some View {
         Section {
-            Toggle("Use this server", isOn: $enabled)
+            InfoRow(key: .serverUseEnabled) {
+                Toggle("Use this server", isOn: $enabled)
+                    .tint(CairnTheme.amber)
+            }
             if draft.networkClass.requiresOptIn {
-                Toggle("Allow requests to leave this device", isOn: $optIn)
-                    .tint(CairnTheme.rust)
+                InfoRow(key: .serverPublicOptIn) {
+                    Toggle("Allow requests to leave this device", isOn: $optIn)
+                        .tint(CairnTheme.rust)
+                }
             }
         } header: {
             Text("Traffic")
@@ -83,7 +98,7 @@ extension ServerProfileEditor {
                 CredentialInClearWarning()
             }
         } header: {
-            Text("Token")
+            InfoSectionHeader("Token", key: .serverToken)
         } footer: {
             Text("Saved in the Keychain on this device only. Never written to the settings database, never logged.")
         }
@@ -107,7 +122,7 @@ extension ServerProfileEditor {
             }
             .font(.caption)
         } header: {
-            Text("Custom headers")
+            InfoSectionHeader("Custom headers", key: .serverCustomHeaders)
         } footer: {
             Text(headerFooter)
         }
