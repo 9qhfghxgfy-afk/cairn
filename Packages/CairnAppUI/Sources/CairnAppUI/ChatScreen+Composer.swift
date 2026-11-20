@@ -23,9 +23,10 @@ extension ChatScreen {
     ///
     /// Three things keep the keyboard from owning the screen. It grows to four lines and no further,
     /// so a long message scrolls inside its own field instead of pushing the transcript off the top;
-    /// scrolling the transcript dismisses it with the finger already moving; and there is a control
-    /// that closes it, both in the keyboard's own bar and in the row itself, because a bar item a user
-    /// has never seen before is not a control they will find under a keyboard they want gone.
+    /// scrolling the transcript dismisses it with the finger already moving; and the row itself carries a
+    /// control that closes it. There is no keyboard accessory bar — see the note in `ChatScreen.swift` — so
+    /// nothing is drawn on top of the row where Send is, and every control in the row is a target a finger
+    /// can aim at rather than a glyph it has to hit.
     var composer: some View {
         VStack(spacing: 5) {
             if let session {
@@ -53,7 +54,7 @@ extension ChatScreen {
                     .foregroundStyle(CairnTheme.rust)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            HStack(alignment: .bottom, spacing: 8) {
+            HStack(alignment: .bottom, spacing: 10) {
                 AttachmentPickerMenu(draft: draft)
                 TextField("Ask Cairn…", text: $composerText, axis: .vertical)
                     .textFieldStyle(.plain)
@@ -79,7 +80,8 @@ extension ChatScreen {
                     } label: {
                         Image(systemName: "chevron.down.circle.fill")
                             .font(.title3)
-                            .padding(2)
+                            .frame(width: Self.composerControlSide, height: Self.composerControlSide)
+                            .contentShape(Circle())
                     }
                     .foregroundStyle(CairnTheme.stoneLight)
                     .accessibilityLabel("Hide the keyboard")
@@ -88,15 +90,18 @@ extension ChatScreen {
                 if session?.isBusy == true {
                     Button(action: stop) {
                         Image(systemName: "stop.fill")
-                            .padding(10)
+                            .frame(width: Self.composerControlSide, height: Self.composerControlSide)
                             .background(Circle().fill(CairnTheme.rust.opacity(0.85)))
+                            .contentShape(Circle())
                             .foregroundStyle(.white)
                     }
+                    .accessibilityLabel("Stop the answer")
                 } else {
                     Button(action: send) {
                         Image(systemName: "arrow.up")
-                            .padding(10)
+                            .frame(width: Self.composerControlSide, height: Self.composerControlSide)
                             .background(Circle().fill(CairnTheme.amber))
+                            .contentShape(Circle())
                             .foregroundStyle(CairnTheme.slateDeep)
                     }
                     // A photo with no words is still a message — "what is in this picture?" does not need to
@@ -106,6 +111,7 @@ extension ChatScreen {
                     .disabled(
                         composerText.trimmingCharacters(in: .whitespaces).isEmpty && draft.isEmpty
                     )
+                    .accessibilityLabel("Send")
                 }
             }
         }

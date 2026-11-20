@@ -18,6 +18,16 @@ public struct ChatScreen: View {
     /// keyboard that stays on screen is a button that did nothing.
     @FocusState var composerFocused: Bool
     @State private var showingConfig = false
+    /// The side of every control in the composer row, in points.
+    ///
+    /// The row used to size its buttons by padding an icon, which made each one a slightly different size and
+    /// each one smaller than it looked. This is the row a thumb aims at while the keyboard covers the lower
+    /// half of the screen, so the controls get a fixed square at the size iOS treats as a target a finger can
+    /// hit, matched by `contentShape` so the hit area is the square rather than the glyph inside it. One
+    /// constant for all three controls also keeps Send from shifting when the hide-keyboard chevron appears
+    /// or when Stop replaces Send.
+    static let composerControlSide: CGFloat = 44
+
 
     /// `imagePreparer` is the thing that can resize a photo — UIKit and ImageIO, which the domain cannot
     /// import. Left nil in previews and tests, which then get `PassthroughImagePreparer`: it checks the bytes
@@ -58,25 +68,16 @@ public struct ChatScreen: View {
                 .cairnPresentation(theme: settings)
             }
         }
-        .toolbar {
-            // The keyboard's own bar is where a "Done" belongs. It is declared here, on the screen
-            // rather than on the composer subview, because a keyboard accessory item is collected from
-            // the screen's toolbar — an item buried in a nested subview is the version that silently
-            // fails to appear. There is a second copy of the control down in the composer row itself:
-            // the bar is the one iOS teaches people to use, and the row is the one they find when they
-            // have not been taught.
-            ToolbarItem(placement: .keyboard) {
-                HStack {
-                    Spacer()
-                    Button {
-                        composerFocused = false
-                    } label: {
-                        Label("Done", systemImage: "keyboard.chevron.compact.down")
-                    }
-                    .accessibilityLabel("Hide the keyboard")
-                }
-            }
-        }
+        // No keyboard accessory bar, deliberately, and the composer's own row is the only way to close the
+        // keyboard besides scrolling the transcript.
+        //
+        // `ToolbarItem(placement: .keyboard)` drew a thin strip directly above the keyboard, which put a
+        // "Done" button exactly where the composer's Send button is. On iPhone the two hit areas are a few
+        // points apart and the strip wins, so the tap a person meant for Send dismissed the keyboard instead
+        // — the one mistake a chat app can make with a message already typed in it. The strip also cost a row
+        // of height in the least space-constrained moment the screen has. The chevron in the composer row does
+        // the same job with a target the finger can actually aim at, and `.scrollDismissesKeyboard(.interactively)`
+        // does it with the gesture a person is already making.
     }
 
     /// Present only when a settings store is wired: the chat still saves its own configuration, and a
