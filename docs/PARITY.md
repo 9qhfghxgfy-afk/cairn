@@ -255,3 +255,7 @@ user replies.
 4. Whether voice stays in M6 or moves to the M7 backlog.
 5. Whether the LM Studio `lmStudio` kind is added in P1 (schema) with its lifecycle calls landing in M3.
 
+6. The Model Manager download path (3.5): the sheet-stack dismissal is fixed in code and host-tested, but the
+   phone run that proves it — **Allow & Download** stays open and counts bytes — is owed (ROADMAP, 2026-11-20).
+   The underlying write was also broken: the weights acknowledgement never reached the store, so the tap that
+   looked like a dismissal bug was also a download that never started.

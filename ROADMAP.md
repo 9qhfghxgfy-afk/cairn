@@ -2496,3 +2496,49 @@ revoked traffic ten seconds earlier; the test that pins this is `testRevokingThe
 * The 0.31.4 pin is chosen by what the pinned toolchain can *read*, not by what MLX would prefer. When the CI
   pin moves to a toolchain that parses tools 6.3, the pin should move with it and this note should die.
 
+
+---
+
+## Bug fix (2026-11-20) — the Download sheet dismissed itself, and the acknowledgement never landed
+
+Symptom on the phone: in Models → Download, tapping **Allow & Download** closed the detail sheet, the Models
+screen and the Servers sheet with it, landing back on the chat with nothing downloaded and nothing in flight.
+
+Three causes, each fixed on its own terms.
+
+1. **The write was a no-op.** `ThemeModel.setModelDownloadsAllowed` and `setDownloadCatalogShown` were written
+   `mutate { $0.setX(v) }`, but those `AppSettings` setters are non-mutating and return a copy —
+   `@discardableResult`, because the stored key is optional and the whole copy is what travels to the store.
+   A bare call hands that copy to `discardableResult` and writes nothing: no error, no warning, no trace.
+   Proved on this machine with a compiled repro (`swiftc -swift-version 6`) — `mutate { $0.setFlag(v) }`
+   leaves the value unchanged. So the tap granted nothing, the download refused to start, and
+   `ModelCatalogModel` set its notice line, which is what fired cause 2.
+2. **The sheet was hosted by list content.** `.sheet(item:)` hung off the `Group` that `ModelCatalogScreen`
+   places *inside* `ModelManagerView`'s `List`. A presentation is carried by the node that hosts it, so when
+   the notice line appeared the group changed shape, the list re-diffed, and the node carrying the sheet was
+   recycled — the app dismissed the sheet, not the person. It is hosted by the list container now, through a
+   small `ModelDetailPresentation` view so a sheet's content is never a conditional branch of a list.
+3. **Every settings write repainted the root.** Observation tracks a property, not a field inside a struct.
+   `CairnChromeStyle` resolved paint from `ThemeModel.settings`, and `CairnLaunchView` watched
+   `theme?.settings.outboundWebAllowed` and `.showsGenerationStats`, so any settings write at all — an
+   acknowledgement, a provider's consent, a catalogue preference — invalidated the window that owns every
+   presentation. The paint now lives in `ThemeModel.chrome` and the two tool answers in
+   `ThemeModel.toolSignals`, each republished only when it actually moves; `CairnApp` watches `toolSignals`.
+   `ThemeChrome.swift` holds the rule and the reason.
+
+Also in this change: the detail sheet no longer prints a bare "No capabilities published for this entry." over
+an entry that states its size, its quantisation and a context ceiling. `LocalCatalogRow.capabilityNote` names
+the facts that *are* published and keeps the flat sentence for an entry that publishes nothing, worded per
+origin. Nothing is inferred — `testTheNoteNeverClaimsACapabilityThePublisherDidNotPublish` holds that line.
+
+**Host-verified:** `swift test` in `Packages/CairnChatDomain` — 650 tests, 0 failures, including the 5 new
+capability-note tests; `Scripts/test-guards.sh` at 53 ok, 0 failed. **CI-verified:** pending; the green run
+number is filled in here the moment it exists. **On-device-verified:** owed — items 1 and 2 of this round's
+device checklist are exactly this path, and the sheet has to stay open through a completed download before
+this is called fixed.
+
+Left open on purpose: `ModelCatalogModel.weightsAreAllowed` reads the settings value through a
+`ModelTrafficSwitch` closure, so the Download sheet's own body re-evaluates on a settings write. Its host is a
+stable container now, so re-evaluation cannot dismiss it; narrowing that read is deferred until it costs
+something. `ThemeModel+WebSearch.swift` is a file split of the web-search rows, not a behaviour change.
+
