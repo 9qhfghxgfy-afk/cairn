@@ -25,18 +25,41 @@ public struct ModelTrafficSwitch: @unchecked Sendable {
     }
 
     /// Previews and tests: an in-memory switch, with nothing behind it.
+    ///
+    /// Deliberately **not** `@MainActor`. A non-isolated reference handed into a `@MainActor` closure is
+    /// "sending 'box' risks causing data races" (CI run 44682235454), and making the cell main-actor-isolated
+    /// only moves the problem: this function is also used as a default argument, and Swift checks default
+    /// arguments in a nonisolated context, so a `@MainActor` factory would fail there instead. The cell is
+    /// therefore made genuinely thread-safe, which is the claim `@unchecked Sendable` has to be able to keep.
     public static func memory(granted: Bool = false) -> ModelTrafficSwitch {
         let box = TrafficBox(granted: granted)
         return ModelTrafficSwitch(
-            isGranted: { box.granted },
-            setGranted: { box.granted = $0 }
+            isGranted: { box.read() },
+            setGranted: { box.write($0) }
         )
     }
 }
 
-/// A reference cell so `memory(granted:)` can be mutated through the closures it hands back. Touched only
-/// from the main actor, which is what its only two callers are.
-private final class TrafficBox {
-    var granted: Bool
-    init(granted: Bool) { self.granted = granted }
+/// A reference cell so `memory(granted:)` can be mutated through the closures it hands back.
+///
+/// Every reader today is on the main actor, but the closures escape, so the cell cannot rely on that: it
+/// locks. An unchecked `Sendable` claim built on "nobody will call this from elsewhere" is the kind that
+/// breaks silently when someone does.
+private final class TrafficBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value: Bool
+
+    init(granted: Bool) { self.value = granted }
+
+    func read() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return value
+    }
+
+    func write(_ granted: Bool) {
+        lock.lock()
+        defer { lock.unlock() }
+        value = granted
+    }
 }

@@ -2368,6 +2368,12 @@ revoked traffic ten seconds earlier; the test that pins this is `testRevokingThe
   and this machine has no Xcode. The App bridge (`OnDeviceModelLibrary`, its download half, and the `CairnApp` wiring) is
   likewise uncompiled here; a strict-concurrency review caught two capture errors before the push (`var` captured by a
   `@Sendable` progress closure; a `@MainActor` test stub reached through `self` inside a `@Sendable` stream builder).
+  Run **44682235454** then went red on one more, in `ModelTrafficSwitch.memory(granted:)`: *sending 'box' risks causing
+  data races*. The reviewer's answer was that region-based isolation permits it; the compiler's answer was no. The cell
+  behind the in-memory switch is now locked and `@unchecked Sendable` rather than a bare reference handed into
+  `@MainActor` closures — and it stays a nonisolated factory, because Swift checks a default argument
+  (`traffic: … = .memory()`) in a nonisolated context, so marking it `@MainActor` would only have moved the error.
+
 * **On-device / real-network:** pending. Nothing on this list has been seen on an iPhone or against a live server.
 
 ### Device checklist for this screen — six lines, each says what it proves
