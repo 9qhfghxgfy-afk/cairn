@@ -66,6 +66,19 @@ public final class ThemeModel {
         mutate { $0.setOutboundWebAllowed(allowed) }
     }
 
+    /// Whether the Model Manager's Download tab shows the curated library. A preference, not a
+    /// permission: it defaults to on, and turning it off changes what a screen shows rather than what
+    /// the device is allowed to send.
+    public func setDownloadCatalogShown(_ shown: Bool) {
+        mutate { $0.setDownloadCatalogShown(shown) }
+    }
+
+    /// The acknowledgement for pulling model weights. Off until granted, and read through the settings
+    /// value by anything that is about to start a download rather than cached in a view.
+    public func setModelDownloadsAllowed(_ allowed: Bool) {
+        mutate { $0.setModelDownloadsAllowed(allowed) }
+    }
+
     /// The user's own SearXNG endpoint; nil or empty means "not set", which is what makes the keyless
     /// default the answer instead of a broken address.
     ///

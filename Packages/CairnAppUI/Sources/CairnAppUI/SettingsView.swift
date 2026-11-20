@@ -39,6 +39,7 @@ struct SettingsView: View {
             newChatSection
             turnSection
             toolsSection
+            modelsSection
             aboutSection
         }
         .navigationTitle("Settings")

@@ -2317,3 +2317,81 @@ the card: DuckDuckGo's endpoint has no such parameter, so that route drops the v
   Apple's documented behaviour, not by running the iPad build.
 * `InfoSectionHeader` in a `Section` header has not been seen on a device: a control inside a header view is exactly the
   kind of container SwiftUI has opinions about.
+## 2026-11-19 — the Download Models catalog: a list to choose from, and one permission that covers both kinds of download
+
+The Model Manager's Download tab was a text field. Everything else in the app lets a person pick from a list; this one
+made them type `mlx-community/…` or `qwen3:8b` from memory. The curated catalog already existed in the domain
+(`DefaultModelCatalog`, eight entries with published sizes) and nothing on screen used it.
+
+### What landed
+
+`ModelCatalogScreen` replaces `ModelDownloadForm` in both tabs. A segmented **Install onto** picks the destination — this
+phone, or the connected server — and the screen then lists either the curated on-device catalog filtered by what is
+actually available in the runtime, or the tags a running server will accept, each row carrying the pull command it will
+run. Capability chips filter the list, size and name order it, and tapping a card opens `ModelDetailSheet` with the
+published facts and one primary action. The free-text form is still reachable where it is the only option: a server that
+offers no tags, and any Ollama-compatible server when adding by name.
+
+`ModelCatalogModel` is the whole view model; the App injects a `LocalModelLibraryServicing` (a listing plus a download
+stream) because `CairnAppUI` may open neither URLSession nor `CairnInferenceLocal`. `App/OnDeviceModelLibrary.swift`
+bridges the two: it reads installed models from the on-disk manifests rather than trusting an in-memory list that is empty
+before an engine is created, and its `download` runs `ModelDownloadManager` behind a `LocalTransferState` stream.
+`CairnApp.swift` builds both at launch so a download works before any engine exists.
+
+`ModelTransferStatus` is the one progress shape both paths report through. The on-device path states
+queued/downloading/verifying/installed and a byte total from the file listing; the server path reports the server's own
+status text and a total only when the server names one, and says "total size not stated" when it does not. No invented
+stage, no 0% bar.
+
+### The two decisions worth their cost
+
+**Showing the list and moving the weights are different permissions.** `showsDownloadCatalog` defaults on: a list of names
+asks nothing of the network and does not need a switch. `modelDownloadsAllowed` defaults off: gigabytes leaving the device
+is the permission, and it is the *same* switch that lets a pull run against a user's own Ollama server, because a pull
+fetches weights from somewhere else too. It is badged `.publicInternet`, and Settings carries both the catalog switch (in
+the Model section) and the download switch (in Network & Privacy, beside Web Search and LAN sharing).
+
+**The grant is read, never copied.** The model holds a `ModelTrafficSwitch` — two `@MainActor` closures over the live
+`ThemeModel` — and consults it at tap time. A `Bool` captured at launch would let a download start after the user had
+revoked traffic ten seconds earlier; the test that pins this is `testRevokingTheGrantStopsTheNextDownload`.
+
+
+
+### Verification — the three tiers, not merged
+
+* **Host:** `swift test` green in `CairnChatDomain` — new `ModelTransferStatusTests`, the unstated-size-sorts-last rule in
+  both directions, the two new `(i)` keys (35 total), the settings defaults and the legacy-nil round-trip.
+  `bash Scripts/parse-check.sh` parses 642 files clean; `Scripts/ci.sh guards` reports 53 ok / 0 failed.
+* **CI-verified:** *pending on this push.* The `Tests/CairnTests` cases added here — the catalog asks nothing, the phone
+  path reaches the library only after the switch, the server path asks the connected server, no server means no offer,
+  cancel stops the task, revoking stops the next download — have never run: that target compiles only under `xcodebuild`,
+  and this machine has no Xcode. The App bridge (`OnDeviceModelLibrary`, its download half, and the `CairnApp` wiring) is
+  likewise uncompiled here; a strict-concurrency review caught two capture errors before the push (`var` captured by a
+  `@Sendable` progress closure; a `@MainActor` test stub reached through `self` inside a `@Sendable` stream builder).
+* **On-device / real-network:** pending. Nothing on this list has been seen on an iPhone or against a live server.
+
+### Device checklist for this screen — six lines, each says what it proves
+
+1. Servers → On-Device → **Download models** opens the curated list with sizes matching `DefaultModelCatalog`. Proves the
+   App's bridge into `CairnInferenceLocal` is wired, not merely compilable.
+2. Flip to **This server** with nothing connected: the screen says connect first and offers nothing to tap. Proves the
+   inert state instead of a list of taps that would fail.
+3. With a live Ollama server the tag list appears; a row already installed opens a sheet whose primary action is
+   **Use in this chat** and whose footer states the bytes were already fetched. Proves installed rows are marked, not
+   duplicated.
+4. Turn **Model Downloads** off and tap a row: a notice names the Settings toggle and no socket opens. Turn it on and tap
+   again: the transfer starts. Proves the grant is read at tap time.
+5. Start a phone download: bytes count up, a listing that states no size reads "total size not stated" with no bar, and
+   **Cancel** leaves a resumable partial. Proves resume and the honest-fraction rule.
+6. Start a server pull, then open Settings → Network & Privacy: **Model Downloads** is the row that reads allowed, and its
+   `(i)` says the same switch covers both paths. Proves one permission governs both kinds of download.
+
+### Known gaps
+
+* No automated test hosts the screen — `CairnAppUI` has no test target. The sheet's states, the chip bar and the segmented
+  destination are asserted only through the view model.
+* A server's tag list is the *offer* the backend makes; whether a pull of a listed tag succeeds stays the server's
+  business, and no stub can promise it.
+* Ollama frequently reports no total for a pull while an OpenAI-compatible server may report one. Both shapes are handled;
+  neither has been observed.
+

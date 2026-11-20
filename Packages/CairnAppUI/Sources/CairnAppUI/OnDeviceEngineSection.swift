@@ -37,7 +37,7 @@ struct OnDeviceEngineSection: View {
 
             if let manager = model.modelManager {
                 NavigationLink {
-                    ModelManagerView(model: manager)
+                    ModelManagerView(model: manager, catalog: model.modelCatalog)
                 } label: {
                     Label("Model Manager", systemImage: "shippingbox")
                 }

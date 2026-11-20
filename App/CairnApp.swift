@@ -152,6 +152,21 @@ struct CairnLaunchView: View {
                         secrets: secrets
                     )
                 )
+                // The Download library: the names Cairn curates, this phone's own model store, and the
+                // acknowledgement that lets weights move. It is its own view model because it works with no
+                // server configured at all. The acknowledgement is read through the settings object on every
+                // tap rather than copied once, so turning it off in Settings stops the *next* download —
+                // copying it would let a grant made hours ago keep authorising traffic after the person had
+                // taken it back.
+                let weightTraffic = ModelTrafficSwitch(
+                    isGranted: { builtTheme.settings.modelDownloadsAreAllowed },
+                    setGranted: { builtTheme.setModelDownloadsAllowed($0) }
+                )
+                builtServers.modelCatalog = ModelCatalogModel(
+                    library: OnDeviceModelLibrary.installed(traffic: weightTraffic),
+                    servers: builtServers.modelManager,
+                    traffic: weightTraffic
+                )
                 // A memory warning releases the resident on-device model. Held in state so the
                 // watch is not deallocated the moment this closure returns.
                 onDeviceWatch = OnDeviceWiring.startMemoryWatch(onDeviceRegistry)

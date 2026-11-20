@@ -9,10 +9,14 @@ import CairnChatDomain
 /// empty condition instead of rendering a blank row.
 public struct ModelManagerView: View {
     private var model: ModelManagerModel
+    /// The curated library for the Download tab. With none, that tab falls back to the typed-name form,
+    /// which is the shape this screen had before the library existed.
+    private var catalog: ModelCatalogModel?
     @State private var tab: ModelManagerTab = .running
 
-    public init(model: ModelManagerModel) {
+    public init(model: ModelManagerModel, catalog: ModelCatalogModel? = nil) {
         self.model = model
+        self.catalog = catalog
     }
 
     public var body: some View {
@@ -28,7 +32,12 @@ public struct ModelManagerView: View {
             switch tab {
             case .running: ModelRunningList(model: model)
             case .installed: ModelInstalledList(model: model)
-            case .download: ModelDownloadForm(model: model)
+            case .download:
+                if let catalog {
+                    ModelCatalogScreen(model: catalog)
+                } else {
+                    ModelDownloadForm(model: model)
+                }
             }
         }
         .navigationTitle("Models")
