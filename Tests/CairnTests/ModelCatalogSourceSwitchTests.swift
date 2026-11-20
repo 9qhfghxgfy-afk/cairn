@@ -110,6 +110,11 @@ private final class SourceStubLibrary: LocalModelLibraryServicing {
     func installedRows() async throws -> [InstalledLocalModel] { [] }
     func delete(_ model: InstalledLocalModel) async throws {}
 
+    func pauseDownload(repoID: String) async {}
+    func cancelDownload(repoID: String) async throws {}
+    func discard(repoID: String) async throws {}
+    func keepsPartialTransfer(repoID: String) async -> Bool { false }
+
     func download(_ row: LocalCatalogRow) -> AsyncThrowingStream<LocalTransferState, any Error> {
         downloadCalls.append(row.repoID)
         return AsyncThrowingStream { continuation in

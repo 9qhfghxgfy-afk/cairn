@@ -4,6 +4,12 @@ import Foundation
 public enum ModelDownloadEvent: Sendable, Equatable {
     case planned(fileCount: Int, totalBytes: Int64?)
     case fileStarted(name: String)
+    /// Nothing is arriving, and the system says why rather than failing: it is holding this file's
+    /// connection open and waiting for a route back to the network. The screen has to say so — a bar
+    /// that stops moving with no explanation reads as a crash, and the person stops a transfer that was
+    /// seconds from carrying on. It is the one event that carries no byte counts, because a wait
+    /// invents none.
+    case waiting(name: String)
     case fileProgress(name: String, update: DownloadProgressUpdate)
     case fileFinished(name: String, verified: Bool)
     case paused(name: String)

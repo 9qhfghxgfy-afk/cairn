@@ -18,7 +18,11 @@ struct ModelDetailSheet: View {
     // `private` member is unreachable from an extension in another file.
     var model: ModelCatalogModel
     let snapshot: LocalCatalogRow
-    @State private var showsMetadata = false
+    @State var showsMetadata = false
+    /// Set by the Cancel button rather than acting on the spot. A cancel is the one transfer control that
+    /// cannot be undone, and on a multi-gigabyte download the question is worth one extra tap — asked in
+    /// words that name the bytes at stake instead of "Are you sure?".
+    @State var confirmingCancel = false
 
     init(model: ModelCatalogModel, row: LocalCatalogRow) {
         self.model = model

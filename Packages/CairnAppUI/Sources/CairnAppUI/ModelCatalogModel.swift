@@ -75,6 +75,36 @@ public final class ModelCatalogModel {
     /// installed" about a model that finished downloading a minute ago, until the app was relaunched.
     public var onTransferSettled: (@MainActor () -> Void)?
 
+    /// Repositories this phone is holding bytes for, with nothing running.
+    ///
+    /// A pause and an interruption are both invisible once a transfer leaves the view model: the row would
+    /// then offer a fresh-looking Download button for four gigabytes already sitting on the device, and
+    /// progress nobody mentions is how a person ends up deleting a model and re-fetching what they had. This
+    /// set is what makes a row say "1.2 GB of 4.1 GB kept — Resume" instead of pretending to be untouched.
+    public private(set) var partialRows: Set<String> = []
+
+    /// Which rows are holding kept bytes, read from the store rather than remembered in memory.
+    ///
+    /// The store is asked because it is the thing that survives: a download iOS killed with no Pause button
+    /// pressed is exactly the case this is for, and nothing in memory would still be there to remember it.
+    /// Rows with something in flight are skipped — asking about those races the transfer that is writing the
+    /// very blocks this question is about.
+    public func refreshPartials() async {
+        guard let library else {
+            partialRows = []
+            return
+        }
+        var found: Set<String> = []
+        for row in rows where !row.isInstalled {
+            if transfers[row.id] != nil { continue }
+            if let status = phoneStatus, status.entryID == row.id, status.isInFlight { continue }
+            if await library.keepsPartialTransfer(repoID: row.repoID) {
+                found.insert(row.id)
+            }
+        }
+        partialRows = found
+    }
+
     /// The cards to draw, in the chosen order, with a typed name offered as its own card when the
     /// library does not carry it.
     public var visibleRows: [LocalCatalogRow] {
@@ -115,6 +145,10 @@ public final class ModelCatalogModel {
                 // emptying the tab: "no models" would be a claim nobody checked.
                 notice = error.localizedDescription
             }
+            // A refresh answers three questions, not one: what is installed, what is running, and what is
+            // being kept. The third is the one a person loses sleep over, and it is the only one that cannot
+            // be inferred from the other two.
+            await refreshPartials()
         } else {
             let held = Set(servers?.installed.map(\.id) ?? [])
             rows = ModelCatalog.ollama.map { $0.marking(installed: held.contains($0.repoID)) }

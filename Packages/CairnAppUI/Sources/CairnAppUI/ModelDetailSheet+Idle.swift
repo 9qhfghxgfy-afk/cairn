@@ -12,6 +12,7 @@ extension ModelDetailSheet {
     @ViewBuilder var idleBlock: some View {
         if row.isInstalled { installedNote }
         if model.needsAnotherServer { serverChoice }
+        if model.canResume(row) { keptNote }
         if row.origin.landsOnThisPhone && !model.weightsAreAllowed {
             consentBlock
         } else if !isWaitingOnAServer {
@@ -19,6 +20,22 @@ extension ModelDetailSheet {
             // app; the chooser above already names what is missing.
             downloadButton
         }
+    }
+
+    /// The bytes this phone is holding with nothing running, stated as a fact before the button that acts on
+    /// them.
+    ///
+    /// "Resume" on its own is a word with no weight: nobody can tell whether the choice is worth nine
+    /// gigabytes of patience or nine seconds, and the honest answer to "should I resume" is only available
+    /// from the store. So the line says what is being kept and what Download would have done anyway — which is
+    /// the part people actually get wrong, because a Download here does not start over, and a person who does
+    /// not know that assumes it does and stops asking.
+    @ViewBuilder private var keptNote: some View {
+        Text("Cairn is holding part of this model on this phone. Resume carries on from it — and Download "
+                + "would have carried on from it too, rather than starting the file again.")
+            .font(.caption)
+            .foregroundStyle(CairnTheme.stoneLight)
+            .accessibilityIdentifier("cairn.detail.kept")
     }
 
     @ViewBuilder private var installedNote: some View {
@@ -54,10 +71,16 @@ extension ModelDetailSheet {
 
     /// The button names the machine that will hold the model, because "Download" on a tag pointed at
     /// someone else's server is not the same promise as "Download" to this phone.
+    ///
+    /// "Resume" is offered for a phone transfer this device is holding bytes for, because a person who is
+    /// about to sit through a restart of a three-gigabyte file deserves to be told the file is not going to
+    /// restart. It is the same tap and the same code path either way — the label is the only thing that
+    /// changes, which is the point: the promise was always the same, the sheet just used not to say so.
     private var downloadLabel: String {
         if model.needsAnotherServer, let target = model.pullTarget {
             return "Pull onto \(target.name)"
         }
+        if model.canResume(row) { return "Resume" }
         return row.origin.destinationText
     }
 

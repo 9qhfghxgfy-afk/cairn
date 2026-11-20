@@ -12,7 +12,9 @@ import Foundation
 /// bar that claims to know how far it has to go is a claim nobody made.
 public enum ModelTransferStage: String, Sendable, Equatable {
     case queued
+    case waiting
     case running
+    case paused
     case verifying
     case finished
     case stopped
@@ -20,8 +22,19 @@ public enum ModelTransferStage: String, Sendable, Equatable {
 
     public var isInFlight: Bool {
         switch self {
-        case .queued, .running, .verifying: return true
-        case .finished, .stopped, .failed: return false
+        case .queued, .waiting, .running, .verifying: return true
+        case .paused, .finished, .stopped, .failed: return false
+        }
+    }
+
+    /// Whether the numbers under this stage still mean something. A paused transfer has stopped moving
+    /// but keeps every byte it fetched, so its bar stays drawn — that bar is what tells the person
+    /// there is something worth resuming. A failed transfer's numbers are not trustworthy, so it gets
+    /// the message instead of a bar.
+    public var showsProgress: Bool {
+        switch self {
+        case .failed: return false
+        case .queued, .waiting, .running, .paused, .verifying, .finished, .stopped: return true
         }
     }
 
@@ -30,7 +43,9 @@ public enum ModelTransferStage: String, Sendable, Equatable {
     public var label: String {
         switch self {
         case .queued: return "Queued"
+        case .waiting: return "Waiting for the network"
         case .running: return "Downloading"
+        case .paused: return "Paused"
         case .verifying: return "Checking the checksum"
         case .finished: return "Installed"
         case .stopped: return "Cancelled"
@@ -49,19 +64,25 @@ public struct ModelTransferStatus: Sendable, Equatable {
     public var line: String
     public var completedBytes: Int64?
     public var totalBytes: Int64?
+    /// The file a phone transfer is sitting on right now. A server pull never names one, because the
+    /// server's own status line is all Cairn is told — and inventing a filename here would be a claim
+    /// about someone else's machine.
+    public var fileName: String?
 
     public init(
         entryID: String,
         stage: ModelTransferStage,
         line: String,
         completedBytes: Int64? = nil,
-        totalBytes: Int64? = nil
+        totalBytes: Int64? = nil,
+        fileName: String? = nil
     ) {
         self.entryID = entryID
         self.stage = stage
         self.line = line
         self.completedBytes = completedBytes
         self.totalBytes = totalBytes
+        self.fileName = fileName
     }
 
     /// A phone transfer, whose stages Cairn owns end to end. The words stay `LocalTransferState`'s
@@ -72,8 +93,16 @@ public struct ModelTransferStatus: Sendable, Equatable {
         var total: Int64?
         switch state {
         case .queued: stage = .queued
-        case .running(let completedBytes, let totalBytes):
+        case .waiting(let completedBytes, let totalBytes, _):
+            stage = .waiting
+            done = completedBytes
+            total = totalBytes
+        case .running(let completedBytes, let totalBytes, _):
             stage = .running
+            done = completedBytes
+            total = totalBytes
+        case .paused(let completedBytes, let totalBytes, _):
+            stage = .paused
             done = completedBytes
             total = totalBytes
         case .verifying: stage = .verifying
@@ -87,7 +116,7 @@ public struct ModelTransferStatus: Sendable, Equatable {
         case .failed: stage = .failed
         }
         self.init(entryID: entryID, stage: stage, line: state.label,
-                  completedBytes: done, totalBytes: total)
+                  completedBytes: done, totalBytes: total, fileName: state.fileName)
     }
 
     /// A server pull, whose only truth is the line the server sent. No stage is invented here: the
@@ -104,9 +133,17 @@ public struct ModelTransferStatus: Sendable, Equatable {
 
     public var isInFlight: Bool { stage.isInFlight }
 
+    /// The stage and the file it is sitting on, in one line: `Downloading · model-00001-of-00004.safetensors`.
+    /// A pull with no stated file is just the stage, because the sheet must not pad the line with a
+    /// filename it was never given.
+    public var stageDetail: String {
+        guard let fileName, !fileName.isEmpty else { return line }
+        return "\(line) · \(fileName)"
+    }
+
     /// nil whenever no denominator was ever named.
     public var fraction: Double? {
-        guard stage.isInFlight, let totalBytes, totalBytes > 0, let completedBytes else { return nil }
+        guard stage.showsProgress, let totalBytes, totalBytes > 0, let completedBytes else { return nil }
         return min(1, Double(completedBytes) / Double(totalBytes))
     }
 

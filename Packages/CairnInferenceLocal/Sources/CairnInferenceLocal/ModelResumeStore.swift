@@ -48,4 +48,16 @@ public struct ModelResumeStore: Sendable {
         let target = directory.appendingPathComponent(ModelStoreLayout.slug(for: repoID), isDirectory: true)
         try? FileManager.default.removeItem(at: target)
     }
+
+    /// Whether this phone is still holding a transfer for a repository that never finished.
+    ///
+    /// A block is what a pause costs, and it is the only durable trace one leaves: the bytes themselves
+    /// sit in a temporary file the system owns. So "is anything kept for this model" is answered by the
+    /// blocks, which is also exactly what a Resume would read — the question and the answer are the same
+    /// thing, which is why this cannot claim a pause the next download would not honour.
+    public func hasBlocks(repoID: String) -> Bool {
+        let target = directory.appendingPathComponent(ModelStoreLayout.slug(for: repoID), isDirectory: true)
+        let entries = (try? FileManager.default.contentsOfDirectory(atPath: target.path)) ?? []
+        return !entries.isEmpty
+    }
 }

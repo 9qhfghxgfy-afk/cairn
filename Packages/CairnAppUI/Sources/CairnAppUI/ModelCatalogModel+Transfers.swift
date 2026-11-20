@@ -42,6 +42,9 @@ extension ModelCatalogModel {
             }
             self?.task = nil
             await self?.refresh()
+            // The pause this transfer may just have left behind is exactly what this question is about, and
+            // it has to be asked after the store has settled rather than before.
+            await self?.refreshPartials()
             self?.repoint()
             // The phone now holds, or does not hold, a model the runtime can load. The Servers screen's
             // report is the App layer's to compute, so this is the nudge rather than the answer.
@@ -126,5 +129,92 @@ extension ModelCatalogModel {
     public func allowAndDownload(_ row: LocalCatalogRow) {
         allowWeights()
         download(row)
+    }
+
+    // MARK: - Pause, resume, cancel
+
+    /// Applies one of the three transfer verbs to whichever machine is doing the pulling.
+    ///
+    /// The sheet offers Pause, Resume and Cancel without knowing or caring whether this model is being
+    /// fetched by the phone or by a server, because that difference belongs here. A phone pause closes a
+    /// connection and keeps resume blocks; a server pause asks that server to stop its own task, which is the
+    /// only thing Cairn can ask of a machine it does not own. Getting that wrong in a view would mean the same
+    /// button meaning two different things depending on a tab, which is the sort of thing nobody notices until
+    /// someone loses four gigabytes.
+    public func control(_ action: ModelTransferControl, for row: LocalCatalogRow) async {
+        switch action {
+        case .pause:
+            await pauseTransfer(row)
+        case .cancel:
+            await cancelTransfer(row)
+        case .resume:
+            // Resume is the start button under another name. The phone path picks up the bytes it kept from
+            // the same offsets; the server path asks again, which is all there is to ask. A separate "resume"
+            // operation would be a second path through the same code, and the second path is where a resume
+            // that quietly restarts from zero would hide.
+            download(row)
+        }
+    }
+
+    /// Whether a row can be paused right now, and therefore whether the button may be drawn at all.
+    public func canPause(_ row: LocalCatalogRow) -> Bool {
+        guard let status = status(for: row), status.isInFlight else { return false }
+        return row.origin.landsOnThisPhone ? library != nil : serverPullIsInFlight
+    }
+
+    /// Whether a row is holding kept bytes with nothing running — the state a Resume button stands for.
+    public func canResume(_ row: LocalCatalogRow) -> Bool {
+        !row.isInstalled && partialRows.contains(row.id)
+    }
+
+    private func pauseTransfer(_ row: LocalCatalogRow) async {
+        guard canPause(row) else { return }
+        if row.origin.landsOnThisPhone {
+            guard let library else { return }
+            // The line changes before the connection does. Closing a transfer takes a moment, and a bar that
+            // keeps sliding for two seconds after a tap is read as a button that did not work, so the person
+            // taps again. The manager's own `paused` state arrives with the real counts and replaces this.
+            phoneStatus = ModelTransferStatus(entryID: row.id, stage: .paused, line: "Pausing")
+            await library.pauseDownload(repoID: row.repoID)
+        } else {
+            // A server cannot be paused from here — Cairn has no such verb for a machine it does not own —
+            // so the button that says Pause here stops the pull and the notice says exactly that. What the
+            // server keeps on its own disk is the server's business, and promising a resume Cairn has no way
+            // to ask for would be a nicer sentence and a worse app.
+            servers?.stopPull()
+            notice = "Stopped on the server. Download asks it again; whatever the server kept is its own to "
+                + "reuse."
+        }
+    }
+
+    private func cancelTransfer(_ row: LocalCatalogRow) async {
+        if row.origin.landsOnThisPhone {
+            guard let library else { return }
+            // The reader goes first, then the transfer, then the bytes. In any other order a progress line can
+            // land after the row has been told it is over, which is how a cancelled download ends up on screen
+            // with a bar still moving under the word "Cancelled".
+            if phoneStatus?.entryID == row.id {
+                task?.cancel()
+                task = nil
+            }
+            phoneStatus = ModelTransferStatus(entryID: row.id, state: .stopped)
+            notice = "Cancelled. Cairn throws away the part it had fetched."
+            do {
+                try await library.cancelDownload(repoID: row.repoID)
+            } catch {
+                // The service's own words, again: refusing to delete and failing to delete are different
+                // problems, and a person who is told "cancelled" when nothing was freed goes on believing the
+                // space is gone.
+                notice = error.localizedDescription
+            }
+            await refresh()
+            onTransferSettled?()
+        } else {
+            // The existing Cancel is the one that knows how a server pull is torn down — it holds the task,
+            // the identifier and the notice, and it is already tested. A second teardown written here would
+            // be a second answer to "what does Cancel mean", and the two would drift.
+            cancel()
+            notice = "Cancelled on the server. Cairn does not delete anything on that machine."
+        }
     }
 }
