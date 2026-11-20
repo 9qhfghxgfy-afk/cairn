@@ -61,7 +61,7 @@ struct DownloadBridgeAnswerTests {
         defer { try? FileManager.default.removeItem(at: root) }
         let bridge = DownloadBridge()
         let token = bridge.register(destination: destination) { _ in }
-        bridge.answer(token, failure: nil)
+        bridge.answer(token: token, failure: nil)
         #expect(await bridge.wait(for: token)
                 == .failed(message: "The transfer finished without delivering a file."))
     }
@@ -75,7 +75,7 @@ struct DownloadBridgeAnswerTests {
         let token = bridge.register(destination: destination) { _ in }
         // 206, not 200: a resumed file is answered with partial content and is still the file.
         bridge.storeFile(try body("payload payload"), for: token, response: response(206))
-        bridge.answer(token, failure: nil)
+        bridge.answer(token: token, failure: nil)
         #expect(await bridge.wait(for: token) == .complete(bytes: 14))
         #expect(try Data(contentsOf: destination) == Data("payload payload".utf8))
     }
@@ -103,10 +103,13 @@ struct DownloadBridgeAnswerTests {
         defer { try? FileManager.default.removeItem(at: root) }
         let bridge = DownloadBridge()
         let token = bridge.register(destination: destination) { _ in }
-        bridge.answer(token, failure: URLError(.timedOut))
-        bridge.answer(token, failure: nil)
+        bridge.answer(token: token, failure: URLError(.timedOut))
+        bridge.answer(token: token, failure: nil)
         switch await bridge.wait(for: token) {
         case .failed(let text):
+            // `message` is a non-optional String, so there is nothing to unwrap here. Optional chaining on a
+            // non-optional is a compile error in Swift 6, and a `?? false` would also swallow a real failure
+            // whose sentence happened not to match instead of reporting it.
             #expect(text.contains("\(NSURLErrorTimedOut)"))
             #expect(text.contains("Resume"))
         default:

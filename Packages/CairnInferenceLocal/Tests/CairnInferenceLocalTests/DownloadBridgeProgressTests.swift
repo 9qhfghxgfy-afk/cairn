@@ -92,7 +92,7 @@ struct DownloadBridgeProgressTests {
     @Test func reportsNothingAfterATransferIsAnswered() {
         let recorder = Recorder()
         let (bridge, token) = bridge(recorder)
-        bridge.answer(token, failure: nil)
+        bridge.answer(token: token, failure: nil)
         bridge.emitProgress(token: token, received: 5_000_000, expectedFromServer: 9_000_000)
         bridge.emitWaiting(token: token, expectedFromServer: 9_000_000)
         #expect(recorder.count == 0)
