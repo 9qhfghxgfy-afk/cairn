@@ -2258,6 +2258,15 @@ in `WebSearchProviderEditor.swift` at `e203fca` and were green in run 4465219658
 simulator only, and no host-test lane builds it for macOS. **On-device-verified: no.** **Real-network-verified: no.** A
 green run for this pass is still owed, and nothing here is claimed as a milestone until one exists.
 
+**CI-verified: yes — run [44663240675](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/44663240675) on `d7837ec`,
+completed success.** Privacy guards green with the new `check-viewbuilder.sh` step in the guard job and the guard self-test
+still at 53/53; Host unit tests on macOS — **585 domain + 170 remote, 0 failures**; Build + test on iPhone 17 / iOS 26.5 —
+build green, **195 `CairnTests`, 0 failures**, which is 193 plus the two Web Search filter tests added here: the stricter
+Safe Search value and the chosen window come back off the stored row, and a fresh draft still stores no window. The claim is
+pinned to `d7837ec` — the run before it, `44660409341` on `3b64b00`, is the one that failed to compile. **On-device-verified:
+no** — no popover in this pass has been seen on a screen, which is the standing gap above. **Real-network-verified: no** —
+nothing here sends a request.
+
 ### The catalogue, not the view, holds the words
 
 `SettingInfoKey` (33 keys across five groups: Settings, Chat, Web Search, Server, Sharing) and `SettingInfo`
