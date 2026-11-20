@@ -945,7 +945,9 @@ Known gaps carried forward, stated plainly:
 ## M3 — On-Device Inference + Model Manager (in progress, started 2026-11-17)
 
 Approved decisions for this milestone: link `mlx-swift-lm` for real in an isolated Swift 5 module
-(pinned 3.32.3 = `mlx-swift` 0.32.3, since that release moved to a separate MLX release train);
+(pinned `mlx-swift-lm` **2.31.3** with `mlx-swift` **0.31.4**; the 3.32.3 / 0.32.3 pair this section first
+claimed does not resolve under the pinned toolchain — corrected 2026-11-20, see the pin note in
+`CairnInferenceNative/Package.swift`);
 curated static `mlx-community` catalog plus a validated free-text repo ID behind the
 public-internet opt-in; LM Studio load/unload/download wired with tolerant decoding and marked
 pending real-server verification.
@@ -1002,14 +1004,17 @@ in Swift 5 mode and actor-wrapped at its boundary: `CairnChatDomain`, `CairnAppU
 
 **The escape hatch, and what it costs.** `mlx-swift-lm` compiles swift-syntax macros and a vendored
 C++ engine from source — a long wall-clock and memory cost on an 8 GB authoring Mac and inside a CI
-time box. So the runtime links **only** with `CAIRN_MLX=1`; `CAIRN_SKIP_MLX=1` forces it out, and
-that is what CI and the simulator build use. With it excluded the provider still conforms to
-`InferenceProvider`, still reports `.onDevice`, and says in its own words that the runtime is not in
-this build. **Unproven, stated plainly:** no build here has ever linked MLX, so the 3.32.3 call shapes
-in `MLXNativeEngine.swift` are written from the package's published usage and not observed, and **no
-MLX token has ever been generated anywhere**. Every one of those calls lives in that one file, so a
-correction cannot move anything else. `CAIRN_MLX=1 Scripts/ci.sh native` is the command that settles
-it, on a machine with the time and RAM for it.
+time box. So the runtime links **only** with `CAIRN_MLX=1`; `CAIRN_SKIP_MLX=1` forces it out, and that is
+what the simulator lane and the host test lane use. With it excluded the provider still conforms to
+`InferenceProvider`, still reports `.onDevice`, and says in its own words that the runtime is not in this
+build. Since 2026-11-20 the linked shape is no longer uncompiled: `ci.yml` runs a `native-linked` job
+(`CAIRN_MLX=1 swift build --package-path Packages/CairnInferenceNative --jobs 3`) that fails unless
+`mlx-swift-lm` 2.31.3 with `mlx-swift` 0.31.4 resolved and an `MLXLLM.swiftmodule` exists on disk, and
+`ipa.yml` carries `CAIRN_MLX=1` so the sideloaded artifact is the build that ships an engine. **Still
+unproven, stated plainly:** the 2.31.3 call shapes in `MLXNativeEngine.swift` are written from the
+package's published usage and not observed, and **no MLX token has ever been generated anywhere** —
+compiling a runtime and running one are different claims. Every one of those calls lives in that one file,
+so a correction cannot move anything else. `CAIRN_MLX=1 Scripts/ci.sh native` is the local command.
 
 **Lifecycle is a second boundary, not an edit to the first.** `RemoteModelManaging` is untouched — it
 drains a pull and returns nothing, so the 59 tests that already depend on it keep their meaning.
@@ -2404,4 +2409,90 @@ revoked traffic ten seconds earlier; the test that pins this is `testRevokingThe
   business, and no stub can promise it.
 * Ollama frequently reports no total for a pull while an OpenAI-compatible server may report one. Both shapes are handled;
   neither has been observed.
+
+## 2026-11-20 — the Download screen grows a second library, and the runtime gets compiled once for real
+
+### What this session changed, and why
+
+* **Two libraries behind one screen.** The Download list used to be the on-device list plus whatever a
+  connected server offered. It now has a named source switch — **On device (MLX)**, **Hugging Face**, and
+  **Ollama** — with the two download libraries pre-populated rather than typed in by hand: 18
+  `mlx-community` rows and 13 Ollama tags, every one of them checked against the live API today (HTTP 200 on
+  all six rows the brief named). A source that has no backend says so in one line and offers nothing to tap;
+  it never shows a list of taps that would fail.
+* **Consent is inside the action, not a page away.** A row that needs the network offers **Allow & Download**
+  in the sheet: one tap records the grant and starts the transfer, because sending someone to Settings to
+  enable a switch and back again to press Download is a two-step apology for a one-step decision. The grant is
+  still read at tap time, so turning **Model Downloads** off really stops a socket from opening.
+* **The checksum was never a checksum.** `ModelFilePlan` read `lfs.oid` from the model tree API, which is the
+  *git blob* hash — the hash of the pointer file, not of the weights — so a download could be "verified"
+  against a number that had nothing to do with the bytes it wrote. The endpoint now asks `?blobs=true`, which
+  returns the real `lfs.sha256`, and the parser accepts the shapes the API actually returns. This is the fix
+  the whole download path was waiting for: verification is now verification.
+* **A model that finished downloading is ready now.** The MLX provider used to photograph its model directory
+  at launch, so a model that landed while Cairn was open was invisible until relaunch, and Servers kept saying
+  nothing was installed. Availability is now read through a directory scanner owned by the App layer, the
+  catalogue nudges that reader when a transfer settles, and a folder counts only when `cairn-install.json`,
+  `config.json` and at least one `.safetensors` are all present — newest first, so a half-finished download is
+  never offered to a runtime. Deleting a model now removes its resume blocks with the folder, so bytes that
+  were thrown away cannot outlive the manifest that vouched for them.
+* **The pins were unsatisfiable in practice.** `mlx-swift` 0.31.5 and 0.31.6 declare
+  `swift-tools-version: 6.3;(experimentalCGen)`, which the pinned `Xcode_26.6` refuses to parse during
+  resolution, so every `CAIRN_MLX=1` build died before compiling a line of Cairn. 0.31.4 declares tools 5.12
+  and still satisfies `mlx-swift-lm` 2.31.3's own `.upToNextMinor(from: "0.31.3")`. `project.yml` declares the
+  same pair at the same pins and deliberately does **not** link the products into the app target: a device
+  build already embeds them transitively through `CairnInferenceNative`, `import MLXLLM` stays inside the one
+  Swift 5 island allowed to say it, and a direct link would make every push compile MLX's C++ and Metal core.
+* **A lane that actually compiles the runtime.** `ci.yml` gains `native-linked`:
+  `CAIRN_MLX=1 swift build --package-path Packages/CairnInferenceNative --jobs 3` with a 45-minute clock, plus
+  a step that fails unless `workspace-state.json` shows 2.31.3 with 0.31.4 and an `MLXLLM.swiftmodule` exists
+  on disk — because a manifest that merely parsed is not a runtime that linked. `ipa.yml` gains
+  `CAIRN_MLX: "1"` and 60 minutes, and fails rather than publishing a `.ipa` whose Servers screen would have to
+  admit it has no engine. Build, not test: with the runtime linked `isCompiledIn` flips, and the excluded-lane
+  fallback tests assert the excluded shape on purpose. The proof step counts modules with `wc -l` rather than
+  `grep -q`: `grep -q` exits on its first match, which can leave `find` writing into a closed pipe, and under
+  `pipefail` that SIGPIPE would read as a missing runtime — a red lane caused by a shell race instead of by a
+  missing engine.
+
+### Verification, in the three categories, unblended
+
+* **Host (this machine, measured):** `CairnChatDomain` **645 tests, 0 failures** — includes the source-switch
+  tests and the plan-parser tests for the digest fix. `CairnInferenceNative` **35 tests, 0 failures** with the
+  runtime excluded. `Scripts/parse-check.sh` 665 files clean, `Scripts/check-viewbuilder.sh` clean,
+  `Scripts/ci.sh guards` with `test-guards.sh` **53 ok / 0 failed**.
+* **CI-verified:** **44702969905** green at `27f3d67` (MLX mapping layer), **44706753509** green at `f605315`
+  (source switch + inline consent, and by ancestry `db1fae0` and `962262e`, whose own runs were cancelled by
+  the next push), **44709972928** green at `7ddcb01` in 9m5s (readiness + the 0.31.4 pin), and
+  **44716270719** green at `eb59a78` in 12m — the first run in this repository's history in which a **linked**
+  MLX build completed at all: `native-linked` compiled `CairnInferenceNative` against `mlx-swift-lm` 2.31.3 in
+  262s and its own proof step confirmed 2.31.3 with `mlx-swift` 0.31.4 resolved and an `MLXLLM.swiftmodule` on
+  disk. That retires the sentence "no build has ever linked MLX". It does not retire "no MLX token has ever
+  been generated": compiling a runtime and running one are different claims, and the `.ipa` that carries the
+  engine is still un-dispatched.
+* **On-device / real-network:** pending. No row here has been downloaded to a phone, no digest has been
+  checked against real bytes, and no MLX token has been generated. `ipa.yml` stays `workflow_dispatch` and is
+  the user's to press.
+
+### Device checklist for this round — five lines, each says what it proves
+
+1. Download → **Hugging Face**: the curated rows appear with sizes, and a row opens a sheet whose primary action is
+   **Allow & Download** while the network grant is still off. Proves the library is pre-populated and the grant is one tap.
+2. Tap it and watch: bytes count up, the card names the source, and nothing asks to open Settings. Proves the consent and
+   the transfer are the same action.
+3. Let a row finish, then open Servers without relaunching: the model reads installed and the runtime says it can load it.
+   Proves the disk read replaced the launch-time photograph.
+4. Delete that model, then look at its folder: no resume blocks survive. Proves an uninstall takes the bytes that were
+   thrown away along with the manifest that vouched for them.
+5. With the `CAIRN_MLX=1` IPA installed, pick one small row (`Llama-3.2-1B-Instruct-4bit`), let it verify, and ask it a
+   question on-device. That is the first **real-network-verified** digest check and the first **on-device-verified** MLX
+   token in this project's history — both are owed, neither is claimed.
+
+### Known gaps
+
+* The curated rows are a snapshot: a repository renamed upstream turns a row into a 404 at tap time. The sheet
+  surfaces the failure inside the card rather than pretending the library is authoritative.
+* `CairnAppUI` still has no test target — the source switch, the consent button and the installed-row states are
+  asserted through the view model, not by hosting the screen.
+* The 0.31.4 pin is chosen by what the pinned toolchain can *read*, not by what MLX would prefer. When the CI
+  pin moves to a toolchain that parses tools 6.3, the pin should move with it and this note should die.
 

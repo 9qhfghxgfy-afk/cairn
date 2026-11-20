@@ -132,9 +132,13 @@ jobs:
             || { echo "FAIL: mlx-swift-lm 2.31.3 is not what resolved"; exit 1; }
           grep -qE '"version"[[:space:]]*:[[:space:]]*"0\.31\.4"' "$STATE" \
             || { echo "FAIL: mlx-swift 0.31.4 is not what resolved — the pinned manifest is unreadable or the pin moved"; exit 1; }
-          find "$BUILD" -name 'MLXLLM.swiftmodule' -print -quit | grep -q . \
+          # `wc -l` rather than `grep -q`: `grep -q` exits on its first match, which can leave `find`
+          # writing into a closed pipe, and under `pipefail` that SIGPIPE reads as a failed pipeline — a
+          # lane that goes red for a shell race rather than for a missing runtime.
+          MODULES="$(find "$BUILD" -name 'MLXLLM.swiftmodule' 2>/dev/null | wc -l | tr -d ' ')"
+          [ "${MODULES:-0}" -gt 0 ] \
             || { echo "FAIL: MLXLLM was not built, so this build has no runtime to run a model with"; exit 1; }
-          echo "ok: mlx-swift-lm 2.31.3 with mlx-swift 0.31.4 resolved, built, and linked"
+          echo "ok: mlx-swift-lm 2.31.3 with mlx-swift 0.31.4 resolved, built, and linked ($MODULES MLXLLM module)"
 
 
   app:
