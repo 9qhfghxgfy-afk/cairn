@@ -2532,8 +2532,19 @@ the facts that *are* published and keeps the flat sentence for an entry that pub
 origin. Nothing is inferred — `testTheNoteNeverClaimsACapabilityThePublisherDidNotPublish` holds that line.
 
 **Host-verified:** `swift test` in `Packages/CairnChatDomain` — 650 tests, 0 failures, including the 5 new
-capability-note tests; `Scripts/test-guards.sh` at 53 ok, 0 failed. **CI-verified:** pending; the green run
-number is filled in here the moment it exists. **On-device-verified:** owed — items 1 and 2 of this round's
+capability-note tests; `Scripts/test-guards.sh` at 53 ok, 0 failed.
+
+**CI-verified:** **run 136** (`44732068028`) green on `c27ad29` — privacy guards, host unit tests, the app
+build, and the simulator suite on iPhone 17 / iOS 26.5 at **218 tests, 0 failures**, which covers the 6 new
+settings-write tests and the new sheet host. Two runs came first, and both are worth the record. **134** was
+red on `'ModelDetailPresentation' initializer is inaccessible due to 'private' protection level`: the implicit
+memberwise initialiser of a `private` struct is itself `private`, so a second type in the same file cannot call
+it — the sheet host declares its `init` now, the way `ModelRunningList` in that same file always has. **135**
+was red on a test of mine that asserted the generation-statistics switch starts off, when it ships **on**; the
+test compares each signal against what the shipped settings actually start with, because an assertion aimed at
+a guessed default proves nothing about the switch.
+
+**On-device-verified:** owed — items 1 and 2 of this round's
 device checklist are exactly this path, and the sheet has to stay open through a completed download before
 this is called fixed.
 
