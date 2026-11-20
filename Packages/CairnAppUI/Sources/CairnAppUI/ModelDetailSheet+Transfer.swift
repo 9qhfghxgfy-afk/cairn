@@ -113,8 +113,15 @@ struct ModelCatalogProgress: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(status.line)
+            // `stageDetail`, not `line`: a four-file repository is a bar parked at 1.2 GB with no way to tell
+            // which file it is sitting on, and that is the one question a person asks a multi-file download.
+            // The domain already joins them (`Downloading · model-00002-of-00004.safetensors`) and says nothing
+            // when no file was named — a server pull keeps its own line, and a failure keeps its message,
+            // because neither carries a filename to append.
+            Text(status.stageDetail)
                 .font(.callout)
+                .lineLimit(2)
+                .textSelection(.enabled)
             if let fraction = status.fraction {
                 ProgressView(value: fraction)
                 Text("\(bytesText(status.completedBytes ?? 0)) of "

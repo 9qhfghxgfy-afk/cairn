@@ -63,6 +63,42 @@ final class ModelTransferStatusTests: XCTestCase {
         XCTAssertEqual(sized.percentText, "33%")
     }
 
+    /// The line the sheet actually draws: the stage and the file it is sitting on, joined.
+    ///
+    /// A four-file repository whose bar says only "Downloading" cannot be read — the person cannot tell
+    /// whether it is on file one of four or file four of four. The join lives in the domain so the sheet
+    /// cannot invent a filename it was never handed: a server pull and a failure carry none, and both have
+    /// to read as the line they were given and nothing more.
+    func testTheDrawnLineNamesTheFileInTheHandAndNothingElse() {
+        XCTAssertEqual(ModelTransferStatus(entryID: "m",
+                                           state: .running(doneBytes: 1, totalBytes: 4,
+                                                           file: "model-00002-of-00004.safetensors")).stageDetail,
+                       "Downloading · model-00002-of-00004.safetensors")
+        XCTAssertEqual(ModelTransferStatus(entryID: "m",
+                                           state: .paused(doneBytes: 1, totalBytes: 4,
+                                                          file: "model.safetensors")).stageDetail,
+                       "Paused · model.safetensors")
+        // Nothing named, nothing appended — the line stands alone rather than trailing a separator.
+        XCTAssertEqual(ModelTransferStatus(entryID: "m",
+                                           state: .running(doneBytes: 1, totalBytes: 4)).stageDetail,
+                       "Downloading")
+        XCTAssertEqual(ModelTransferStatus(entryID: "m",
+                                           state: .running(doneBytes: 1, totalBytes: 4, file: "")).stageDetail,
+                       "Downloading")
+        // A refusal carries no file, so its message is shown whole and unadorned.
+        XCTAssertEqual(ModelTransferStatus(entryID: "m",
+                                           state: .failed("The Hub has no file at that address (status 404).")).stageDetail,
+                       "The Hub has no file at that address (status 404).")
+        XCTAssertEqual(ModelTransferStatus(entryID: "m",
+                                           state: .installed(bytes: 8)).stageDetail,
+                       "Installed on this phone")
+        // A server pull is the server's sentence, never Cairn's guess about another machine's file.
+        XCTAssertEqual(ModelTransferStatus(entryID: "m",
+                                           pull: ModelPullProgress(modelName: "m",
+                                                                   statusText: "pulling manifest")).stageDetail,
+                       "pulling manifest")
+    }
+
     /// A sheet must never show one model's numbers under another model's name.
     func testAStatusAlwaysNamesTheEntryItBelongsTo() {
         XCTAssertEqual(ModelTransferStatus(entryID: "a", state: .queued).entryID, "a")
