@@ -28,15 +28,28 @@ extension ChatSessionModel {
     func toolSelection(for provider: any InferenceProvider) -> ToolSelection {
         let routing = toolRouting(for: provider)
         guard routing.offersTools, !conversation.mode.isHybrid else { return ToolSelection() }
-        // With no configured window there is nothing to fit against, so the whole offerable set
-        // travels — `offerableNames` has already removed anything this turn may not run.
-        guard let window = conversation.config.sampling.contextWindow, window > 0 else {
+        // With no window in play — none set by the chat, none declared by the engine — there is
+        // nothing to fit against, so the whole offerable set travels. `offerableNames` has already
+        // removed anything this turn may not run.
+        guard let window = effectiveContextWindow(for: provider), window > 0 else {
             return routing.selection(withinWordBudget: .max, wordBudget: Self.wordCount)
         }
         // Words, not tokens: there is no tokenizer in this module, and an estimate shown as a token
         // count is a number the user reads as exact. A quarter of the window is what the block may
         // take; the conversation keeps the rest.
         return routing.selection(withinWordBudget: window / 4, wordBudget: Self.wordCount)
+    }
+
+    /// The window this turn has to fit: the chat's own setting and the engine's declared ceiling,
+    /// whichever is smaller.
+    ///
+    /// An engine that holds 4,096 tokens does not hold more because the chat asked for 32,768, and a
+    /// tool block sized against the larger number is a block that arrives too late to be used. An
+    /// engine that declares nothing is left alone — only a stated ceiling trims anything.
+    func effectiveContextWindow(for provider: any InferenceProvider) -> Int? {
+        [conversation.config.sampling.contextWindow, provider.contextTokenCeiling]
+            .compactMap { $0 }
+            .min()
     }
 
     static func wordCount(_ text: String) -> Int {

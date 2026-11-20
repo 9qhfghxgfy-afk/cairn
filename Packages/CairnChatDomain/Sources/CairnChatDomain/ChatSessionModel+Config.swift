@@ -43,6 +43,40 @@ extension ChatSessionModel {
     /// instead of letting the empty panel read as a fault.
     public var reasoningSupported: Bool { activeProvider?.capabilities.thinking ?? false }
 
+    /// The window this turn really has, when the engine holds less than the chat asked for.
+    ///
+    /// A chat configured for 32,768 tokens and pointed at an engine that holds 4,096 does not gain a
+    /// bigger window by being configured: the setting says what the chat would like, the engine says
+    /// what it has. Said beside the controls rather than left to a failed turn, because a number that
+    /// quietly means something else is the kind of promise this app does not make.
+    public var contextCeilingNote: String? {
+        guard let ceiling = activeProvider?.contextTokenCeiling else { return nil }
+        let asked = conversation.config.sampling.contextWindow ?? 0
+        guard asked == 0 || asked > ceiling else { return nil }
+        return "This engine holds about \(ceiling) tokens at once — older turns are dropped so the turn fits."
+    }
+
+    /// What a switch is asking for that this engine cannot do, in one line each.
+    ///
+    /// The switches stay live — a backend gets the tools through the prompt protocol, and a thinking
+    /// switch costs nothing — but a control that promises a thing nobody performs reads as a broken
+    /// app. So the composer says what will not appear, next to the switch that asked for it, instead of
+    /// leaving an empty panel to be discovered.
+    public var engineCapabilityNotes: [String] {
+        guard let provider = activeProvider else { return [] }
+        var notes: [String] = []
+        if conversation.config.thinkingEnabled, !provider.capabilities.thinking {
+            notes.append("\(provider.displayName) emits no reasoning trace, so Thinking adds nothing here.")
+        }
+        if conversation.config.toolToggle.isEnabled, !provider.capabilities.toolCalling {
+            notes.append(
+                "\(provider.displayName) is offered Tools as text, not as calls it can make; "
+                    + "a tight window drops them first."
+            )
+        }
+        return notes
+    }
+
     public var currentTurnContext: TurnContext {
         if let provider = activeProvider { return turnContext(for: provider, history: path) }
         // No engine selected: state nothing about the backend rather than guessing, so the

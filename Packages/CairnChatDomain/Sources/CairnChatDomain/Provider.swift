@@ -242,6 +242,16 @@ public protocol InferenceProvider: Sendable, Identifiable {
     /// server switcher needs it to map an engine back to the profile whose last model it should
     /// restore; a mock or on-device engine has none and takes the default in `RemoteEngineID`.
     var serverProfileID: UUID? { get }
+    /// Whether this engine runs a model on this phone, fronts a server, or stands in for one. A mode
+    /// is a routing decision, so "On device" has to be able to name the engine it means, and
+    /// `networkClass` cannot make that distinction: a stand-in and a real on-device model are both
+    /// honestly `.onDevice`.
+    var engineKind: EngineKind { get }
+    /// The largest context this engine holds, in tokens, or nil when it states no ceiling.
+    ///
+    /// An engine that says nothing is left alone. Only one that names a window gets its prompt
+    /// shortened, because trimming a turn nobody asked to trim is a silent edit to a conversation.
+    var contextTokenCeiling: Int? { get }
 
     func models() async throws -> [ModelInfo]
 
@@ -253,4 +263,13 @@ public protocol InferenceProvider: Sendable, Identifiable {
 /// to prevent, so support is declared rather than assumed.
 public extension InferenceProvider {
     var samplingSupport: SamplingSupport { .none }
+
+    /// A server is the ordinary case, and an engine on this device that has not said it runs a real
+    /// model is the Milestone 1 stand-in — which is what keeps "On device" from ever routing a chat
+    /// to a stub while a real model sits unchosen.
+    var engineKind: EngineKind { networkClass == .onDevice ? .standIn : .server }
+
+    /// No declared ceiling means no trimming. The on-device engines state theirs because they really
+    /// do run out of room.
+    var contextTokenCeiling: Int? { nil }
 }

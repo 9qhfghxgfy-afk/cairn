@@ -138,7 +138,14 @@ public final class ChatWorkspace {
     /// Where an engine's traffic goes, so a switcher can say "public" out loud instead of letting
     /// a name imply it. nil for an engine that is not registered.
     public func providerNetworkClass(_ id: String) -> NetworkClass? {
-        (registry?.provider(id: id) ?? providerList.first { $0.id == id })?.networkClass
+        (engine(id: id))?.networkClass
+    }
+
+    /// The engine behind an id, or nil. Internal rather than public: the mode-routing extension in
+    /// `ChatWorkspace+ModeRouting.swift` needs an engine's declared kind, and a `NetworkClass` alone
+    /// cannot tell a real on-device model from the stand-in that answers a fresh install.
+    func engine(id: String) -> (any InferenceProvider)? {
+        registry?.provider(id: id) ?? providerList.first { $0.id == id }
     }
 
     public func start() async {
@@ -292,5 +299,9 @@ public final class ChatWorkspace {
         } catch {
             lastError = error.localizedDescription
         }
+        // A mode is a routing decision, not a label. Before this, choosing "On device" saved the
+        // word and left the session answering from the server it was already pointed at — a switch
+        // that says one thing and does another, which is the failure this app is not allowed to have.
+        routeEngines(for: newMode)
     }
 }

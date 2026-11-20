@@ -12,11 +12,16 @@ public struct OnDeviceEngineState: Sendable, Equatable {
     /// about hardware it has not checked.
     public var status: String
     public var isUsable: Bool
+    /// The engine this state describes, so a row that says "ready" can also put the chat on it.
+    /// nil for a runtime with no engine registered behind it, which is reported as a status line and
+    /// nothing more — a tap that routes to an engine nobody registered is the failure this avoids.
+    public var engineID: String?
 
-    public init(name: String, status: String, isUsable: Bool) {
+    public init(name: String, status: String, isUsable: Bool, engineID: String? = nil) {
         self.name = name
         self.status = status
         self.isUsable = isUsable
+        self.engineID = engineID
     }
 }
 
@@ -44,6 +49,17 @@ public struct OnDeviceEngineReport: Sendable, Equatable {
     )
 
     public var canRunSomething: Bool { appleModel.isUsable || mlx.isUsable }
+
+    /// The engines a chat can be pointed at right now, in the order the row shows them.
+    ///
+    /// Only usable ones are offered: a row that offers "use this" for a runtime the device says is
+    /// not ready is a tap that fails, and a control that fails on tap is worse than no control.
+    public var engineChoices: [EngineChoice] {
+        [appleModel, mlx].compactMap { state in
+            guard state.isUsable, let engineID = state.engineID else { return nil }
+            return EngineChoice(engineID: engineID, name: state.name)
+        }
+    }
 
     /// One line for the Servers row: which engines are ready, or why they are not.
     public var summary: String {
