@@ -9,10 +9,14 @@
 // boundary, so every module on the other side of that boundary — CairnChatDomain, CairnAppUI,
 // CairnInferenceLocal — stays Swift 6 strict and never sees a MLX type.
 //
-// Pin: `mlx-swift-lm` **2.31.3**, with `mlx-swift` pinned to **0.31.6** — the top of the 0.31.x range the
-// dependency itself asks for (`.upToNextMinor(from: "0.31.3")`) — so a transitive range cannot quietly move
-// the runtime under a milestone that was verified against a different one. Products used: MLXLLM,
-// MLXLMCommon.
+// Pin: `mlx-swift-lm` **2.31.3**, with `mlx-swift` pinned to **0.31.4**. 0.31.4 is the newest 0.31.x whose
+// manifest CI's pinned toolchain can read: 0.31.5 and 0.31.6 declare
+// `swift-tools-version: 6.3;(experimentalCGen)`, which Xcode_26.6 rejects while it parses the manifest, so a
+// `CAIRN_MLX=1` build pinned to either of those dies during dependency resolution before any Cairn source
+// is compiled. 0.31.4 declares 5.12 and still satisfies the dependency's own
+// `.upToNextMinor(from: "0.31.3")`, so nothing about the range the runtime asks for has moved. Products
+// used: MLXLLM, MLXLMCommon. The same pair is declared in `project.yml` at the same pins, because two exact
+// pins of one URL that disagree make the graph unsatisfiable.
 //
 // Why 2.31.3 and not the 3.x line, both read from the packages' own manifests on 2026-11-19:
 //   * 2.31.3 declares swift-tools-version 6.1; 3.32.3 declares 6.2 and pulls in CompilerPluginSupport, so
@@ -48,7 +52,7 @@ private var mlxDependencies: [Package.Dependency] {
     guard !skipMLX else { return [] }
     return [
         .package(url: "https://github.com/ml-explore/mlx-swift-lm.git", exact: "2.31.3"),
-        .package(url: "https://github.com/ml-explore/mlx-swift.git", exact: "0.31.6"),
+        .package(url: "https://github.com/ml-explore/mlx-swift.git", exact: "0.31.4"),
     ]
 }
 

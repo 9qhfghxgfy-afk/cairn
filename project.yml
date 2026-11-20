@@ -40,6 +40,22 @@ packages:
     path: Packages/CairnInferenceNative
   CairnAppUI:
     path: Packages/CairnAppUI
+  # The MLX runtime, declared here at the pins `CairnInferenceNative/Package.swift` uses. Its products are
+  # deliberately NOT listed under the app target's `dependencies`, for two reasons that are both load-bearing:
+  # a device build already gets MLXLLM/MLXLMCommon/MLX embedded transitively through `CairnInferenceNative`
+  # when `CAIRN_MLX=1`, and a direct link would make every CI run compile MLX's C++ and Metal core from
+  # source inside the simulator lane's time box. It also keeps `import MLXLLM` inside the one Swift 5 island
+  # that is allowed to say it. The pins must match the package's exactly: two exact requirements on one URL
+  # that disagree make the graph unsatisfiable.
+  # Pin: `mlx-swift` 0.31.4 is the newest 0.31.x whose manifest Xcode_26.6 can parse — 0.31.5 and 0.31.6
+  # declare `swift-tools-version: 6.3;(experimentalCGen)` and are rejected during resolution — and it still
+  # satisfies `mlx-swift-lm` 2.31.3's own `.upToNextMinor(from: "0.31.3")`.
+  mlx-swift:
+    url: https://github.com/ml-explore/mlx-swift.git
+    exactVersion: 0.31.4
+  mlx-swift-lm:
+    url: https://github.com/ml-explore/mlx-swift-lm.git
+    exactVersion: 2.31.3
 
 targets:
   Cairn:
