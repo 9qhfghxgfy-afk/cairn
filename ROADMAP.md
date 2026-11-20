@@ -2615,7 +2615,14 @@ pages need JavaScript, but the JSON behind them (`developer.apple.com/tutorials/
 readable from this machine with `curl | grep`, which is how the first two were settled. A plausible Apple
 signature is not a verified one.
 
-**CI-verified:** owed — this round is not claimed until a green run number is cited against it.
+**CI-verified:** owed, and the first run earned its red. Run **44818106128** failed the host job on three
+symbols that were plausible and wrong — an internal `static let` named from a public default argument, a
+`URLRequest` handed to something that wants a `URLSessionDownloadTask`, and `countOfBytesExpectedToWrite`,
+which is not a member of a task that receives bytes — and it stopped there, so the UI target and
+`Tests/CairnTests` were never compiled at all. The fix is the checking, not just the patch: `swiftc
+-swift-version 6` against `FoundationNetworking` on this machine now typechecks the whole of
+`CairnInferenceLocal` except its Darwin-only files, and it catches all three of those locally. A second run is
+owed, and the UI half is still CI's first look.
 `Tests/CairnTests` compiles only on CI, so the four new transfer-control tests
 (`testPauseStopsTheTransferAndNeverTouchesTheDiscardPath`, `testCancelClosesTheTransferAndFreesWhatWasFetched`,
 `testAKeptTransferIsOfferedAsResumeRatherThanAsAFreshDownload`,

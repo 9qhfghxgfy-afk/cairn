@@ -21,25 +21,35 @@ extension ModelCatalogModel {
             return
         }
         let entryID = row.repoID
+        transferGeneration += 1
+        let generation = transferGeneration
         phoneStatus = ModelTransferStatus(entryID: entryID, state: .queued)
         let stream = library.download(row)
         task = Task { @MainActor [weak self] in
+            // The outcome is computed first and applied once, at the end, because this task can outlive the
+            // transfer it was started for: a Cancel closes the reader, and a Resume pressed a second later
+            // starts a newer task with a newer status. Every write below is gated on still owning the screen,
+            // so an unwinding transfer cannot clear the new task's handle, and cannot paint "Cancelled" over
+            // a bar that is already moving again.
+            var outcome: ModelTransferStatus?
             do {
                 for try await state in stream {
-                    if Task.isCancelled { break }
+                    if Task.isCancelled || self?.transferGeneration != generation { break }
                     self?.phoneStatus = ModelTransferStatus(entryID: entryID, state: state)
                 }
                 if Task.isCancelled {
-                    self?.phoneStatus = ModelTransferStatus(entryID: entryID, state: .stopped)
+                    outcome = ModelTransferStatus(entryID: entryID, state: .stopped)
                 }
             } catch is CancellationError {
-                self?.phoneStatus = ModelTransferStatus(entryID: entryID, state: .stopped)
+                outcome = ModelTransferStatus(entryID: entryID, state: .stopped)
             } catch {
                 // The service's own words. "the file did not match its published checksum" and "the
                 // download failed" send a person to different places, so neither is paraphrased.
-                self?.phoneStatus = ModelTransferStatus(entryID: entryID, stage: .failed,
-                                                        line: error.localizedDescription)
+                outcome = ModelTransferStatus(entryID: entryID, stage: .failed,
+                                              line: error.localizedDescription)
             }
+            guard self?.transferGeneration == generation else { return }
+            if let outcome { self?.phoneStatus = outcome }
             self?.task = nil
             await self?.refresh()
             // The pause this transfer may just have left behind is exactly what this question is about, and
@@ -188,6 +198,13 @@ extension ModelCatalogModel {
     }
 
     private func cancelTransfer(_ row: LocalCatalogRow) async {
+        // A confirmation dialog holds the status it was drawn with, so a transfer can finish while the
+        // question is still open. Cancelling something that already landed would turn an "Installed" card
+        // into a "Cancelled" one and delete bytes the person never asked to lose.
+        if row.isInstalled || status(for: row)?.stage == .finished {
+            notice = "Nothing is running for this model, so there is nothing to cancel."
+            return
+        }
         if row.origin.landsOnThisPhone {
             guard let library else { return }
             // The reader goes first, then the transfer, then the bytes. In any other order a progress line can

@@ -45,6 +45,11 @@ public final class ModelCatalogModel {
     var task: Task<Void, Never>?
     var pulledID: String?
     var phoneStatus: ModelTransferStatus?
+    /// Bumped every time a phone transfer starts, so the task reading one stream can tell whether it still
+    /// owns the screen. A Cancel followed immediately by a Resume leaves the old task unwinding while a newer
+    /// one is already running, and without this the dying transfer would clear the new task's handle and
+    /// paint "Cancelled" over a bar that is moving again.
+    var transferGeneration = 0
 
     public init(
         library: (any LocalModelLibraryServicing)?,

@@ -12,7 +12,10 @@ import CairnChatDomain
 /// reason: the system keyboard covers the Save button, and a person who taps past the field gets nothing
 /// back. Dismiss at the top of both actions so a press never has to fight the keyboard for the tap.
 struct ModelTokenRow: View {
-    @ObservedObject var model: ModelTokenModel
+    /// Plain, not `@ObservedObject`: the model is `@Observable`, so the properties this body reads are
+    /// tracked on their own. That also keeps Settings — which holds this model as an optional value — inside
+    /// the same tracking, without a property wrapper on every parent that passes it down.
+    var model: ModelTokenModel
     let kind: ModelTokenKind
 
     @FocusState private var focusedField: Bool
@@ -38,7 +41,7 @@ struct ModelTokenRow: View {
             HStack(spacing: 10) {
                 Button("Save") { save() }
                     .buttonStyle(.borderedProminent)
-                    .tint(CairnTheme.accent)
+                    .tint(CairnTheme.amber)
                     .disabled(draft.wrappedValue
                         .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     .accessibilityIdentifier("cairn.settings.token." + kind.rawValue + ".save")
@@ -46,13 +49,13 @@ struct ModelTokenRow: View {
                 if model.isSaved(for: kind) {
                     Button("Remove", role: .destructive) { removeToken() }
                         .buttonStyle(.bordered)
-                        .tint(CairnTheme.warn)
+                        .tint(CairnTheme.rust)
                         .accessibilityIdentifier("cairn.settings.token." + kind.rawValue + ".remove")
                 }
 
                 Text(model.isSaved(for: kind) ? "Saved" : "Not saved")
                     .font(.caption)
-                    .foregroundStyle(model.isSaved(for: kind) ? CairnTheme.ok : CairnTheme.stoneLight)
+                    .foregroundStyle(model.isSaved(for: kind) ? CairnTheme.moss : CairnTheme.stoneLight)
             }
         }
     }

@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 import CairnChatDomain
 
 /// The view model behind the optional token rows: a yes-or-no per kind, and nothing else.
@@ -10,16 +11,20 @@ import CairnChatDomain
 /// The drafts are deliberately not remembered. A token typed into a field is a secret sitting in this
 /// process's memory; keeping it there after a save would mean a re-render or a re-open of the screen could
 /// redraw it, and the screen has no reason to show a person something they can never read back.
-@MainActor
-public final class ModelTokenModel: ObservableObject {
+/// `@Observable`, like every other view model in this module, rather than Combine's `ObservableObject`:
+/// the screen holds this one as a plain optional value, and Observation tracks the properties a body
+/// actually reads — so the "Saved" line and a refused write repaint without a property wrapper anywhere in
+/// the view, and without the row being handed anything but the yes-or-no.
+@Observable @MainActor
+public final class ModelTokenModel {
     /// What each kind answered the last time it was asked. This is the remembered *fact* — "there is a
     /// token here" — never the token.
-    @Published private var savedKinds: Set<ModelTokenKind> = []
+    private var savedKinds: Set<ModelTokenKind> = []
     /// The latest thing typed into a field, held until the row is left. Cleared on save and on remove.
-    @Published private var drafts: [ModelTokenKind: String] = [:]
+    private var drafts: [ModelTokenKind: String] = [:]
     /// Why an action did not work, in words, when it did not. A token that silently fails to save is the
     /// worst possible outcome: the next download fails with a 401 and nothing here says why.
-    @Published public var notice: String?
+    public var notice: String?
 
     private let store: (any ModelTokenStoring)?
 
