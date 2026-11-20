@@ -103,6 +103,14 @@ private struct ModelDetailPresentation: View {
     private var catalog: ModelCatalogModel?
     let row: LocalCatalogRow
 
+    /// Declared, not memberwise: a `private` struct's implicit memberwise initialiser is itself `private`,
+    /// which a different type in this file cannot call. `ModelRunningList` below writes its init the same
+    /// way for the same reason.
+    init(catalog: ModelCatalogModel?, row: LocalCatalogRow) {
+        self.catalog = catalog
+        self.row = row
+    }
+
     var body: some View {
         if let catalog {
             ModelDetailSheet(model: catalog, row: row)
