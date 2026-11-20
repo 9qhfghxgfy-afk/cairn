@@ -28,6 +28,17 @@ public final class ModelCatalogModel {
     let library: (any LocalModelLibraryServicing)?
     let servers: ModelManagerModel?
     let traffic: ModelTrafficSwitch
+    /// The Ollama servers this person has configured, read through on demand. A server added in
+    /// Settings has to be offerable here without relaunching the app, and copying the list at launch is
+    /// how a screen ends up offering a server that was deleted an hour ago.
+    let ollamaTargets: @MainActor () -> [ServerProfile]
+    /// The Ollama server chosen inside the detail sheet for a pull the open server cannot run. Held so
+    /// the sheet can show which server a tag would actually be sent to, rather than leaving it implied.
+    /// `internal(set)`: the sourcing half in another file moves it, and nothing outside this module may.
+    public internal(set) var pullTarget: ServerProfile?
+    /// True once the person has moved the source switch themselves. Until then the screen is allowed to
+    /// pick a source from the server that opened Models; after that it must not second-guess them.
+    public private(set) var sourceChosen = false
     // `internal`, not `private`: the transfer half of this type lives in
     // `ModelCatalogModel+Transfers.swift`, and a `private` member is unreachable from an extension in
     // another file. Nothing outside this module can see them either way.
@@ -38,16 +49,14 @@ public final class ModelCatalogModel {
     public init(
         library: (any LocalModelLibraryServicing)?,
         servers: ModelManagerModel?,
-        traffic: ModelTrafficSwitch = .memory()
+        traffic: ModelTrafficSwitch = .memory(),
+        ollamaTargets: @escaping @MainActor () -> [ServerProfile] = { [] }
     ) {
         self.library = library
         self.servers = servers
         self.traffic = traffic
+        self.ollamaTargets = ollamaTargets
     }
-
-    public var weightsAreAllowed: Bool { traffic.isGranted() }
-    public func allowWeights() { traffic.setGranted(true) }
-    public func denyWeights() { traffic.setGranted(false) }
 
     /// Whether the phone path can actually run. False means the App layer handed over no library — no
     /// storage, or no wiring on this build — which is a fact to state, not a button to disable silently.
@@ -66,6 +75,9 @@ public final class ModelCatalogModel {
     }
 
     public func choose(_ destination: ModelCatalogOrigin) async {
+        // Moving the switch by hand is a decision, and it outranks whatever the opening server implies
+        // from then on — otherwise every visit to Models would move the switch back.
+        sourceChosen = true
         guard self.destination != destination else { return }
         self.destination = destination
         await refresh()
@@ -80,12 +92,18 @@ public final class ModelCatalogModel {
     public func refresh() async {
         isLoading = true
         defer { isLoading = false }
-        if destination.landsOnThisPhone {
+        // Captured before the await. Two refreshes can overlap — the screen's task and a source switch —
+        // and a slow answer from the store must not drop the list of a source the user has already left.
+        let wanted = destination
+        if wanted.landsOnThisPhone {
             rows = ModelCatalog.onDevice
             guard let library else { return }
             do {
-                rows = try await library.catalogRows()
+                let read = try await library.catalogRows()
+                guard destination == wanted else { return }
+                rows = read
             } catch {
+                guard destination == wanted else { return }
                 // The curated list stays on screen with its installed marks missing rather than
                 // emptying the tab: "no models" would be a claim nobody checked.
                 notice = error.localizedDescription
@@ -109,18 +127,8 @@ public final class ModelCatalogModel {
         }
     }
 
-    /// The transfer state for one card, or nil when nothing is in flight for it.
-    ///
-    /// The server numbers are read from `ModelManagerModel` here rather than copied into this type: the
-    /// server's own progress is its truth, and a second copy of it is a second thing to keep honest.
-    public func status(for row: LocalCatalogRow) -> ModelTransferStatus? {
-        if row.origin.landsOnThisPhone {
-            guard let status = phoneStatus, status.entryID == row.id else { return nil }
-            return status
-        }
-        guard pulledID == row.id, let progress = servers?.pullProgress else { return nil }
-        return ModelTransferStatus(entryID: row.id, pull: progress)
-    }
+    /// A card's transfer state lives with the transfers that produce it, in
+    /// `ModelCatalogModel+Transfers.swift`.
 
     public func cancel() {
         if let task {
@@ -136,10 +144,9 @@ public final class ModelCatalogModel {
         }
     }
 
-    /// Why the phone path refuses to start, in the sheet's and the notice's shared words. It names what
-    /// has to be turned on rather than only refusing, because a button that does nothing and says nothing
-    /// reads as a broken app.
-    public static let trafficNotice = "Downloading a model sends bytes off this device. Turn on model "
-        + "downloads, and Cairn will show the outbound badge while the weights are in flight."
+    /// Applies a source change for the sourcing half in `ModelCatalogModel+Sourcing.swift`. The
+    /// `destination` setter is `private(set)`, so only this file can move it; a public setter would let
+    /// any view claim a source without refreshing the list that goes with it.
+    func apply(source: ModelCatalogOrigin) { destination = source }
 
 }

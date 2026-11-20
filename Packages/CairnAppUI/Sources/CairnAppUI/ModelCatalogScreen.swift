@@ -42,17 +42,23 @@ public struct ModelCatalogScreen: View {
 
     private var destinationSection: some View {
         Section {
-            Picker("Install onto", selection: Binding(
+            // The switcher names the two libraries, not two destinations. Where the bytes land is the
+            // footer's job; what a person is choosing here is whose names they get to pick from.
+            Picker("Source", selection: Binding(
                 get: { model.destination },
                 set: { chosen in Task { await model.choose(chosen) } }
             )) {
-                Text("This phone").tag(ModelCatalogOrigin.onDevice)
-                Text("This server").tag(ModelCatalogOrigin.ollamaLibrary)
+                Text(ModelCatalogOrigin.onDevice.sourceLabel).tag(ModelCatalogOrigin.onDevice)
+                Text(ModelCatalogOrigin.ollamaLibrary.sourceLabel).tag(ModelCatalogOrigin.ollamaLibrary)
             }
             .pickerStyle(.segmented)
-            .accessibilityIdentifier("cairn.catalog.destination")
+            .accessibilityIdentifier("cairn.catalog.source")
             if !model.offersPhone {
                 Text("Cairn cannot reach its model storage on this phone, so nothing can be installed here yet.")
+                    .font(.callout)
+                    .foregroundStyle(CairnTheme.stoneLight)
+            } else if model.needsAnotherServer {
+                Text(model.serverGuidance)
                     .font(.callout)
                     .foregroundStyle(CairnTheme.stoneLight)
             } else if model.destination == .ollamaLibrary && !model.offersServer {
@@ -61,9 +67,9 @@ public struct ModelCatalogScreen: View {
                     .foregroundStyle(CairnTheme.stoneLight)
             }
         } header: {
-            Text("Install onto")
+            Text("Source")
         } footer: {
-            Text(model.destination.destinationText)
+            Text(model.sourceBlurb + " " + model.destination.destinationText)
         }
     }
 

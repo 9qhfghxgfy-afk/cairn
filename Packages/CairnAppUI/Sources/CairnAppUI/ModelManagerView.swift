@@ -56,6 +56,10 @@ public struct ModelManagerView: View {
             // Re-read on every appearance: the server's memory changes while the user is in the
             // chat, and a stale Running list is worse than no Running list.
             if let profile = model.profile { await model.open(profile) }
+            // The Download tab's source is decided by the server that opened Models — On-Device opens
+            // on Hugging Face, a remote server opens on Ollama. It has to happen after the profile is
+            // open, or the catalog would read a profile that is not set yet and always guess On-Device.
+            if let catalog { await catalog.openFrom(kind: model.profile?.kind) }
         }
     }
 }

@@ -165,7 +165,14 @@ struct CairnLaunchView: View {
                 builtServers.modelCatalog = ModelCatalogModel(
                     library: OnDeviceModelLibrary.installed(traffic: weightTraffic),
                     servers: builtServers.modelManager,
-                    traffic: weightTraffic
+                    traffic: weightTraffic,
+                    // The Ollama servers a tag may be pulled onto, read at the moment the sheet asks so a
+                    // server added in Settings is offered without relaunching the app. Only the Ollama
+                    // kinds: LM Studio and an OpenAI-compatible server can list models but have no install
+                    // endpoint, so offering them here would promise a pull that cannot run.
+                    ollamaTargets: {
+                        builtServers.profiles.filter { $0.kind == .ollama || $0.kind == .ollamaCloud }
+                    }
                 )
                 // A memory warning releases the resident on-device model. Held in state so the
                 // watch is not deallocated the moment this closure returns.

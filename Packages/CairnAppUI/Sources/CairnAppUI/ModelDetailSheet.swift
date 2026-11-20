@@ -13,8 +13,11 @@ import CairnChatDomain
 /// decides to download a model is the moment the decision is actually about. It is off until granted, and
 /// the Download button says what is missing instead of sitting there disabled.
 struct ModelDetailSheet: View {
-    private var model: ModelCatalogModel
-    private let snapshot: LocalCatalogRow
+    // `internal`, not `private`: the idle half of this sheet lives in
+    // `ModelDetailSheet+Idle.swift` and the in-flight half in `ModelDetailSheet+Transfer.swift`, and a
+    // `private` member is unreachable from an extension in another file.
+    var model: ModelCatalogModel
+    let snapshot: LocalCatalogRow
     @State private var showsMetadata = false
 
     init(model: ModelCatalogModel, row: LocalCatalogRow) {
@@ -24,11 +27,11 @@ struct ModelDetailSheet: View {
 
     /// Re-read from the list so a refresh that lands a download updates the sheet instead of leaving it
     /// describing the state as it was when the card was tapped.
-    private var row: LocalCatalogRow {
+    var row: LocalCatalogRow {
         model.rows.first { $0.repoID == snapshot.repoID } ?? snapshot
     }
 
-    private var status: ModelTransferStatus? { model.status(for: row) }
+    var status: ModelTransferStatus? { model.status(for: row) }
 
     var body: some View {
         CairnSheet {
@@ -111,88 +114,9 @@ struct ModelDetailSheet: View {
         }
     }
 
-    /// Nothing is in flight for this entry. The button says where the bytes will land, and the missing
-    /// acknowledgement is shown beside the button that cannot legally run yet rather than two screens
-    /// away in Settings.
-    @ViewBuilder private var idleBlock: some View {
-        if row.isInstalled {
-            Text(row.origin.landsOnThisPhone
-                    ? "This model is already on this phone."
-                    : "The server reports this tag as installed.")
-                .font(.callout)
-                .foregroundStyle(CairnTheme.amber)
-        }
-        Button {
-            model.download(row)
-        } label: {
-            Label(row.origin.destinationText, systemImage: "arrow.down.circle")
-                .frame(maxWidth: .infinity)
-        }
-        .buttonStyle(.borderedProminent)
-        .tint(CairnTheme.amber)
-        .disabled(row.isInstalled || model.isDownloading)
-        .accessibilityIdentifier("cairn.detail.download")
+    /// The idle half of the sheet — what to press, and what has to be agreed to first — is in
+    /// `ModelDetailSheet+Idle.swift`; the in-flight half is in `ModelDetailSheet+Transfer.swift`.
 
-        if row.origin.landsOnThisPhone && !model.weightsAreAllowed {
-            Toggle(isOn: Binding(
-                get: { model.weightsAreAllowed },
-                set: { allowed in if allowed { model.allowWeights() } else { model.denyWeights() } }
-            )) {
-                Text("Model downloads may reach the internet")
-                    .font(.callout)
-            }
-            .tint(CairnTheme.amber)
-            .accessibilityIdentifier("cairn.detail.acknowledge")
-            Text(ModelCatalogModel.trafficNotice)
-                .font(.caption)
-                .foregroundStyle(CairnTheme.stoneLight)
-        }
-    }
-
-    private func transferBlock(_ status: ModelTransferStatus) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            ModelCatalogProgress(status: status)
-            Text("The bytes are moving now. Closing this sheet leaves the transfer running; Cairn keeps "
-                    + "the outbound badge up until it ends.")
-                .font(.caption)
-                .foregroundStyle(CairnTheme.stoneLight)
-            Button("Cancel the download", role: .destructive) {
-                model.cancel()
-            }
-            .font(.callout.weight(.semibold))
-            .accessibilityIdentifier("cairn.detail.cancel")
-        }
-    }
 }
 
-/// One transfer's numbers, drawn from whichever side stated them. A phone transfer names its own byte
-/// counts; a server pull names its own status line and whatever totals it chose to state.
-struct ModelCatalogProgress: View {
-    private var status: ModelTransferStatus
-    init(status: ModelTransferStatus) { self.status = status }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(status.line)
-                .font(.callout)
-            if let fraction = status.fraction {
-                ProgressView(value: fraction)
-                Text("\(bytesText(status.completedBytes ?? 0)) of "
-                        + "\(bytesText(status.totalBytes ?? 0)) · \(status.percentText)")
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(CairnTheme.stoneLight)
-            } else {
-                // No denominator was ever named, so no bar claims to know how far it has to go.
-                ProgressView().progressViewStyle(.linear)
-                if let done = status.completedBytes {
-                    Text("\(bytesText(done)) so far · \(status.percentText)")
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(CairnTheme.stoneLight)
-                }
-            }
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityIdentifier("cairn.detail.progress")
-    }
-}
 

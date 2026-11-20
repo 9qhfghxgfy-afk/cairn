@@ -86,4 +86,42 @@ extension ModelCatalogModel {
         await refresh()
         repoint()
     }
+
+    /// The transfer state for one card, or nil when nothing is in flight for it.
+    ///
+    /// The server numbers are read from `ModelManagerModel` here rather than copied into this type: the
+    /// server's own progress is its truth, and a second copy of it is a second thing to keep honest.
+    public func status(for row: LocalCatalogRow) -> ModelTransferStatus? {
+        if row.origin.landsOnThisPhone {
+            guard let status = phoneStatus, status.entryID == row.id else { return nil }
+            return status
+        }
+        guard pulledID == row.id, let progress = servers?.pullProgress else { return nil }
+        return ModelTransferStatus(entryID: row.id, pull: progress)
+    }
+
+    // MARK: Consent
+
+    public var weightsAreAllowed: Bool { traffic.isGranted() }
+    public func allowWeights() { traffic.setGranted(true) }
+    public func denyWeights() { traffic.setGranted(false) }
+
+    /// Why the phone path refuses to start, in the sheet's and the notice's shared words. It names what
+    /// has to be turned on rather than only refusing, because a button that does nothing and says nothing
+    /// reads as a broken app.
+    public static let trafficNotice = "Downloading a model sends bytes off this device. Turn on model "
+        + "downloads, and Cairn will show the outbound badge while the weights are in flight."
+
+    /// One tap that both grants the acknowledgement and starts the download the person was already
+    /// asking for.
+    ///
+    /// Two taps for a decision already made is a trap: the first tap reads as "the app is broken" and
+    /// the second is made without re-reading what it authorises. So the button says both halves in its
+    /// own name, and the disclosure line above it names where the bytes go before it is pressed. The
+    /// grant is written to Settings here, so the same switch a person can take back in Settings is the
+    /// one this tap moves — it is not a second, weaker consent stored beside the download.
+    public func allowAndDownload(_ row: LocalCatalogRow) {
+        allowWeights()
+        download(row)
+    }
 }
