@@ -15,13 +15,23 @@ public actor MLXNativeProvider: InferenceProvider {
     public static let engineID = "on-device.mlx"
     public static let modelID = "mlx-on-device"
 
-    private let modelDirectory: URL?
+    /// Read on demand rather than frozen at launch: a model that finishes downloading while Cairn is
+    /// open should be loadable on the next turn, not at the next launch. `nonisolated` because the
+    /// registry reads availability from any thread, and a `@Sendable` closure is safe to call there.
+    private let resolveDirectory: @Sendable () -> URL?
     private var loaded: String?
 
     /// - Parameter modelDirectory: a folder of already-installed, already-verified weights.
     ///   Cairn's own downloader owns that folder; this engine never fetches anything.
     public init(modelDirectory: URL? = nil) {
-        self.modelDirectory = modelDirectory
+        self.init(directoryResolver: { modelDirectory })
+    }
+
+    /// - Parameter directoryResolver: the same folder, looked up every time it is needed. The App layer
+    ///   points this at the model store, so installing a model makes this engine usable without a
+    ///   relaunch and without re-registering the provider.
+    public init(directoryResolver: @escaping @Sendable () -> URL?) {
+        self.resolveDirectory = directoryResolver
     }
 
     // MARK: - Identity (nonisolated so the registry can read them from any thread)
@@ -61,7 +71,7 @@ public actor MLXNativeProvider: InferenceProvider {
     }
 
     public nonisolated var runtimeAvailability: NativeRuntimeAvailability {
-        NativeRuntimeAvailability.current(hasInstalledModel: modelDirectory != nil)
+        NativeRuntimeAvailability.current(hasInstalledModel: resolveDirectory() != nil)
     }
 
     public func models() async throws -> [ModelInfo] {
@@ -75,7 +85,7 @@ public actor MLXNativeProvider: InferenceProvider {
     public nonisolated func stream(
         _ request: GenerationRequest
     ) -> AsyncThrowingStream<StreamChunk, any Error> {
-        let directory = modelDirectory
+        let directory = resolveDirectory()
         return AsyncThrowingStream { continuation in
             let bridge = MLXStreamBridge(
                 parser: DeviceTemplateChunkParser(offeredTools: request.tools),

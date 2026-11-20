@@ -143,8 +143,11 @@ struct CairnLaunchView: View {
                 // What this phone can run by itself, read from the build and the hardware rather
                 // than assumed, plus the Model Manager for every server's loaded and installed
                 // models. Both are handed to the Servers screen as values and a view model, so
-                // CairnAppUI never imports a runtime.
+                // CairnAppUI never imports a runtime. The report is read rather than remembered: a
+                // model that finishes downloading makes MLX ready on the next reload, not on the next
+                // launch.
                 builtServers.onDeviceReport = OnDeviceWiring.report()
+                builtServers.onDeviceReportReader = { OnDeviceWiring.report() }
                 builtServers.modelManager = ModelManagerModel(
                     managing: factory.modelService(),
                     lifecycle: RemoteModelLifecycleService(
@@ -174,6 +177,12 @@ struct CairnLaunchView: View {
                         builtServers.profiles.filter { $0.kind == .ollama || $0.kind == .ollamaCloud }
                     }
                 )
+                // A finished download changes what this phone can run. The Servers screen's on-device
+                // report is re-read through the same reader the launch used, so MLX moves to ready without
+                // a relaunch and without CairnAppUI being allowed to look at a filesystem.
+                builtServers.modelCatalog?.onTransferSettled = {
+                    builtServers.refreshOnDeviceReport()
+                }
                 // A memory warning releases the resident on-device model. Held in state so the
                 // watch is not deallocated the moment this closure returns.
                 onDeviceWatch = OnDeviceWiring.startMemoryWatch(onDeviceRegistry)

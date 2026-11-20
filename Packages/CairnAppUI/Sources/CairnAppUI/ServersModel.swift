@@ -20,6 +20,10 @@ public final class ServersModel {
     /// module imports neither on-device runtime and a view here can never call a provider. The
     /// default says "not checked yet" rather than looking ready.
     public var onDeviceReport: OnDeviceEngineReport = .unavailable
+    /// Reads the on-device runtime report from the App layer, which is the only place that can ask a
+    /// runtime whether it is in this build and whether a model is on disk. Set by the App layer; when it
+    /// is unset the launch-time copy is kept rather than an answer invented here.
+    public var onDeviceReportReader: (@MainActor () -> OnDeviceEngineReport)?
     /// The Model Manager's view model, injected by the App after init. nil means no Model Manager
     /// entry point is offered at all — a disabled button is worse than no button.
     public var modelManager: ModelManagerModel?
@@ -95,6 +99,10 @@ public final class ServersModel {
     }
 
     public func reload() {
+        // The on-device half is re-read with the server list, because both are facts that change while
+        // the app is open: a model that finishes downloading makes the runtime usable, and a Servers
+        // screen that still says "no model installed" after that is describing the past.
+        refreshOnDeviceReport()
         do {
             profiles = try storing.profiles()
             publishEngines()
@@ -102,6 +110,12 @@ public final class ServersModel {
         } catch {
             notice = "Could not read saved servers: \(error.localizedDescription)"
         }
+    }
+
+    /// Re-pulls the on-device report from the App layer, if one was wired in.
+    public func refreshOnDeviceReport() {
+        guard let onDeviceReportReader else { return }
+        onDeviceReport = onDeviceReportReader()
     }
 
     /// Validates and canonicalizes through the domain rules, then stores. A profile never

@@ -43,6 +43,9 @@ extension ModelCatalogModel {
             self?.task = nil
             await self?.refresh()
             self?.repoint()
+            // The phone now holds, or does not hold, a model the runtime can load. The Servers screen's
+            // report is the App layer's to compute, so this is the nudge rather than the answer.
+            self?.onTransferSettled?()
         }
     }
 

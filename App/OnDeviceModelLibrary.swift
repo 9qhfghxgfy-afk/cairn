@@ -87,7 +87,12 @@ final class OnDeviceModelLibrary: LocalModelLibraryServicing {
 
     func delete(_ model: InstalledLocalModel) async throws {
         guard let layout else { throw CairnLibraryError.noStorage }
+        // The folder is removed first, so a failed removal leaves the resume blocks in place for a retry.
+        // They are then cleared with it: a delete that left them behind would keep part of a model the
+        // person has just thrown away, and the next download of that repository would resume from bytes
+        // whose verification record was deleted along with the manifest.
         try layout.remove(model.repoID, fileManager: fileManager)
+        ModelResumeStore.forStore(layout).clearAll(repoID: model.repoID)
     }
 
     /// The published file list for one repository.

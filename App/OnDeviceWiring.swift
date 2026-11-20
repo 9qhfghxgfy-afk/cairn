@@ -13,12 +13,12 @@ enum OnDeviceWiring {
     /// The engines that need no server. Both are `.onDevice`, so neither earns the outbound badge
     /// and neither needs the network opt-in.
     static func engines() -> [any InferenceProvider] {
-        [FoundationModelsProvider(), MLXNativeProvider()]
+        [FoundationModelsProvider(), mlxProvider()]
     }
 
     static func report() -> OnDeviceEngineReport {
         let apple = AppleModelAvailabilityReader.current()
-        let mlx = MLXNativeProvider().runtimeAvailability
+        let mlx = mlxProvider().runtimeAvailability
         return OnDeviceEngineReport(
             appleModel: OnDeviceEngineState(
                 name: "Apple model",
@@ -31,6 +31,15 @@ enum OnDeviceWiring {
                 isUsable: mlx.isUsable
             )
         )
+    }
+
+    /// One MLX provider, aimed at the store rather than at a photograph of it taken at launch.
+    ///
+    /// A model that finishes downloading while Cairn is open is found on the next look: the Servers
+    /// screen says ready and the next turn loads it, without a relaunch. The two closures are the only
+    /// place this wiring touches the filesystem, so the engine still cannot reach outside its module.
+    private static func mlxProvider() -> MLXNativeProvider {
+        MLXNativeProvider(directoryResolver: { MLXModelDiscovery.installedDirectory() })
     }
 
     /// A memory warning releases the resident model rather than being noticed and ignored. iOS

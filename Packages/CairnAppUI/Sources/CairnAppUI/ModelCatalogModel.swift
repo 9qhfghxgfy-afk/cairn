@@ -68,6 +68,13 @@ public final class ModelCatalogModel {
 
     public var isDownloading: Bool { task != nil || serverPullIsInFlight }
 
+    /// Called when a transfer stops, so the App layer can re-read what the phone now holds.
+    ///
+    /// The on-device engine report is the App layer's to compute — this module can see neither a
+    /// filesystem nor a runtime — and without this hook the Servers screen would go on saying "no model
+    /// installed" about a model that finished downloading a minute ago, until the app was relaunched.
+    public var onTransferSettled: (@MainActor () -> Void)?
+
     /// The cards to draw, in the chosen order, with a typed name offered as its own card when the
     /// library does not carry it.
     public var visibleRows: [LocalCatalogRow] {
