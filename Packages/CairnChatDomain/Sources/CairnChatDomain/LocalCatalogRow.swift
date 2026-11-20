@@ -98,4 +98,35 @@ public struct LocalCatalogRow: Identifiable, Sendable, Equatable {
         case (nil, nil): return ""
         }
     }
+
+    /// What the detail sheet draws where a capability badge would go, for an entry that publishes no
+    /// capability at all. Empty when the entry does publish one — the sheet draws badges then, not words.
+    ///
+    /// The old line was a flat "No capabilities published for this entry", which reads like missing data
+    /// on an entry that states its size, its quantisation and a context ceiling — so the person concludes
+    /// the screen is broken rather than that the publisher said nothing. The line names the facts that
+    /// **are** published instead, and only an entry with nothing published at all (a typed repository, a
+    /// tag no server describes) says so plainly.
+    ///
+    /// Nothing here is inferred. A capability Cairn has not been told about is never named, because a
+    /// badge a user acts on has to be a fact rather than a guess from a model's name.
+    public var capabilityNote: String {
+        guard capabilityLabels.isEmpty else { return "" }
+        var facts: [String] = []
+        if let parameterSize { facts.append(parameterSize) }
+        if let quantization { facts.append(quantization) }
+        if let contextLength { facts.append("\(contextLength) token context") }
+        if !facts.isEmpty { return "No capability badges published · " + facts.joined(separator: " · ") }
+        // Nothing published at all, which is a different sentence for each kind of entry: a repository
+        // that describes none of its builds, a tag a server has no metadata for, and a name this library
+        // has never heard of are three different reasons to be silent.
+        switch origin {
+        case .onDevice:
+            return "The repository publishes nothing about this build, so nothing is claimed here."
+        case .ollamaLibrary:
+            return "The server publishes nothing about this tag, so nothing is claimed here."
+        case .custom:
+            return "That name is not in Cairn's library, so nothing is claimed about it here."
+        }
+    }
 }

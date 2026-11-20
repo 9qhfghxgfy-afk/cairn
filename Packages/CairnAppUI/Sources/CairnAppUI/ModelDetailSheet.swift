@@ -80,10 +80,18 @@ struct ModelDetailSheet: View {
         .accessibilityIdentifier("cairn.detail.header")
     }
 
+    /// The capability badges the publisher states, or a line that says what is stated instead.
+    ///
+    /// "No capabilities published for this entry." on its own reads as a broken screen when the same entry
+    /// lists its size, its quantisation and a context ceiling — the person concludes the app is failing
+    /// rather than that the publisher said nothing. `capabilityNote` names the facts that are published,
+    /// and only an entry that publishes nothing at all says so. Nothing is inferred here: a capability
+    /// Cairn has not been told about is never shown as a badge, because a badge a person acts on has to be
+    /// a fact rather than a guess from a model's name.
     private var capabilityRow: some View {
         HStack(spacing: 6) {
             if row.capabilityLabels.isEmpty {
-                Text("No capabilities published for this entry.")
+                Text(row.capabilityNote)
                     .font(.caption)
                     .foregroundStyle(CairnTheme.stoneLight)
             } else {
@@ -92,6 +100,7 @@ struct ModelDetailSheet: View {
                 }
             }
         }
+        .accessibilityIdentifier("cairn.detail.capabilities")
     }
 
     private var metadataBlock: some View {
