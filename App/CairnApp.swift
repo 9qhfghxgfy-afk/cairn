@@ -245,14 +245,20 @@ struct CairnLaunchView: View {
             guard let shareWiring else { return }
             Task { await shareWiring.handlePhase(phase) }
         }
-        .onChange(of: theme?.settings.outboundWebAllowed ?? false) { _, _ in
-            // Re-assemble the registry when the acknowledgement moves. Without this, arming a chat
-            // straight after saying "yes, web tools may go out" would offer the calculator only, and the
-            // web tools would look broken until the app were relaunched.
-            if let workspace, let toolWiring { toolWiring.install(on: workspace) }
-        }
-        .onChange(of: theme?.settings.showsGenerationStats ?? true) { _, _ in
-            // The statistics switch decides what is drawn, so it travels to the sessions the same way.
+        .onChange(of: theme?.toolSignals) { _, _ in
+            // Re-assemble the registry when one of the two answers that decide a chat's tools moves.
+            // Without this, arming a chat straight after saying "yes, web tools may go out" would offer
+            // the calculator only, and the web tools would look broken until the app were relaunched;
+            // the statistics switch travels the same way because a session reads it at construction.
+            //
+            // Watched as one value rather than as `theme?.settings.outboundWebAllowed` and
+            // `theme?.settings.showsGenerationStats`. Observation tracks a property, and `settings` is one
+            // property, so watching either field made this — the launch view, the object that owns the
+            // store, the workspace and the root presentation — depend on **every** settings write in the
+            // app: the download acknowledgement, the catalogue preference, a provider's consent. Each of
+            // those rebuilt the whole window chain, and a window chain that is rebuilt while a sheet is
+            // open takes the sheet and everything stacked on it with it. `toolSignals` moves for two
+            // settings and for nothing else.
             if let workspace, let toolWiring { toolWiring.install(on: workspace) }
         }
     }

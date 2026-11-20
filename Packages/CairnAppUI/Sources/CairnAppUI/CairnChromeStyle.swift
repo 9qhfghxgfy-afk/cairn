@@ -24,8 +24,15 @@ public enum CairnChromeStyle {
     }
 
     /// Light, dark, or the device — the second, independent half of the choice.
+    ///
+    /// Read through `chrome` and not through `settings`: Observation tracks a property, not a field inside a
+    /// struct, so a view that reads the settings value to resolve its appearance is invalidated by **every**
+    /// settings write in the app, including one that changes nothing on screen. The views that resolve paint
+    /// are the route and every presentation hanging off it, which is where that churn is most expensive —
+    /// it is how a presentation stack gets torn down from underneath a sheet. `palette(for:)` already reads
+    /// the narrow value, through `ThemeModel.palette`.
     public static func appearance(for theme: ThemeModel?) -> AppearanceMode {
-        theme?.settings.appearance ?? .system
+        theme?.chrome.appearance ?? .system
     }
 
     /// The half to paint with: the pinned appearance if the user pinned one, otherwise the device.
