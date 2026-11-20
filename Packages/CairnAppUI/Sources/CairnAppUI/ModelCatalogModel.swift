@@ -100,8 +100,11 @@ public final class ModelCatalogModel {
             return
         }
         var found: Set<String> = []
-        for row in rows where !row.isInstalled {
-            if transfers[row.id] != nil { continue }
+        // Only the phone's own rows can be holding bytes on this phone, and the row with something in flight
+        // is skipped: asking about that one races the transfer writing the very blocks being asked about.
+        // There is one phone transfer at a time, which is why this is a single status check rather than a
+        // table of them — `ModelTransferStatus` answers for whichever row is showing it.
+        for row in rows where !row.isInstalled && row.origin.landsOnThisPhone {
             if let status = phoneStatus, status.entryID == row.id, status.isInFlight { continue }
             if await library.keepsPartialTransfer(repoID: row.repoID) {
                 found.insert(row.id)
