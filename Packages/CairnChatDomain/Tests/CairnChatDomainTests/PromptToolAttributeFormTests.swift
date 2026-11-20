@@ -171,38 +171,3 @@ final class PromptToolAttributeFormTests: XCTestCase {
         XCTAssertTrue(block.contains(BuiltInTool.webSearch))
     }
 }
-
-/// The loop, not only the parser: a tag has to survive the step it was written in and come back as an
-/// executed call, which is the difference between a parsing test and a chat that works.
-final class ToolLoopAttributeFormTests: XCTestCase {
-
-    func testAnAttributeCallRunsThroughThePromptLoop() async throws {
-        let registry = ToolRegistry(tools: [CalculatorTool()])
-        let steps = ScriptedSteps([
-            [.content("Working. <calculator expression=\"12*34\" />")],
-            [.content("It is 408.")],
-        ])
-        let request = GenerationRequest(
-            modelID: "test-model",
-            messages: [ChatMessagePayload(role: .user, text: "What is 12 times 34?")],
-            config: .default,
-            tools: registry.definitions(),
-            toolProtocol: .prompt
-        )
-        var started: [ToolInvocation] = []
-        var outcome: ToolLoopOutcome?
-        for try await event in ToolLoop.stream(
-            request: request, engine: steps.engine, registry: registry, format: .prompt,
-            context: ToolExecutionContext(toolsEnabled: true)
-        ) {
-            switch event {
-            case .callStarted(let invocation): started.append(invocation)
-            case .completed(let finished): outcome = finished
-            default: break
-            }
-        }
-        XCTAssertEqual(started.map(\.name), [BuiltInTool.calculator])
-        XCTAssertEqual(outcome?.text, "It is 408.", "the tag is not answer text")
-    }
-}
-

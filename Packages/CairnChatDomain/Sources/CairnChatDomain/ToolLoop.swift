@@ -96,8 +96,17 @@ public enum ToolLoop {
                 // when the tool was actually offered this turn, so `<b>` in prose or an `<a href="…">` in
                 // a pasted link stays prose. Without the list, `parse(_:)` reads only the two strict shapes.
                 let parsed = PromptToolProtocol.parse(buffered, offered: stepRequest.tools)
-                if parsed.isEmpty { stepText = buffered; emit(.content(buffered)) }
-                else { calls.append(contentsOf: parsed); callText = buffered }
+                if parsed.isEmpty {
+                    // A tag naming an offered tool is struck out even when it carried nothing executable:
+                    // the alternative is putting `<web_search query=…>` markup in front of the user as an
+                    // answer. Prose with no markup in it comes back untouched.
+                    let prose = PromptToolProtocol.strippedText(buffered, offered: stepRequest.tools)
+                    stepText = prose
+                    emit(.content(prose))
+                } else {
+                    calls.append(contentsOf: parsed)
+                    callText = buffered
+                }
             }
 
             let parsedCalls = calls.compactMap { ToolCall.parse($0) }
