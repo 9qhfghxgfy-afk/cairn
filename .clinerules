@@ -210,6 +210,15 @@ compatibility, not copied expression.
 - Say plainly what the local check could **not** see (stubbed Keychain, deleted `Share/`, deleted
   loopback suites, Darwin-only `URLSessionConfiguration` setters, removed `URLError.posix`) so the
   review is aimed at exactly that blind surface instead of the code that was already compiled.
+- **Read a red run through `gh`, once, and grep it.** `$env:LOCALAPPDATA\cairn-tools\bin\gh.exe run view <run-id>
+  --log-failed` is authenticated and returns the real compiler line. Filter to `error:` with `sort -u | head` — never
+  print a log or a whole step. Unauthenticated `curl` scraping of check-run annotations is still a dead end.
+- **Compile the pure-Swift shapes locally before pushing.** `swiftc -swift-version 6 scratch.swift` on a throwaway file
+  under the temp directory type-checks strict-concurrency patterns with the real Swift 6.4.2 compiler: `@Sendable`
+  captures, `@MainActor` closures over a reference cell, `AsyncThrowingStream` + `Task` + `onTermination`,
+  `@discardableResult`. CI run 44682235454 was red on a capture a reviewer called legal and this check calls an error.
+- **A labelled argument list must follow declaration order**, and `Tests/CairnTests` is compiled only on CI (run
+  44686043125 was red on exactly that). Read the target type's `init` before writing a test that constructs it.
 - Do not waste turns trying to scrape unauthenticated GitHub Actions check-run logs via `curl`
   when they time out or return empty annotations. Read the failing step name once, then delegate.
 

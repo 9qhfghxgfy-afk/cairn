@@ -2362,17 +2362,21 @@ revoked traffic ten seconds earlier; the test that pins this is `testRevokingThe
 * **Host:** `swift test` green in `CairnChatDomain` — new `ModelTransferStatusTests`, the unstated-size-sorts-last rule in
   both directions, the two new `(i)` keys (35 total), the settings defaults and the legacy-nil round-trip.
   `bash Scripts/parse-check.sh` parses 642 files clean; `Scripts/ci.sh guards` reports 53 ok / 0 failed.
-* **CI-verified:** *pending on this push.* The `Tests/CairnTests` cases added here — the catalog asks nothing, the phone
-  path reaches the library only after the switch, the server path asks the connected server, no server means no offer,
-  cancel stops the task, revoking stops the next download — have never run: that target compiles only under `xcodebuild`,
-  and this machine has no Xcode. The App bridge (`OnDeviceModelLibrary`, its download half, and the `CairnApp` wiring) is
-  likewise uncompiled here; a strict-concurrency review caught two capture errors before the push (`var` captured by a
-  `@Sendable` progress closure; a `@MainActor` test stub reached through `self` inside a `@Sendable` stream builder).
-  Run **44682235454** then went red on one more, in `ModelTrafficSwitch.memory(granted:)`: *sending 'box' risks causing
-  data races*. The reviewer's answer was that region-based isolation permits it; the compiler's answer was no. The cell
-  behind the in-memory switch is now locked and `@unchecked Sendable` rather than a bare reference handed into
-  `@MainActor` closures — and it stays a nonisolated factory, because Swift checks a default argument
-  (`traffic: … = .memory()`) in a nonisolated context, so marking it `@MainActor` would only have moved the error.
+* **CI-verified:** green run **44687193214** on `f8be33b` — guards, both host suites, the simulator build, and the whole
+  `CairnTests` suite on iPhone 17 / iOS 26.5, which is the only place the eight catalog cases have ever been compiled or
+  run, and the only place the App bridge has ever been compiled at all. Five red runs came first, each naming something a
+  Windows machine cannot see: **44682235454** handed a bare reference into `@MainActor` closures — *sending 'box' risks
+  causing data races* — in `ModelTrafficSwitch.memory(granted:)`, a shape the strict-concurrency reviewer called legal
+  under region-based isolation and the compiler called an error, so the cell behind the in-memory switch is now locked
+  and `@unchecked Sendable` rather than a bare reference (and stays a nonisolated factory, because a default argument
+  like `traffic: … = .memory()` is checked in a nonisolated context, which is why marking it `@MainActor` would only
+  have moved the error); **44683478193** cleared `CairnAppUI` and then could not name `ModelTrafficSwitch` in
+  `App/OnDeviceModelLibrary.swift`, which had never imported the module it comes from, and warned twice in `ThemeModel`
+  because the two new settings setters return the copy rather than mutating in place, so they are now `@discardableResult`
+  like `ShareSettings`; **44684875217** read an `async throws` call under `try` alone; **44686043125** built the entire
+  app clean and stopped in the test target, where two stub catalog rows passed `downloadBytes` after `provider`. The
+  lesson after that is local: `swiftc -swift-version 6` on a scratch file in the temp directory type-checks exactly these
+  capture and `@Sendable` shapes with the real 6.4.2 compiler, at no cost, before anything is pushed.
 
 * **On-device / real-network:** pending. Nothing on this list has been seen on an iPhone or against a live server.
 
