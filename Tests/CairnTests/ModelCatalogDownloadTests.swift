@@ -12,14 +12,20 @@ import CairnAppUI
 final class ModelCatalogDownloadTests: XCTestCase {
 
     private func stubRows() -> [LocalCatalogRow] {
+        // Argument order follows `LocalCatalogRow.init` exactly: a labelled argument list that is out of
+        // declaration order is a compile error, and this target only ever gets compiled on CI.
         [
             LocalCatalogRow(repoID: "mlx-community/Big Model", displayName: "Big Model",
-                            summary: "A large capable build.", provider: "Example", series: "Big",
-                            capabilityLabels: ["Tools", "Vision"], downloadBytes: 8_000_000_000,
+                            summary: "A large capable build.",
+                            downloadBytes: 8_000_000_000,
+                            capabilityLabels: ["Tools", "Vision"],
+                            provider: "Example", series: "Big",
                             sortOrder: 1, origin: .onDevice),
             LocalCatalogRow(repoID: "mlx-community/Small Quiet", displayName: "Small Quiet",
-                            summary: "A small text-only build.", provider: "Example", series: "Quiet",
-                            downloadBytes: 900_000_000, sortOrder: 2, origin: .onDevice),
+                            summary: "A small text-only build.",
+                            downloadBytes: 900_000_000,
+                            provider: "Example", series: "Quiet",
+                            sortOrder: 2, origin: .onDevice),
         ]
     }
 
