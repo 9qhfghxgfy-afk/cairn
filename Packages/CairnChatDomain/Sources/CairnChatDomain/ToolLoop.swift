@@ -92,7 +92,10 @@ public enum ToolLoop {
 
             var callText = stepText
             if format == .prompt {
-                let parsed = PromptToolProtocol.parse(buffered)
+                // The offered names are what make a lenient reader safe: an attribute tag is only a call
+                // when the tool was actually offered this turn, so `<b>` in prose or an `<a href="…">` in
+                // a pasted link stays prose. Without the list, `parse(_:)` reads only the two strict shapes.
+                let parsed = PromptToolProtocol.parse(buffered, offered: stepRequest.tools)
                 if parsed.isEmpty { stepText = buffered; emit(.content(buffered)) }
                 else { calls.append(contentsOf: parsed); callText = buffered }
             }
