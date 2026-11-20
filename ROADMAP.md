@@ -2553,3 +2553,85 @@ Left open on purpose: `ModelCatalogModel.weightsAreAllowed` reads the settings v
 stable container now, so re-evaluation cannot dismiss it; narrowing that read is deferred until it costs
 something. `ThemeModel+WebSearch.swift` is a file split of the web-search rows, not a behaviour change.
 
+
+---
+
+## 2026-11-20 — Pause / Resume / Cancel on a download, optional source tokens, and the keyboard out of Send's way
+
+Three complaints, one shape: a long download was something a person had to *endure* rather than steer. The
+sheet had one verb under its progress bar — Cancel, which throws the bytes away — so stopping to free the
+network meant losing four gigabytes, and nothing on screen said that four gigabytes were still on the phone
+after iOS killed the transfer. There was no way to introduce the app to a source that asks who is asking, so a
+gated repository answered 401 and the row reported a refusal nobody could act on. And the keyboard's own bar
+drew a "Done" exactly where Send is.
+
+**Transfers.** `ModelTransferStage` gained `waiting`, `paused`, `cancelled`, `stopped` and `LocalTransferState`
+gained `waiting`/`paused` carrying their byte counts, so a pause is a state rather than a euphemism for
+"Stopped". `LocalModelLibraryServicing` gained four verbs — `pauseDownload`, `cancelDownload`, `discard`,
+`keepsPartialTransfer` — and `DownloadBridge.stopTransfers(in:pause:)` is where the two stop verbs separate: a
+pause asks `cancel(byProducingResumeData:)` for the block a later resume is built from, a cancel asks
+`cancel()` for nothing, because a resume block pointing at bytes this app is about to delete is a promise that
+outlives them. A pause files whichever block arrives first — the completion handler and `didCompleteWithError`
+have no stated order — and the guaranteed callback answers, so a race cannot answer a pause with an empty
+block. `ModelCatalogModel` routes `control(_ action: for row:)` per origin: a phone pause closes this app's
+connection and keeps resume blocks, a server pause stops the pull and says in the notice that whatever the
+server kept is the server's own business. `refreshPartials()` reads kept bytes **from the store**, because a
+download iOS killed leaves nothing in memory to remember them; that is what makes an untouched-looking row say
+"1.4 GB of 4.1 GB kept — Resume". Cancel is the only verb that costs something, so it is the only one that
+asks, and the confirmation names the bytes (`ModelTransferControl.lossLine`) instead of asking whether the
+person is sure; its second button deliberately has no `.cancel` role, because a cancel-role button is the
+sheet's dismissal control and an outside tap would otherwise pause a download someone only wanted to close the
+question about.
+
+**Tokens.** `ModelTokenKind` (Hugging Face, Ollama registry) with `ModelTokenStoring` in the domain,
+`KeychainModelTokenStore` in `CairnProviderRemote` under its own service `app.cairn.model-token`, and
+`ModelTokenModel`/`ModelTokenRow` in Settings. The row may ask whether a token exists and may never be handed
+one; the store is seeded once at init so a row that re-renders on every keystroke never asks the Keychain from
+inside `body`. A token is attached per request and dropped at the host boundary — on the download path by the
+bridge's redirect handler, on the listing path by `ListingRedirectGuard` — because session-level headers are
+re-applied to every hop and the Hub hands out a storage host nobody authorised. Save and Remove report a
+refused write instead of showing a saved state that does not exist.
+
+**Keyboard.** The `ToolbarItem(placement: .keyboard)` bar is gone: on iPhone its hit area sits on top of the
+composer's, so the tap meant for Send dismissed the keyboard. The composer row carries the dismiss control,
+`.scrollDismissesKeyboard(.interactively)` does it with the gesture already being made, and all three row
+controls now share `composerControlSide` (44 pt) with `contentShape`, so nothing moves when Stop replaces Send.
+
+**Host-verified:** `swift test` in `Packages/CairnChatDomain` — 650 tests, 0 failures (the 37-key `SettingInfo`
+test still holds); `Scripts/check-logging.sh`, `check-signing.sh`, `check-no-paywall.sh`, `check-hostname.sh`
+and `check-ats.sh` all exit 0, and `Scripts/test-guards.sh` is 53 ok / 0 failed; `swiftc -parse` is clean over
+every file touched. Strict-concurrency shapes were typechecked locally under Swift 6.4 rather than guessed: an
+`@unchecked Sendable` delegate holding `@Sendable` closures including an async one called from a URLSession
+thread, a `@MainActor` object handing a `@Sendable (Bool) async -> Void` outward, a credential awaited outside
+the synchronous request hook, and `switch` patterns that match a case carrying a labelled payload.
+
+**Not verifiable here, and corrected rather than assumed.** Three API claims in the first draft of this work
+were wrong, and each was disproved rather than argued. There is no
+`URLSessionDownloadTask.cancel(byCancelingProducingFile:)` — the pair is `cancel(byProducingResumeData:)` and
+`cancel()`; `URLSessionTaskDelegate` carries one waiting method, `urlSession(_:taskIsWaitingForConnectivity:)`,
+not two spellings, and the extra one would have compiled, never run, and reported nothing; and a `Dictionary`
+filter closure cannot name `value` without `$0.` — the local compiler said so in one line. Apple's documentation
+pages need JavaScript, but the JSON behind them (`developer.apple.com/tutorials/data/documentation/…json`) is
+readable from this machine with `curl | grep`, which is how the first two were settled. A plausible Apple
+signature is not a verified one.
+
+**CI-verified:** owed — this round is not claimed until a green run number is cited against it.
+`Tests/CairnTests` compiles only on CI, so the four new transfer-control tests
+(`testPauseStopsTheTransferAndNeverTouchesTheDiscardPath`, `testCancelClosesTheTransferAndFreesWhatWasFetched`,
+`testAKeptTransferIsOfferedAsResumeRatherThanAsAFreshDownload`,
+`testACancelNamesWhatItCostsAndSaysSoWhenNothingWasFetched`) and both stub libraries get their first real
+compile there.
+
+**On-device-verified:** owed, and it is the point of this round: pause during a multi-gigabyte pull, kill the
+app, reopen it, and check the row still says what was kept; then resume, then cancel, and check the space comes
+back. Whether a resume block from a non-background session survives a quit-and-reopen is an on-device fact, and
+it is written as one wherever the code depends on it.
+
+**Real-network-verified:** owed for the token path — a gated repository listed and fetched with a saved token,
+and the same request without one answering 401.
+
+Left open on purpose: `DownloadBridge.swift` is 310 lines, above the ~150-line house limit; splitting its
+delegate extension into a second file means relaxing `private` helpers to module visibility, a wider surface
+than the split buys, so that waits for its own change. `CairnProviderRemote` cannot be built on this machine at
+all — `SecurityKeychainOperator.swift` imports `Security`, Darwin-only — so `KeychainModelTokenStore` is
+reviewed and parsed, not compiled, until CI.
