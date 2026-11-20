@@ -38,6 +38,24 @@ public enum AppleModelAvailability: Sendable, Equatable {
     }
 
     public var isUsable: Bool { self == .available }
+
+    /// The same fact in the form a failed turn can carry.
+    ///
+    /// A turn that cannot run says why, in the same words the Servers row uses, so the reason a person
+    /// reads in the composer and the reason the engine row shows are one reason and not two opinions.
+    /// A reason this build does not know stays the plain "not available right now" rather than being
+    /// mapped onto a diagnosis it cannot support.
+    public var generationError: OnDeviceGenerationError {
+        switch self {
+        case .available: return .generationFailed
+        case .deviceNotEligible: return .deviceNotEligible
+        case .appleIntelligenceNotEnabled: return .appleIntelligenceNotEnabled
+        case .modelNotReady: return .modelNotReady
+        case .unsupportedOS: return .unsupportedOS
+        case .frameworkAbsent: return .frameworkAbsent
+        case .other: return .unavailable
+        }
+    }
 }
 
 /// Reads availability at runtime. Never cached across a session: Apple Intelligence can be toggled

@@ -25,6 +25,20 @@ public struct FoundationModelsProvider: InferenceProvider {
     public var serverProfileID: UUID? { nil }
     public var samplingSupport: SamplingSupport { .none }
 
+    /// A model that really runs on this phone, rather than a stub that answers in one's place. This is
+    /// what lets the chat's "On device" mode route here: the mock is `.onDevice` too, and honestly so,
+    /// because it sends nothing anywhere — but it runs nothing either.
+    public var engineKind: EngineKind { .localModel }
+
+    /// Roughly 4,096 tokens of instructions, history and answer together.
+    ///
+    /// Declared, not measured: the framework offers no way to ask, and a prompt one exchange too long
+    /// does not degrade — the whole turn fails, with an error that names neither the prompt nor the
+    /// fix. Saying the ceiling out loud is what lets a turn be fitted before it is sent, which is the
+    /// difference between "shortened to fit" and a red line in the composer.
+    public static let tokenCeiling = 4096
+    public var contextTokenCeiling: Int? { Self.tokenCeiling }
+
     /// Declared, not hoped for: no thinking field, no tool calls, no vision, and no sampling knobs
     /// this API reads. A knob the framework would silently ignore must not appear in the sheet.
     public var capabilities: ProviderCapabilities {
@@ -63,13 +77,11 @@ public struct FoundationModelsProvider: InferenceProvider {
         _ request: GenerationRequest,
         into continuation: AsyncThrowingStream<StreamChunk, any Error>.Continuation
     ) async throws {
+        // The reason is carried through rather than flattened into "not available": "turn on Apple
+        // Intelligence in Settings" and "this iPhone is not eligible" are different answers with
+        // different fixes, and a person told neither goes toggling settings at random.
         let availability = AppleModelAvailabilityReader.current()
-        switch availability {
-        case .available: break
-        case .unsupportedOS: throw OnDeviceGenerationError.unsupportedOS
-        case .frameworkAbsent: throw OnDeviceGenerationError.frameworkAbsent
-        default: throw OnDeviceGenerationError.unavailable
-        }
+        guard availability.isUsable else { throw availability.generationError }
         #if canImport(FoundationModels)
         if #available(iOS 26.0, macOS 26.0, *) {
             try await streamViaFoundationModels(request, into: continuation)
@@ -85,17 +97,45 @@ public struct FoundationModelsProvider: InferenceProvider {
         _ request: GenerationRequest,
         into continuation: AsyncThrowingStream<StreamChunk, any Error>.Continuation
     ) async throws {
-        let session = LanguageModelSession(instructions: request.systemText)
+        // The tool block is re-rendered from the request's own definitions, so taking it out is a
+        // subtraction of the exact text the session appended — not a guess at how it was worded.
+        let fitted = PromptContextFit.fit(
+            systemText: request.systemText,
+            body: request.conversationText,
+            toolBlock: ToolPromptBlock.render(request.tools, format: request.toolProtocol),
+            tokenCeiling: tokenCeiling
+        )
+        // Refused here rather than sent and rejected there. The framework's own overflow message names
+        // neither the prompt nor the fix, and a turn that cannot fit at all has an answer Cairn can
+        // say out loud: shorten it, or switch the chat to a server with a bigger window.
+        guard fitted.fits else { throw OnDeviceGenerationError.inputTooLarge }
+
+        let session = LanguageModelSession(instructions: fitted.instructions)
         let started = ContinuousClock.now
         var emitted = ""
 
-        for try await snapshot in session.streamResponse(to: request.conversationText) {
-            if Task.isCancelled { break }
-            let full = snapshot.content
-            guard full.count > emitted.count else { continue }
-            let delta = String(full.suffix(full.count - emitted.count))
-            emitted = full
-            continuation.yield(.content(delta))
+        do {
+            for try await snapshot in session.streamResponse(to: fitted.body) {
+                if Task.isCancelled { break }
+                // A snapshot carries the text generated so far, so only its tail is new. The prefix is
+                // checked rather than assumed: slicing by length alone can cut mid-word if the framework
+                // ever rewrites what came before. A rewrite cannot be un-sent, so the length tail is
+                // still the least-wrong remainder when the prefixes disagree.
+                let full = snapshot.content
+                let delta: String
+                if full.hasPrefix(emitted) {
+                    delta = String(full.dropFirst(emitted.count))
+                } else if full.count > emitted.count {
+                    delta = String(full.suffix(full.count - emitted.count))
+                } else { continue }
+                guard !delta.isEmpty else { continue }
+                emitted = full
+                continuation.yield(.content(delta))
+            }
+        } catch {
+            // A stop is not a fault. The partial answer is already in the tree, so a cancelled turn
+            // closes with its metrics instead of with a red line in the composer.
+            if !Task.isCancelled { throw OnDeviceFailure.describe(error) }
         }
 
         // tokensGenerated stays 0 because the framework reports no token count here. The UI reads 0

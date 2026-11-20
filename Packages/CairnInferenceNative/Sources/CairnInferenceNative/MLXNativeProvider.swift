@@ -32,6 +32,11 @@ public actor MLXNativeProvider: InferenceProvider {
     public nonisolated var serverProfileID: UUID? { nil }
     public nonisolated var samplingSupport: SamplingSupport { .none }
 
+    /// Weights on this phone, run by this app — which is what makes it a thing the chat's "On device"
+    /// mode can route to. The runtime is C++ behind an actor; the kind is a plain declared value, so
+    /// nothing about that boundary leaks into routing.
+    public nonisolated var engineKind: EngineKind { .localModel }
+
     /// Nothing is claimed that the runtime has not been observed to emit. `thinking` is true
     /// because the templates can emit thinking markers, not because this model certainly does —
     /// the chunk parser, not this flag, decides whether a panel ever appears.
