@@ -147,16 +147,26 @@ final class ThemeSettingsWriteTests: XCTestCase {
         XCTAssertEqual(CairnChromeStyle.pinnedScheme(for: model), .dark)
     }
 
+    /// Each switch moves its own answer, neither moves the other's, and neither moves the paint. Written
+    /// relative to what the shipped settings start with rather than against a hard-coded default: the
+    /// statistics switch ships **on** and the outbound acknowledgement ships off, and a test that assumes
+    /// either in the wrong direction proves nothing about the switch.
     func testTheTwoToolAnswersStillMoveTheSignalsAndOnlyThem() {
         let model = theme()
         let paint = model.chrome
-        model.setOutboundWebAllowed(true)
-        XCTAssertTrue(model.toolSignals.webToolsAllowed)
-        XCTAssertFalse(model.toolSignals.showsGenerationStats, "one switch must not move the other")
+        let before = model.toolSignals
 
-        model.setShowsGenerationStats(false)
-        XCTAssertFalse(model.toolSignals.showsGenerationStats)
-        XCTAssertTrue(model.toolSignals.webToolsAllowed, "and must not reset it")
+        model.setShowsGenerationStats(!before.showsGenerationStats)
+        XCTAssertEqual(model.toolSignals.showsGenerationStats, !before.showsGenerationStats,
+                       "the statistics switch has to reach the registry")
+        XCTAssertEqual(model.toolSignals.webToolsAllowed, before.webToolsAllowed,
+                       "and must not move the acknowledgement with it")
+
+        model.setOutboundWebAllowed(!before.webToolsAllowed)
+        XCTAssertEqual(model.toolSignals.webToolsAllowed, !before.webToolsAllowed,
+                       "the acknowledgement has to reach the registry too")
+        XCTAssertEqual(model.toolSignals.showsGenerationStats, !before.showsGenerationStats,
+                       "and must not reset the statistics answer")
 
         XCTAssertEqual(model.chrome, paint, "neither switch is a paint answer")
     }
