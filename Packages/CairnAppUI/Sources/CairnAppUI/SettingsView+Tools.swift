@@ -15,6 +15,7 @@ import CairnChatDomain
 /// nothing typed into it is lost.
 extension SettingsView {
 
+    @ViewBuilder
     var toolsSection: some View {
         Section {
             InfoRow(

@@ -2242,8 +2242,21 @@ as the fallback; `presentationDetents` is ignored the moment the content adapts 
 left as a modifier that does nothing; and `accessibilityElement(children: .combine)` came off the port stepper's label
 because a stepper already synthesizes the adjustable element VoiceOver increments.
 
-**CI-verified: not yet.** This entry is written before the run; the run number gets appended here when it is green, and the
-milestone is not claimed until then. **On-device-verified: no.** **Real-network-verified: no.**
+**CI-verified: no — the first run failed, and the failure was a real one.** Run
+[44660409341](https://github.com/9qhfghxgfy-afk/cairn/actions/runs/44660409341) on `3b64b00` died in *Build + test on
+simulator* with one compiler error: `SettingsView+Tools.swift:18:33: function declares an opaque return type, but has no
+return statements in its body from which to infer an underlying type`. The cause is a rule this machine cannot exercise:
+`var body: some View` gets its result builder from the `View` protocol requirement, and a hand-written
+`var toolsSection: some View` in an extension gets none — so the moment my change put a second `Section` beside the first,
+the body stopped being one expression and stopped compiling. `@ViewBuilder` on that property is the fix. Because the error
+class is invisible to `swiftc -parse`, `Scripts/check-viewbuilder.sh` now reports any computed property or helper whose body
+holds two top-level views with no `@ViewBuilder`; it is wired into `Scripts/ci.sh guards` and into the guard job in
+`.github/workflows/ci.yml`, so the next one is caught in seconds on Linux rather than six minutes into a macOS build. A
+review pass on the same code proposed wrapping every `.textInputAutocapitalization` / `.keyboardType` call in `#if os(iOS)`
+because those modifiers are unavailable on macOS; that finding is **rejected against evidence** — the identical calls were
+in `WebSearchProviderEditor.swift` at `e203fca` and were green in run 44652196582, `CairnAppUI` is compiled for the iOS
+simulator only, and no host-test lane builds it for macOS. **On-device-verified: no.** **Real-network-verified: no.** A
+green run for this pass is still owed, and nothing here is claimed as a milestone until one exists.
 
 ### The catalogue, not the view, holds the words
 

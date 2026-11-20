@@ -191,6 +191,12 @@ guards() {
   bash Scripts/check-hostname.sh
   bash Scripts/check-signing.sh
   bash Scripts/check-no-paywall.sh
+  # Not a privacy guard — a compile-reliability guard, and the one thing here that catches an error
+  # the Windows authoring machine cannot see at all. A hand-written `var something: some View` does
+  # not inherit the result builder that `View.body` gets from the protocol, so a second sibling view
+  # added to such a body is a build failure six minutes into a macOS run. It failed CI 44660409341
+  # exactly that way; this finds the next one before the build instead.
+  bash Scripts/check-viewbuilder.sh
   bash Scripts/test-guards.sh
 }
 

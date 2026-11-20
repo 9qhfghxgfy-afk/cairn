@@ -44,6 +44,12 @@ jobs:
       # why workflow files are not part of the scanned scope.
       - name: No monetization, usage cap, or tracking hook in shipped sources
         run: bash Scripts/check-no-paywall.sh
+      # Not privacy: compile reliability. A hand-written `var something: some View` in an extension does
+      # not inherit the result builder that `View.body` gets from the protocol requirement, so adding a
+      # second sibling view to such a body is a build failure that only a macOS compile can show. This
+      # reports the candidates on Linux, in seconds, instead of six minutes into the build job.
+      - name: Every multi-view property declares @ViewBuilder
+        run: bash Scripts/check-viewbuilder.sh
       # The guards above are only worth what their patterns are worth. This re-runs them against
       # planted values in a throwaway tree and fails if any guard stops rejecting them, or if a
       # guard prints the value it caught.
