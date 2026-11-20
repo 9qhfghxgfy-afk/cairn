@@ -61,6 +61,52 @@ public struct ModelManagerView: View {
             // open, or the catalog would read a profile that is not set yet and always guess On-Device.
             if let catalog { await catalog.openFrom(kind: model.profile?.kind) }
         }
+        // The detail sheet is hosted here, on the list itself, and not inside the Download tab's content.
+        //
+        // A presentation is carried by the view it is attached to. Attached inside a list's content — as
+        // it was, on the `Group` the Download tab builds — it is a content node, so anything that makes
+        // the list re-diff its own structure recycles the node that was carrying the sheet, and the sheet
+        // is dismissed by the app rather than by the person. The Download tab's content changes shape on
+        // its own: a notice appears, the rows arrive, a transfer starts and a card gains a progress line.
+        // Tapping "Allow & Download" did all of that at once, and the stack of sheets underneath it
+        // collapsed to the chat.
+        //
+        // Attached to the list container instead, the host has a stable identity: rows come and go inside
+        // it, and the presentation survives.
+        .sheet(item: focusedDetail) { row in
+            ModelDetailPresentation(catalog: catalog, row: row)
+        }
+    }
+
+    /// The Download tab's focused card, reached through the optional catalogue so this view can be built
+    /// with no library wired at all. With no catalogue the binding is always nil, so nothing is presented.
+    ///
+    /// `focused` is a settable property on the catalogue precisely so that a sheet can close itself; the
+    /// binding ends there and does not touch a transfer, which the catalogue keeps running.
+    private var focusedDetail: Binding<LocalCatalogRow?> {
+        Binding(
+            get: { catalog?.focused },
+            set: { catalog?.focused = $0 }
+        )
+    }
+}
+
+/// The sheet a Download card opens, drawn by the Models list rather than by the card's own row.
+///
+/// The catalogue is optional because this screen can be built with no curated library at all, in which
+/// case the Download tab is the typed-name form and nothing can be focused. The optional lives here rather
+/// than in the `.sheet` closure because a sheet's content has to be one view, and a conditional branch
+/// inside a sheet's own content is the kind of thing that renders as a blank panel if the unwrap fails.
+/// It cannot fail here: the focused card is a property of the catalogue, so no catalogue means no focus
+/// means no presentation.
+private struct ModelDetailPresentation: View {
+    private var catalog: ModelCatalogModel?
+    let row: LocalCatalogRow
+
+    var body: some View {
+        if let catalog {
+            ModelDetailSheet(model: catalog, row: row)
+        }
     }
 }
 

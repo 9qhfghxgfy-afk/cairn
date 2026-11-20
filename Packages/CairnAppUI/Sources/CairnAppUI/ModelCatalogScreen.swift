@@ -17,8 +17,16 @@ public struct ModelCatalogScreen: View {
     public init(model: ModelCatalogModel) { self.model = model }
 
     /// Sections, not a `List`: this view is dropped into `ModelManagerView`'s own list as the Download
-    /// tab, and a list inside a list draws as a broken inset. The presentation and the two tasks hang off
-    /// the group, which is legal — a sheet attaches to the view hierarchy above the list either way.
+    /// tab, and a list inside a list draws as a broken inset.
+    ///
+    /// It carries no presentation. The detail sheet used to hang off this group, which looked legal — a
+    /// sheet does attach to the view hierarchy above a list either way — but the group is a **content
+    /// node** inside `ModelManagerView`'s list, and a presentation is carried by the node that hosts it.
+    /// This group changes shape on its own: a notice appears, the rows arrive, a transfer starts and a
+    /// card gains a progress line. Each re-diff recycled the node holding the sheet, so tapping
+    /// "Allow & Download" — which moves the notice, the acknowledgement and a card's progress at once —
+    /// took the sheet and the screens stacked under it down to the chat. The sheet is hosted on the list
+    /// container in `ModelManagerView` now, where its host has a stable identity.
     public var body: some View {
         Group {
             if let notice = model.notice {
@@ -27,12 +35,6 @@ public struct ModelCatalogScreen: View {
             destinationSection
             filterSection
             cardSection
-        }
-        .sheet(item: Binding(
-            get: { model.focused },
-            set: { model.focused = $0 }
-        )) { row in
-            ModelDetailSheet(model: model, row: row)
         }
         .task { await model.refresh() }
         // Re-reads the server's names the moment its pull stops reporting. A timer would be the
