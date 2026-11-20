@@ -17,6 +17,29 @@ public enum ModelCatalogOrigin: String, Sendable, Equatable, Codable, CaseIterab
 
     public var id: String { rawValue }
 
+    /// The word on the source switcher. `Hugging Face` and `Ollama` are the two libraries a person is
+    /// actually choosing between, and neither is a destination: an Ollama tag lands on a server that may
+    /// well be on this phone's own network.
+    public var sourceLabel: String {
+        switch self {
+        case .onDevice: return "Hugging Face"
+        case .ollamaLibrary: return "Ollama"
+        case .custom: return "Typed name"
+        }
+    }
+
+    /// What choosing that source costs, in one line under the switcher.
+    public var sourceBlurb: String {
+        switch self {
+        case .onDevice:
+            return "MLX weights for this iPhone, fetched from Hugging Face."
+        case .ollamaLibrary:
+            return "Tags pulled by an Ollama server you have configured."
+        case .custom:
+            return "Installed by the exact name you typed."
+        }
+    }
+
     /// The destination line under the section title.
     public var destinationText: String {
         switch self {

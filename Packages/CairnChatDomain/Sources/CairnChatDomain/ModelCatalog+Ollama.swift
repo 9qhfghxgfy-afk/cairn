@@ -124,5 +124,13 @@ extension ModelCatalog {
             addedOn: day(2026, 9, 21), provider: "Qwen", series: "Qwen2.5-Coder",
             sortOrder: 12, origin: .ollamaLibrary
         ),
+        LocalCatalogRow(
+            repoID: "llava:7b", displayName: "LLaVA 7B",
+            summary: "The library's standing answer for a server that has to read a photograph: an "
+                + "older multimodal tag, still the usual pull for image questions on a modest GPU.",
+            parameterSize: "7B", downloadBytes: 4_733_362_813, capabilityLabels: ["Vision"],
+            addedOn: day(2026, 10, 12), provider: "LLaVA", series: "LLaVA",
+            sortOrder: 13, origin: .ollamaLibrary
+        ),
     ]
 }

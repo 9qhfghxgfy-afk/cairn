@@ -17,7 +17,13 @@ import Foundation
 /// fetched. The summaries are Cairn's own words.
 public enum ModelCatalog {
     /// The curated on-device MLX library, in Cairn's rank.
-    public static var onDevice: [LocalCatalogRow] { onDeviceRows }
+    ///
+    /// The base list and the later additions live in separate files so neither list grows past the size
+    /// at which it can still be read as a whole; the rank is re-applied here, because `sortOrder` is the
+    /// order the `Popular` sort shows and the only place the two halves meet.
+    public static var onDevice: [LocalCatalogRow] {
+        (onDeviceRows + onDeviceAdditions).sorted { $0.sortOrder < $1.sortOrder }
+    }
 
     /// The curated Ollama library tags, in Cairn's rank.
     public static var ollama: [LocalCatalogRow] { ollamaRows }
