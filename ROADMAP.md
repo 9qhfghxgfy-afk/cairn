@@ -3112,3 +3112,142 @@ model **while its own download is in flight** is not handled: the Installed list
 the case needs the Download tab's row to offer a cancel first, and `modelWasRemoved` deliberately leaves a server
 pull alone. And `releaseFromMemory` maps a folder's `format` to the engine's resident id, which is right for MLX's
 one-resident engine and would need a real per-folder claim table before a second on-device runtime ships.
+
+## 2026-11-21 — the memory gate failed its own two tests, and the app target did not build at all: both found by running the gate where it actually compiles
+
+**Status: fixed, and green lane-for-lane on this Mac, including `CairnTests` on iPhone 17 / iOS 26.5. Not a
+milestone — no CI run number is cited against this commit and none has been dispatched.**
+
+### Why this surfaced now
+
+The 2026-11-20 pass was authored and checked on a Windows host, which by its own account cannot build
+`CairnInferenceLocal` (`no such module 'CryptoKit'`), cannot build `CairnAppUI`, and cannot compile
+`Tests/CairnTests`. Running `Scripts/ci.sh local` here — the first time that suite has ever executed — gave
+**118 of 120**, the two reds both inside the arithmetic that decides whether a model may be loaded on a
+phone that is running out of memory. Then `Scripts/ci.sh test` showed that the commit at `224864b` does not
+build at all: three compile errors in `CairnAppUI`, and once those were fixed, five
+`ModelInstalledSectionTests` failures.
+
+### Defect 1 — the pool clamp had a floor in its comment and a ceiling in its code
+
+`MLXMemoryBudget.cacheLimitBytes(headroomBytes:)` documented `min(ceiling, reading / 8)`, "never below the
+floor", and implemented `guard share > 0, share < ceiling else { return ceiling }`. A reading so small that
+integer division yields **zero** — any headroom under eight bytes, which is what the test's
+`headroomBytes: 1` hands it — took the same branch as an eight-gigabyte reading and returned the 32 MiB
+**ceiling**: the largest pool Cairn will ever hold, handed to the most squeezed phone there is. The branch
+was written for "generous" and caught "nothing" with it.
+
+One expression now, bounded both ways: `min(ceiling, max(floor, share))`, with `nil` / `0` / negative still
+the floor. One byte → 8 MiB; 48 MiB → 8 MiB; 192 MiB → 24 MiB; 384 MiB and 8 GB → 32 MiB. The clamp is
+computed in `Int64` before narrowing to `Int`, so a Mac-scale reading cannot trap the conversion.
+
+### Defect 2 — an overflow was read as room, and a saturated requirement as affordable
+
+`MLXLoadPreflight.usableShare(of:)` scaled before it divided, and answered a failed multiply with the
+input: `overflow ? headroom : scaled / 5`. That ternary is the whole bug. Past roughly 3.7 exabytes the
+`× 4` overflows, and the overflow path reported **"all of this reading is usable"** — the precise opposite
+of what a measurement that failed means. `decide` then compared a `requiredBytes` that had itself saturated
+to `Int64.max` against that figure, so `Int64.max <= Int64.max` admitted an eight-exbibyte model on a
+phone. The test that exists to catch it — `decide(headroomBytes: .max, weightsBytes: .max)` must refuse —
+was red.
+
+Three changes, all inside the gate:
+
+* **Divide before scaling**: `(headroom / 5) * 4 + ((headroom % 5) * 4) / 5`. Exactly
+  `floor(headroom × 4⁄5)` for every `Int64` including `Int64.max` (→ 7,378,697,629,483,820,645), and the
+  largest product is four fifths of the input instead of four times it, so there is nothing left to
+  saturate.
+* **Saturation is reported rather than hidden.** The share answers `(bytes, saturated)`; a saturated share,
+  or a requirement that saturated to `Int64.max`, refuses `.headroomTooLow` at once. A figure the
+  arithmetic had to invent is not a measurement, and this gate admits nothing but measurements.
+* **The requirement must sit strictly inside the reading as well as inside its usable share.** Weights equal
+  to the whole headroom leave nothing for the process asking — no tokenizer, no SwiftUI, no decoded image.
+  At a 4/5 share that check is redundant and is kept as the invariant, so a later change to the ratio
+  cannot make "the whole of it" admissible by accident.
+
+The boundary the suite pins did not move: at `required = 1,506,207,616` (1.07 GB of weights + the
+301,989,888-byte cache for the capped 2,048-token window + 128 MiB of pipelines), a reading of
+1,882,759,520 admits and one byte less refuses.
+
+
+### What the green run also had to fix — `224864b` did not build
+
+That commit was written where neither `CairnAppUI` nor `Tests/CairnTests` can compile, and it was pushed.
+Three compile errors, every one of a kind this repo has met before:
+
+* `installedEntries` carried `public private(set)` while the merge that writes it lives in
+  `ModelManagerModel+Installed`. A `private` setter is **file**-scoped in Swift, so an extension in another
+  file cannot assign it — the same trap recorded for four other split AppUI models, fixed the same way:
+  `public internal(set)`, still read-only outside the module.
+* `InstalledInventory.entries(for:profileID:serverName:)` takes a `String` and was handed `profile.id`, a
+  `UUID`. Now `profile.id.uuidString`, the spelling every other UUID-keyed identifier in Cairn uses
+  (`RemoteEngineID.make`, the Keychain account name).
+
+And five `ModelInstalledSectionTests` assertions were wrong where the merge rule was right:
+
+* `profile` was a **computed** property, so each read minted a fresh `ServerProfile` with a fresh `UUID()` —
+  the id the test asserted and the id the model was opened with were two different servers. It is a stored
+  `let` now: one profile per test case, which is what the assertion always meant.
+* Three tests counted or compared the **whole** merged list as though opening a profile whose server answers
+  added no row. It adds one, and `testOneNameOnAPhoneAndOnAServerStaysTwoRows` exists to prove that. Each
+  assertion now scopes to `$0.host == .thisPhone`, the row the test is about, and
+  `testAStoreThatWillNotReadKeepsTheRowsItAlreadyShowed` got the stronger form its name promises: every row
+  on screen before the failed read is still on screen after it, with the folder's row called out.
+
+Nothing was deleted from a test; no test was weakened to pass. Two reds stopped being red, three compile
+errors stopped existing, five assertions started claiming what their names say.
+
+### Verification — the three tiers kept separate, as always
+
+**macOS-verified this session (Xcode 27.2 / 27B52, Swift 6.4.3, Apple M3 Max):**
+
+* `swift test --package-path Packages/CairnInferenceLocal` → **120 tests in 24 suites, 0 failures** (was
+  118/120). `MLXMemoryBudgetTests` and `MLXLoadPreflightTests` both green, including the two that were red.
+* `bash Scripts/ci.sh all`, pinned to CI's destination (`SIMULATOR_NAME='iPhone 17' SIMULATOR_OS='26.5'`),
+  start to finish in one log: all five privacy guards pass and `Scripts/test-guards.sh` reports **53 ok, 0
+  failed**; domain **670 tests, 0 failures**; remote **170, 0 failures**; local **120 in 24 suites**; native
+  with MLX excluded **45 in 7 suites**; `xcodegen generate`; `xcodebuild build`; `xcodebuild test` →
+  **242 `CairnTests`, 0 failures**, ending in `** TEST SUCCEEDED **`, which includes
+  `ModelInstalledSectionTests` (9) and `OnDeviceMemoryGateTests` (4) — the only place the gate, the registry
+  and the model store exist together.
+* `CAIRN_MLX=1 swift build --package-path Packages/CairnInferenceNative` → **Build complete (26.68 s)** with
+  `MLX`, `MLXLLM`, `MLXLMCommon`, `MLXNN`, `MLXOptimizers` and `Cmlx`'s Metal sources all compiled. That is
+  the **macOS host** slice: it says the linked module type-checks, not that an iPhone loaded a model. No
+  token has been generated anywhere.
+* `CAIRN_MLX=1 xcodegen generate` → regenerated, and `IPHONEOS_DEPLOYMENT_TARGET` stays **26.0**, under the
+  ceiling the MLX pins need.
+
+**CI-verified: no.** **On-device-verified: no.** **Real-network-verified: not applicable** — none of this
+opens a socket.
+
+### Two facts about this machine, recorded rather than fixed
+
+* `Scripts/ci.sh probe` prints Xcode **27.2** (27B52) with `iphoneos27.2` / `iphonesimulator27.2` and
+  simulator runtimes iOS **26.2 / 26.5 / 27.2**, while CI is pinned to `macos-26` / `Xcode_26.6` / iOS 26.5.
+  Local green is therefore not CI green, the pin is untouched, and only a green CI run moves it. The
+  hardware also disagrees with the 2026-11-16 note: `sysctl` here reports an **Apple M3 Max with 36 GB**, not
+  the 8 GB MacBook Pro 13″. Recorded, not re-scoped — no budget code changed, and the iPhone's
+  `os_proc_available_memory()` is still the only figure any of it reads.
+* Plain `Scripts/ci.sh all` fails on this machine before compiling a line: with no `SIMULATOR_OS`,
+  `xcodebuild` resolves the unpinned `iPhone 15 Pro` destination as `OS:latest` = 27.2, and there is no
+  iPhone 15 Pro device type on 27.2 here (only on 26.2). The script's documented override — the pair above,
+  which is also CI's pin — is what the run used. Teaching `resolve_destination` to pick the newest runtime
+  on which the named device actually exists is **owed** and was deliberately not attempted here, since
+  changing the gate is not this commit's claim.
+
+### Files
+
+Changed: `CairnInferenceLocal/…/MLXMemoryBudget.swift`, `CairnInferenceLocal/…/MLXLoadPreflight.swift`,
+`CairnAppUI/…/ModelManagerModel.swift`, `CairnAppUI/…/ModelManagerModel+Installed.swift`,
+`Tests/CairnTests/ModelInstalledSectionTests.swift`.
+
+### Owed
+
+1. A CI run on this commit — guards, the four host suites, `xcodegen`, simulator build and `CairnTests`. That
+   pays the 2026-11-20 entry's debt too, since it cites no run either.
+2. The device pass that entry lists: load one installed MLX model, answer twice, watch the second turn get
+   faster (the pooled container), then force a memory warning and confirm the model stays loaded.
+3. A device build with the runtime linked — `Scripts/ci.sh device`, and `ipa.yml` when the user triggers it.
+   What is proven here is the host slice.
+4. `ModelManagerModel.swift` is 192 lines and still wants its server-lifecycle half in its own file.
+
