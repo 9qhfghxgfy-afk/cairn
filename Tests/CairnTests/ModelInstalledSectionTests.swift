@@ -40,9 +40,12 @@ final class ModelInstalledSectionTests: XCTestCase {
         return model
     }
 
-    private var profile: ServerProfile {
-        ServerProfile(name: "Studio box", kind: .ollama, baseURLString: "http://192.168.1.20:11434")
-    }
+    /// One profile, held rather than recomputed. `ServerProfile.init` defaults `id` to a fresh `UUID()`,
+    /// so a computed property hands out a different profile each time it is read — and then the id a test
+    /// asserts and the id the model was opened with are two different servers.
+    private let profile = ServerProfile(
+        name: "Studio box", kind: .ollama, baseURLString: "http://192.168.1.20:11434"
+    )
 
     func testAPhoneWithModelsOnDiskIsNotShownEmptyBecauseAServerRefused() async {
         let service = StubModelService()
@@ -80,7 +83,7 @@ final class ModelInstalledSectionTests: XCTestCase {
         XCTAssertFalse(model.deletionVerdict(for: server ?? phoneEntry("x")).isAllowed)
     }
 
-    func testDeletingAPhoneRowTellsTheStoreAndBothScreensAreTold() async {
+    func testDeletingAPhoneRowTellsTheStoreAndBothScreensAreTold() async throws {
         let serving = InstalledStubServing()
         serving.entries = [phoneEntry("org/gguf")]
         serving.entriesAfterRemoval = []
@@ -89,13 +92,19 @@ final class ModelInstalledSectionTests: XCTestCase {
         model.onLocalModelRemoved = { entry in await hook.record(entry) }
 
         await model.open(profile)
-        XCTAssertEqual(model.installedEntries.count, 1)
+        // The stub server answers with one tag of its own, so the merged list is the phone's row **and**
+        // the server's. What this test is about is the phone's row, so that is the row it counts and the
+        // row it deletes — a server row would be a deletion Cairn refuses, and a different test.
+        XCTAssertEqual(model.installedEntries.filter { $0.host == .thisPhone }.map(\.id),
+                       [InstalledModelEntry.phoneID(repoID: "org/gguf")])
+        let phoneRow = try XCTUnwrap(model.installedEntries.first { $0.host == .thisPhone })
 
-        await model.removeInstalled(model.installedEntries[0])
+        await model.removeInstalled(phoneRow)
 
         XCTAssertEqual(serving.removals, [InstalledModelEntry.phoneID(repoID: "org/gguf")])
         XCTAssertEqual(hook.ids, ["org/gguf"], "the screens are told which repository went away")
-        XCTAssertTrue(model.installedEntries.isEmpty, "the row is gone once the store says it is")
+        XCTAssertTrue(model.installedEntries.filter { $0.host == .thisPhone }.isEmpty,
+                      "the row is gone once the store says it is")
     }
 
     func testARefusedRemovalLeavesTheRowOnScreenWithTheReason() async throws {
@@ -104,7 +113,7 @@ final class ModelInstalledSectionTests: XCTestCase {
         let model = makeModel(serving: serving)
 
         await model.open(profile)
-        let entry = try XCTUnwrap(model.installedEntries.first)
+        let entry = try XCTUnwrap(model.installedEntries.first { $0.host == .thisPhone })
 
         // The store refuses because a turn is being written in that model. The read still works, so the row
         // can only still be here because the store still has it — not because a refresh failed and fell back.
@@ -112,7 +121,9 @@ final class ModelInstalledSectionTests: XCTestCase {
         await model.removeInstalled(entry)
 
         XCTAssertEqual(model.notice, InstalledModelError.turnRunning.errorDescription)
-        XCTAssertEqual(model.installedEntries.map(\.id), [entry.id],
+        // Scoped to the phone's own rows on purpose: the open server's row is supposed to be there. The
+        // claim under test is that the folder row the person pressed Delete on did not disappear.
+        XCTAssertEqual(model.installedEntries.filter { $0.host == .thisPhone }.map(\.id), [entry.id],
                        "a delete that did not happen leaves the row where it was")
         XCTAssertTrue(serving.removals.isEmpty)
     }
@@ -122,13 +133,18 @@ final class ModelInstalledSectionTests: XCTestCase {
         serving.entries = [phoneEntry("org/gguf")]
         let model = makeModel(serving: serving)
         await model.open(profile)
-        let entry = try XCTUnwrap(model.installedEntries.first)
+        let entry = try XCTUnwrap(model.installedEntries.first { $0.host == .thisPhone })
+        let shown = model.installedEntries
 
         serving.listFailure = CairnInstalledProbeFailure()
         await model.refreshInstalledEntries()
 
-        XCTAssertEqual(model.installedEntries.map(\.id), [entry.id],
+        // Every row that was on screen is still on screen, and the folder's row above all: that is the row
+        // the phone was asked about and could not answer for. The server's rows are re-derived from the
+        // answer it already gave, so a read that fails here loses nothing.
+        XCTAssertEqual(model.installedEntries.map(\.id), shown.map(\.id),
                        "a store that cannot be read now is not evidence that the folder is gone")
+        XCTAssertTrue(model.installedEntries.contains { $0.id == entry.id })
         XCTAssertEqual(model.notice, CairnInstalledProbeFailure().errorDescription,
                        "the notice is the read's own failure, not a removal's")
     }

@@ -82,7 +82,10 @@ extension ModelManagerModel {
         guard let profile else { return [] }
         return InstalledInventory.entries(
             for: installed,
-            profileID: profile.id,
+            // The profile's `id` is a UUID and the entry key is a string, so the key is spelled the way
+            // every other UUID-keyed identifier in Cairn spells it — `uuidString`, as in `RemoteEngineID`
+            // and the Keychain account name — which is also what a server row's id prints as.
+            profileID: profile.id.uuidString,
             serverName: profile.name
         )
     }

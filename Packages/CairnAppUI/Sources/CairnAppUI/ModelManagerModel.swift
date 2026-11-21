@@ -20,7 +20,11 @@ public final class ModelManagerModel {
     /// This is separate from `installed` rather than replacing it because the two lists answer different
     /// questions. `installed` is one server's own answer and is what a server-side detail request folds
     /// onto; this is what a person has, and it survives a server that will not answer.
-    public private(set) var installedEntries: [InstalledModelEntry] = []
+    ///
+    /// `internal(set)` and not `private(set)` because the merge that writes it lives in
+    /// `ModelManagerModel+Installed`, and a `private` setter is file-scoped in Swift — the same trap CI
+    /// run 44518294831 caught for four other split AppUI models.
+    public internal(set) var installedEntries: [InstalledModelEntry] = []
     public private(set) var detail: ModelDetail?
     public private(set) var pullProgress: ModelPullProgress?
     public private(set) var isWorking = false
