@@ -2721,12 +2721,38 @@ file, and the callback shapes sit where nobody has to guess them.
 
 ### Verification, in the three categories, unblended
 
-**CI-verified:** owed by this commit; the run is what decides it. Two things make this round's CI run the first
-*execution* of the new code rather than a formality: `Packages/CairnInferenceLocal` cannot be built on the
-authoring machine at all — `SHA256Digest.swift` imports `CryptoKit` and `AppleModelAvailability.swift` imports
-`FoundationModels`, both Darwin-only, so `swift build --package-path Packages/CairnInferenceLocal` fails at the
-module level here — and swift-testing is not installed for this Windows toolchain, so the five new test files get
-their first compile and their first run on CI.
+**CI-verified:** green on run **44843402778** (commit `cc504e9`) — Privacy guards, Linked MLX build, Host unit
+tests (macOS), and Build + test on simulator, all success. That run is the *first execution* of this round's code
+rather than a formality, and the reason matters: `Packages/CairnInferenceLocal` cannot be built on the authoring
+machine at all — `SHA256Digest.swift` imports `CryptoKit` and `AppleModelAvailability.swift` imports
+`FoundationModels`, both Darwin-only, so `swift test --package-path Packages/CairnInferenceLocal` stops at
+`no such module 'CryptoKit'` before it reaches a single test. The draft here claimed swift-testing was itself
+missing from the Windows toolchain; that was wrong and is corrected — swift-testing runs fine here (`CairnInferenceNative`
+reports through it), and the only local blocker is the Darwin-only imports.
+
+**Two red runs came first, and each one was a real defect rather than a harness typo.** Run **44838442572**
+(`21e6ecf`) failed the host job on five identical lines: `answer(_:failure:)` was called without the `token:` label
+the declaration carries, at `DownloadBridgeAnswerTests.swift:64, 78, 106, 107` and
+`DownloadBridgeProgressTests.swift:95`. The same draft had also chained optionality onto a non-optional `String` —
+`ModelDownloadOutcome.failed(message:)` is never nil, so `text?.contains(...)` does not compile, and the
+`?? false` beside it would have passed a real failure whose sentence merely did not match. Both directions were then
+proved locally with `swiftc -swift-version 6` on the enum and the sentence alone, with no package build: the optional
+chain is rejected outright, the plain `contains` compiles and reports the timeout sentence as true.
+
+Run **44840494975** (`388e90a`) compiled, then failed exactly one assertion:
+`await bridge.wait(for: token) == .complete(bytes: 14)`. The payload that test writes is **fifteen** bytes, so the
+number in the test was simply wrong. The line behind it was worth more than the assertion. `DownloadBridge` measured
+the landed file with `attributes[.size] as? Int64` — the only file-size read in the repo — and that cast is not
+portable: Darwin returns an `NSNumber` that bridges to `Int64`, the open-source Foundation stores a plain Swift `Int`
+(sometimes unsigned), and a dynamic cast between two distinct Swift integer types fails rather than converting.
+Measured on this machine, the bare cast read a real fifteen-byte file as **zero** bytes. In `answer(token:failure:)`
+zero is not a wrong number but a branch: `stored > 0` is what separates `.complete` from
+`.failed("The transfer finished without delivering a file.")`, and `.complete(bytes:)` is what
+`ModelDownloadManager` hands to the digest step as `InstalledModelFile(name:bytes:sha256:)`. A cast that misses
+therefore discards a finished four-gigabyte download along with the checksum that would have proved it. The read now
+asks every spelling in order — `Int64`, `Int`, `UInt64`, `NSNumber` — and trusts none, because which one Darwin uses
+is not a fact this machine can settle; the test asserts fifteen and ties the reported count to the file on disk
+instead of trusting a literal nobody measured.
 
 What the machine did prove, before pushing:
 
@@ -2748,7 +2774,47 @@ What the machine did prove, before pushing:
   `waitsForConnectivity` setter is get-only off Apple platforms, and `NSURLSessionDownloadTaskResumeData` exists
   only in CFNetwork (the harness shims it to keep the rest of the file checking).
 
-**On-device-verified:** owed, and it is the whole point of the round — the bug only ever appeared on a phone.
+**The active file name was already carried and nothing drew it.** `ModelTransferStatus.stageDetail` joins the stage
+to the file a transfer is sitting on (`Downloading · model-00002-of-00004.safetensors`), and the whole chain that
+feeds it was already honest: the bridge reports per-file progress, `ModelDownloadManager+Files` tags every event with
+the file's name, `App/OnDeviceModelLibrary+Download` puts that name into `LocalTransferState`, and
+`ModelTransferStatus.init(entryID:state:)` copies it across. The sheet drew `status.line`, which for a phone transfer
+is the bare word "Downloading" — so a four-file repository sat at 1.2 GB with no way to tell which file it was on.
+`ModelCatalogProgress` draws `stageDetail` now. A server pull and a refusal carry no file name, so the join returns
+their line untouched: a 404 still shows the Hub's whole sentence, and the sheet still invents nothing about someone
+else's machine. `ModelTransferStatusTests.testTheDrawnLineNamesTheFileInTheHandAndNothingElse` proves the join in the
+tier that runs on this machine; the pixels are a device checklist line.
+
+### Counts, one tier per line — these are not the same population
+
+**Host tier — this Windows 11 machine, Swift 6.4.2, no Xcode:**
+
+- `swift test --package-path Packages/CairnChatDomain` — **651 XCTest tests, 0 failures** (plus 0 swift-testing; this
+  package has no swift-testing suite).
+- `swift test --package-path Packages/CairnInferenceNative` — **35 swift-testing tests in 5 suites, 0 failures**.
+- `Scripts/parse-check.sh` — **686 files parse clean**. Syntax only: it loads no modules, so it proves nothing about
+  types and is not a substitute for a build.
+- `Packages/CairnInferenceLocal` — **cannot be built here at all** (`no such module 'CryptoKit'`). No part of the
+  download bridge is host-verified; only shapes extracted from it and compiled alone are.
+
+**Guards tier — runs anywhere with bash, and self-tested:**
+
+- `Scripts/ci.sh guards` here and the CI guard job both pass all five guards (`check-logging`, `check-no-paywall`,
+  `check-hostname`, `check-ats`, `check-signing`), and `Scripts/test-guards.sh` reports **53 ok, 0 failed** on both
+  machines — the guards still reject planted values and still never print what they caught.
+
+**CI tier — macOS-26 runner, Xcode 26.6, green run 44843402778 on `cc504e9`:**
+
+- Tree, streaming, and cancellation (`CairnChatDomain`) — **651 XCTest, 0 failures**.
+- Remote provider, profile, and secret (`CairnProviderRemote`) — **170 XCTest, 0 failures**.
+- On-device inference, memory, and catalog (`CairnInferenceLocal`) — **92 swift-testing tests in 19 suites,
+  0 failures**; its XCTest bundle is empty, which is why the count reads 0 in that column.
+- Native runtime isolation (`CairnInferenceNative`) — **35 swift-testing tests in 5 suites, 0 failures**.
+- Build + test on iPhone 17 / iOS 26.5 — **222 XCTest, 0 failures**, `** TEST SUCCEEDED **`. This is the only lane
+  that compiles `CairnAppUI` and `Tests/CairnTests`, so it is what stands behind the `stageDetail` change and the
+  delegate-conformance change.
+
+**On-device tier:** owed, and it is the whole point of the round — the bug only ever appeared on a phone.
 
 **Real-network-verified:** partly, and only for the shapes the code is written against: the Hub answers a weight
 request with a hop to a signed storage address, and a missing path answers 404 with a short body and no transport
@@ -2760,7 +2826,10 @@ nor a gated repository's 401 has been observed from this app.
 1. Start a large download and watch the bar move past the metadata files. A bar that reaches a weight file at all
    proves `didWriteData` is being delivered, which is the bug.
 2. Let it finish and open the file's row: the byte count shown is the size on disk and the checksum verdict is
-   `verified`. Proves the temporary file was moved into the store rather than left in it.
+   `verified`. Proves the temporary file was moved into the store rather than left in it. While it runs, the line above
+   the bar should name the file it is sitting on — `Downloading · model-00002-of-00004.safetensors` — which on a
+   four-file repository is the only way to tell which file the bar belongs to; a bare "Downloading" means the name
+   arrived and the sheet dropped it.
 3. Pause mid-file, force-quit, reopen, resume. The row names what was kept and the transfer continues from partway
    through. Proves the resume block and the 206 path; whether the block survives a quit is the open question this
    line settles either way.
@@ -2784,7 +2853,7 @@ nor a gated repository's 401 has been observed from this app.
 - No rate is shown. The sheet says stage · filename · bytes · percent; bytes-per-second needs a clock in
   `LocalTransferState`, which every transfer state would then have to carry, so it is its own change rather than a
   line added to a bug fix.
-- `DownloadBridge.swift` is 380 lines, still over the ~150-line house limit; the delegate half is out of it now and
+- `DownloadBridge.swift` is 402 lines, still over the ~150-line house limit; the delegate half is out of it now and
   what remains is one state machine whose callbacks must be ordered against each other. Splitting it further means
   splitting the lock.
 - `HTTPTransferStatus.refusal(for:)` exists for the response-shaped call and is exercised by tests; the delegate
