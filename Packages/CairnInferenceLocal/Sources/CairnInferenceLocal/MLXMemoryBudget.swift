@@ -16,8 +16,8 @@ import Foundation
 /// this process actually has rather than being one constant for every phone:
 ///
 /// - unknown headroom → the **floor**, because an unmeasured budget is not a licence;
-/// - a measured reading → `min(ceiling, reading / 8)`, never below the floor;
-/// - never above the ceiling, whatever a generous reading says.
+/// - a measured reading → `min(ceiling, max(floor, reading / 8))`, so the reading can move the pool
+///   only between the two figures and can never push it past either end.
 ///
 /// The weights are the big allocation and they are priced by `MLXLoadPreflight`; this number is only
 /// the pool that accumulates *beside* them, which is why it is tens of megabytes and not hundreds.
@@ -36,18 +36,19 @@ public enum MLXMemoryBudget {
 
     /// The pool ceiling to ask for, given the headroom reading at load time.
     ///
-    /// One eighth of the reading, clamped between the floor and the ceiling. On an 8 GB iPhone with
-    /// roughly a gigabyte of usable headroom that lands on the ceiling; on a phone that has already
-    /// been squeezed — the case where a load was about to be the last thing this process did — it
-    /// shrinks toward the floor instead of adding to the pressure.
+    /// One eighth of the reading, clamped **both ways** — `min(ceiling, max(floor, reading / 8))`. On
+    /// an 8 GB iPhone with roughly a gigabyte of usable headroom that lands on the ceiling; on a phone
+    /// that has already been squeezed it shrinks toward the floor instead of adding to the pressure.
+    /// A reading too small to yield even one byte of share is the most squeezed case there is, so it
+    /// takes the floor and never the ceiling.
     public static func cacheLimitBytes(headroomBytes: Int64?) -> Int {
         guard let headroom = headroomBytes, headroom > 0 else {
             return cacheLimitFloorBytes
         }
+        // Bounded in the wide type before it narrows. `share` can be absurd on a Mac, and after the
+        // clamp it can only be the floor or the ceiling, so the `Int` conversion cannot trap.
         let share = headroom / 8
-        guard share > 0, share < Int64(cacheLimitCeilingBytes) else {
-            return cacheLimitCeilingBytes
-        }
-        return max(cacheLimitFloorBytes, Int(share))
+        let bounded = min(Int64(cacheLimitCeilingBytes), max(Int64(cacheLimitFloorBytes), share))
+        return Int(bounded)
     }
 }

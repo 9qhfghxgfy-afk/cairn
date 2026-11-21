@@ -91,7 +91,15 @@ public enum MLXLoadPreflight {
         guard let headroom = headroomBytes, headroom > 0 else {
             return .refuse(.headroomUnknown(requiredBytes: required))
         }
-        guard required <= usableShare(of: headroom) else {
+        let (usable, shareSaturated) = usableShareComponents(of: headroom)
+        // A figure that arrived by saturating is the arithmetic giving up, not a measurement. An
+        // absurd requirement reads as `Int64.max`, an absurd reading used to read as room for
+        // anything, and the two together admitted the one load that cannot fit — so either one
+        // refuses on its own. And a requirement the size of the whole reading may not pass either:
+        // weights that consume every byte leave nothing for the process that is asking, so the
+        // requirement has to sit strictly inside the reading as well as inside its usable share.
+        guard !shareSaturated, required < Int64.max,
+              required <= usable, required < headroom else {
             return .refuse(.headroomTooLow(requiredBytes: required, availableBytes: headroom))
         }
         return .admit(requiredBytes: required)
@@ -102,10 +110,27 @@ public enum MLXLoadPreflight {
     /// One share rule app-wide — `MemoryFitEstimator`, `ResidentModelPolicy` and `TwoResidentBudget`
     /// read it from the same two numbers, so a decision can never be priced two ways.
     public static func usableShare(of headroomBytes: Int64) -> Int64 {
-        let (scaled, overflow) = headroomBytes.multipliedReportingOverflow(
-            by: Int64(MemoryFitEstimator.usableNumerator)
-        )
-        return overflow ? headroomBytes : scaled / Int64(MemoryFitEstimator.usableDenominator)
+        usableShareComponents(of: headroomBytes).bytes
+    }
+
+    /// The same share, plus whether the arithmetic had to saturate. A saturated figure is a failure
+    /// to measure, and the gate treats it as one rather than as room.
+    private static func usableShareComponents(of headroomBytes: Int64)
+        -> (bytes: Int64, saturated: Bool)
+    {
+        let numerator = Int64(MemoryFitEstimator.usableNumerator)
+        let denominator = Int64(MemoryFitEstimator.usableDenominator)
+        guard denominator > 0, numerator >= 0 else { return (Int64.max, true) }
+        let whole = max(0, headroomBytes)
+        // Divide before scaling. `(headroom / 5) * 4 + ((headroom % 5) * 4) / 5` is exactly
+        // `floor(headroom * 4 / 5)`, but its largest product is four fifths of the input instead of
+        // four times it, so `Int64.max` needs no clamp to be answered. The multiply-first form
+        // overflowed on an absurd reading and then reported the overflow as "the whole of it is
+        // room", which is how `Int64.max` of headroom came to admit any load at all.
+        let (scaled, scaleOverflow) = (whole / denominator).multipliedReportingOverflow(by: numerator)
+        let (tail, tailOverflow) = (whole % denominator).multipliedReportingOverflow(by: numerator)
+        let (total, addOverflow) = scaled.addingReportingOverflow(tail / denominator)
+        return (scaleOverflow || tailOverflow || addOverflow) ? (Int64.max, true) : (total, false)
     }
 
     private static func saturatingAdd(_ lhs: Int64, _ rhs: Int64) -> Int64 {
