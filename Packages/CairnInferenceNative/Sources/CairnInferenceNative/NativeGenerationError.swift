@@ -17,6 +17,13 @@ public enum NativeGenerationError: Error, Equatable {
     case nothingToAnswer
     /// The runtime refused to load the weights it was given.
     case loadFailed
+    /// The memory gate refused the load before any weight was read, with the sentence that explains it.
+    ///
+    /// This is not the same failure as `loadFailed` and it does not have the same fix: the runtime
+    /// failing to load means something is wrong with the files, while the gate refusing means the
+    /// phone is out of room. Told apart, one leads to reinstalling a model and the other to closing
+    /// apps or picking a smaller model; folded together, they lead nowhere.
+    case insufficientMemory(reason: String)
     /// Generation stopped partway.
     case generationFailed
     /// The caller cancelled, which is not an error worth surfacing as one.
@@ -34,6 +41,10 @@ public enum NativeGenerationError: Error, Equatable {
             return "There is no message in this turn to answer."
         case .loadFailed:
             return "The on-device runtime could not load that model."
+        case .insufficientMemory(let reason):
+            // The gate's own sentence, verbatim: it was written from the measurement this turn is
+            // missing, so rewording it here would put a guess where a reading was.
+            return reason
         case .generationFailed:
             return "On-device generation stopped."
         case .cancelled:

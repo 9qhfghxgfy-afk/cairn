@@ -44,12 +44,20 @@ enum MLXNativeEngine {
     /// engine either loads it or says it is not there — a second downloader here would be a second path
     /// by which a model could arrive on the phone without the user having chosen it.
     ///
+    /// The container comes from `MLXContainerPool` rather than being loaded here. Loading per turn was
+    /// the old shape, and it is what a jetsam report reads as dirty memory: every load allocates, the
+    /// runtime parks the old buffers in its pool instead of returning them, and nothing ever called
+    /// `clearCache()`. One pooled container plus a cache limit applied before the cold load is the fix;
+    /// `cacheLimitBytes` arrives from the memory gate that measured the phone, not from a constant here.
+    ///
     /// Tools travel as schemas only. No handler is handed to the runtime, because a tool that ran inside
     /// the runtime would have bypassed the chat's `Tools` chip, the per-tool toggle and the outbound
     /// acknowledgement; a call therefore comes back as a `.toolCall` chunk for `ToolLoop` to run.
     static func stream(
         request: GenerationRequest,
         modelDirectory: URL,
+        cacheLimitBytes: Int,
+        pool: MLXContainerPool,
         emit: @escaping @Sendable (StreamChunk) -> Void
     ) async throws {
         let marker = modelDirectory.appendingPathComponent("config.json").path
@@ -59,14 +67,10 @@ enum MLXNativeEngine {
         let turns = MLXChatTranscript.turns(for: request)
         guard !turns.isEmpty else { throw NativeGenerationError.nothingToAnswer }
 
-        let container: ModelContainer
-        do {
-            container = try await loadModelContainer(directory: modelDirectory)
-        } catch is CancellationError {
-            throw NativeGenerationError.cancelled
-        } catch {
-            throw NativeGenerationError.loadFailed
-        }
+        // Reused across turns, and the load inside it is already inside the cache budget.
+        let container = try await pool.container(
+            for: modelDirectory, cacheLimitBytes: cacheLimitBytes
+        )
 
         var chat: [Chat.Message] = []
         for turn in turns {
@@ -123,13 +127,17 @@ enum MLXNativeEngine {
 }
 #else
 /// The shape this file must keep so the provider compiles identically on the simulator and in a build
-/// that left the runtime out: the answer is always "not here", and it is always typed.
+/// that left the runtime out: the answer is always "not here", and it is always typed. The signature
+/// matches the real engine exactly — cache limit and pool included — so the provider's memory path is
+/// the same code in both shapes and cannot drift between them.
 enum MLXNativeEngine {
     static let isCompiledIn = false
 
     static func stream(
         request: GenerationRequest,
         modelDirectory: URL,
+        cacheLimitBytes: Int,
+        pool: MLXContainerPool,
         emit: @escaping @Sendable (StreamChunk) -> Void
     ) async throws {
         if NativeRuntimeBuild.isSimulatorBuild {

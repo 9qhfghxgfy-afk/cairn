@@ -2859,3 +2859,168 @@ nor a gated repository's 401 has been observed from this app.
 - `HTTPTransferStatus.refusal(for:)` exists for the response-shaped call and is exercised by tests; the delegate
   path reads the status itself so that a non-HTTP response cannot be mistaken for a file.
 
+## 2026-11-20 — a jetsam kill (bug type 298): admission before the load, a capped buffer pool, a bounded attention cache, and pressure that defers instead of killing
+
+**Status: written and host-checked. CI run owed; on-device owed. Nothing here is a milestone until a green run number
+is cited against this commit.**
+
+### What the phone said, and what the code was doing
+
+A jetsam event (`bug_type 298`) on an 8 GB iPhone reported roughly 1,554 MiB resident with about 1,168 MiB of it
+**dirty internal** — memory the process owns, cannot be purged, and iOS takes without asking. Four things in the
+on-device path produced exactly that shape, and none of them is a bug in the ordinary sense; each was a reasonable
+thing to do on a Mac:
+
+1. **No admission.** `MLXNativeEngine` called `loadModelContainer` on a folder without ever asking
+   `os_proc_available_memory()`. The memory arithmetic existed only as a *warning on the Download tab*
+   (`MemoryFitEstimator`), so a model that had been warned about could still be loaded on a phone that had since
+   filled up.
+2. **An unbounded buffer pool.** mlx-swift documents `Memory.cacheLimit`'s default as the runtime's whole memory
+   limit — 1.5× the device's recommended working set — and its iOS article says plainly that for LLM evaluation "you
+   might allow up to 20 megabytes of buffer cache". Nothing in Cairn had ever linked the product that exposes it, and
+   `clearCache()` had never been called. Freed buffers were parked, not returned.
+3. **A new container every turn.** Each streamed turn loaded a container and dropped it; the pool kept what the dead
+   container had used. A six-turn conversation was six generations of buffers beside the weights.
+4. **No KV bound and no pressure answer.** `GenerateParameters.maxKVSize` was never set, so the attention cache grew
+   with the conversation; and the one memory-warning handler released the registry's bookkeeping while ignoring the
+   pool that was actually holding the memory.
+
+### What runs now
+
+* **Admission, before a byte is allocated.** `MLXLoadPreflight` (Local) prices *weights read from the files on disk* +
+  *the attention cache at the bound the engine actually runs* + a 128 MiB Metal pipeline reserve (a 512 MiB blanket
+  reserve when the model publishes no attention shape), against four fifths of the headroom reading. Unknown headroom
+  or an unsizable folder refuses. The verdict crosses into the Swift 5 island as `NativeAdmission` through a
+  `NativeMemoryAdmitting` seam implemented in the app layer (`OnDeviceMemoryAdmission`), so the pure arithmetic stays
+  provable and the runtime stays quarantined. A refusal surfaces as `NativeGenerationError.insufficientMemory(reason:)`
+  carrying the gate's own sentence.
+* **`OnDeviceKV.tokenCap = 2048`** lives in the domain — one number both the engine (`parameters.maxKVSize`, which
+  switches the runtime to its rotating cache) and the preflight read. Documented as a cache bound and not a context
+  window, so it is still not offered as a knob and `contextLengthAdjustable` stays false.
+* **A capped pool, applied before the cold load.** `MLXMemoryBudget` gives `min(32 MiB, headroom / 8)` with an 8 MiB
+  floor; `MLXRuntimeMemory` is the only file in Cairn that touches `Memory.cacheLimit`, `clearCache()` or
+  `cacheMemory`, which is why the `MLX` product was added to the linked packages.
+* **One container, reused.** `MLXContainerPool` loads once and reuses until the folder changes — a model switch
+  releases the old weights *before* the new ones arrive — and is released only by a decision, never because a turn
+  ended.
+* **Pressure with its severity respected, and never mid-stream.** `MemoryPressureLevel` splits `.warning` (flush
+  buffers, keep the model) from `.critical` (release what is idle). `MLXTurnLedger` counts generations in flight: a
+  release asked for under a live stream is recorded and lands at the last `endTurn()`, and `clearCache()` runs at the
+  end of every turn and with every release. `DispatchMemoryPressureSource` registers one dispatch source per severity
+  and holds both as actor state; `OnDeviceMemoryWatch` merges it with the UIKit notification and is stored by
+  `CairnApp` for the life of the process, with `stop()` cancelling the sources. Backgrounding releases through
+  `OnDeviceWiring.handlePhase` → `OnDeviceUnloadSink`.
+* **Apple's model makes its own room.** `FoundationModelsProvider` now takes the registry and, when the system model
+  is really going to run, releases what Cairn owns first. It cannot unload Apple's model and does not pretend to:
+  `OnDeviceUnloadSink.unload(modelID:)` answers `false` for that id, so no later decision is priced from a freeing
+  that never happened.
+
+### Files
+
+New: `CairnChatDomain/…/OnDeviceKV.swift`; `CairnInferenceLocal/…/MLXLoadPreflight.swift`,
+`MLXLoadPreflightVerdict.swift`, `MLXMemoryBudget.swift`, `MemoryPressureLevel.swift`,
+`DispatchMemoryPressureSource.swift`, `OnDeviceMemoryWatch.swift`, `FoundationModelsProvider+Residency.swift`;
+`CairnInferenceNative/…/NativeMemoryAdmission.swift`, `MLXRuntimeMemory.swift`, `MLXContainerPool.swift`,
+`MLXTurnLedger.swift`; `App/OnDeviceUnloadSink.swift`, `App/OnDeviceMemoryAdmission.swift`; five new test files.
+Changed: `OnDeviceModelRegistry` (turn ownership, idle and deferred release, per-level handling, a `flusher`),
+`MemoryPressureSource` (levels plus `stop()`), `MLXNativeEngine` and its host shape, `MLXNativeEngine+Sampling`,
+`MLXSampling`, `NativeGenerationError`, `MLXNativeProvider`, `FoundationModelsProvider`, `App/CairnApp.swift`,
+`App/OnDeviceWiring.swift`, `App/MLXModelDiscovery.swift` (`footprint(at:)`),
+`Packages/CairnInferenceNative/Package.swift` (the `MLX` product), and `project.yml` (four app files and
+`CairnInferenceNative` added to the `CairnTests` target).
+
+### Verification — the three tiers kept separate, as always
+
+**Host-verified this session (Windows, Swift 6.4.2):**
+
+* `Packages/CairnInferenceNative` — `swift test`: **45 swift-testing tests in 7 suites, 0 failures**, including the 13
+  new ledger/admission tests and every pre-existing provider test: the refusal path, the excluded-runtime path and
+  "nothing is resident until a turn really loads something" all still hold with the new turn lifecycle.
+* `Packages/CairnChatDomain` — builds clean; `--filter OnDeviceKVTests` 2/2 pass.
+* `swiftc -swift-version 6 -typecheck` over the new and changed `CairnInferenceLocal` sources (preflight, verdict,
+  budget, pressure level, UIKit source, watch, registry, residency gate) against a built `CairnChatDomain` module —
+  **no diagnostics**, so the strict-concurrency shapes are checked even though that package cannot build here whole.
+* `swiftc -parse` over the three new Local test files and the two new `Tests/CairnTests` files — clean.
+* `Scripts/ci.sh guards` — all five guards pass; `Scripts/test-guards.sh` reports **53 ok, 0 failed**.
+
+**Not checkable from this machine, and not claimed:** `CairnInferenceLocal`'s suite (`no such module 'CryptoKit'` on
+Windows), the Darwin-only branches of `DispatchMemoryPressureSource`, `MLXRuntimeMemory` and `MLXContainerPool`
+(compiled out on every host here), `CairnAppUI`, the app target, and `Tests/CairnTests`.
+
+**CI-verified: no.** **On-device-verified: no.** **Real-network-verified: not applicable** — none of this opens a
+socket.
+
+### Device checklist for this round — five lines, each says what it proves
+
+1. Load an installed MLX model and answer twice. The second turn should be **faster** and the Running tab should keep
+   naming the model: that is the pooled container, where the old shape paid the load cost every turn.
+2. Ask two long questions in a row. If the model starts losing the beginning of the conversation, that is
+   `maxKVSize` rotating the cache at 2,048 tokens — a stated limit rather than a kill.
+3. Open other heavy apps until iOS posts a memory warning. Cairn should stay loaded and keep working; buffers go, the
+   model stays. If the model is dropped on a warning, the level split is wrong.
+4. Ask a question and background the app at once. The answer should finish rather than tear, and the model should be
+   gone on return — the deferred release landing at the end of the turn.
+5. Pick a model that does not fit, or fill the phone's memory first. The composer should show a sentence naming the
+   sizes and the fix, and Cairn must stay up. A crash here means admission was never consulted.
+
+### Known gaps
+
+* The three Darwin-only branches are written against APIs read from the pinned packages (`Memory.cacheLimit` as a
+  settable property, `Memory.clearCache()`, `Memory.cacheMemory`, `GenerateParameters.maxKVSize`) and from that
+  package's own iOS article, but **no compiler here has seen them**. The dispatch sources are built with two disjoint
+  masks so their handlers hold no shared state; whether iOS delivers a `.critical` event to a foreground app is
+  unverified, which is why UIKit's notification stays registered beside them and a flush is idempotent.
+* `OnDeviceModelRegistry` is now ~178 lines, over the house limit. Its turn-ownership methods need file-scoped state,
+  so moving them to an extension means relaxing `resident`/`activeModelIDs` to internal; that trade is left for a
+  follow-up rather than taken quietly here.
+* The pool holds **one** container. Two MLX builds on one phone stay serialised by the single-resident rule — intended
+  — but switching models pays a full reload, which is visible in the Running tab rather than hidden.
+* The attention-cache bound is 2,048 tokens for every local model. A per-model bound needs a settings surface and a
+  place to say what is lost past it, so for now the number is stated in `ARCHITECTURE.md` §8 instead of tunable.
+* The registry's `flusher` is wired only to the MLX provider. A second local runtime added later must be attached to
+  the same sink or it will silently never be flushed, which is what `OnDeviceUnloadSink` exists to make obvious.
+* The registry's `flusher` is wired only to the MLX provider. A second local runtime added later must be attached to
+  the same sink or it will silently never be flushed, which is what `OnDeviceUnloadSink` exists to make obvious.
+
+### Final review pass (2026-11-20) — the three fixes the Swift 6 / Xcode 26 review asked for
+
+* **`(any DispatchSourceMemoryPressure)?`** on both held sources in `DispatchMemoryPressureSource`, and
+  `-> any DispatchSourceMemoryPressure` on the factory helper. This is not a style change: Apple's own documentation
+  declares `protocol DispatchSourceMemoryPressure : DispatchSourceProtocol, Sendable` (bridged from
+  `OS_dispatch_source_memorypressure`), so the bare name is a protocol used as a type and Swift 6's `ExistentialAny`
+  rejects it; `makeMemoryPressureSource` already returns that existential, so no cast is involved. Checked against
+  the docs entry for the symbol rather than from memory, because a local probe with a hand-written class gives the
+  opposite verdict (`'any' has no effect on concrete type`) and this machine cannot compile the Darwin branch at all.
+* **Explicit `self.` on both residency hops** inside the provider's `Task` — `await self.beginResidencyTurn()` /
+  `await self.endResidencyTurn()` — and `residencyMarker` moved from `static var` to `static let`. Swift does not
+  *require* `self.` for a value type in an escaping closure, so the first half is clarity about what the escaping
+  closure captures; the second is the shape Swift 6's global-strict-concurrency rule wants for an immutable
+  `Sendable` value, and the marker really is a constant built only from this type's own static constants.
+* **`beginTurn` now clears the deferred release it supersedes.** `markTurnStarted(_:)` pairs
+  `activeModelIDs.insert` with `deferredReleaseIDs.remove`, so a release asked for while an **earlier** turn was
+  running cannot fire at the end of a **new** turn in the same model — which would have taken a model that is not
+  idle, or reported a release that never happened. `markActive` routes through the same helper; `markIdle`'s
+  deferral is unchanged.
+* Two swift-testing cases in `OnDeviceDeferredReleaseTests` pin both halves: `.critical` pressure under a running
+  turn releases nothing and lands at `markIdle`, and a deferred request does not survive a new turn in the same model.
+
+**Host verification for this pass.** `swift test --package-path Packages/CairnChatDomain` → **653 tests, 0 failures**.
+`swift test --package-path Packages/CairnInferenceNative` → **45 tests, 0 failures**. `Scripts/ci.sh guards` → all five
+guards pass and `Scripts/test-guards.sh` reports **53 ok, 0 failed**. `swiftc -swift-version 6 -typecheck` over a
+17-file `CairnInferenceLocal` subset (registry, watch, both pressure sources, residency gate, both
+`FoundationModelsProvider` files) against the built `CairnChatDomain` module → **no diagnostics**, and the new test
+file typechecks against that scratch module with `@testable import` and Swift `Testing`. What the host still cannot
+see: `CairnInferenceLocal`'s own suite (`error: no such module 'CryptoKit'`), the whole `#if canImport(Darwin)` body
+of the dispatch source, `FoundationModels`, MLX, and `Tests/CairnTests`.
+
+**Still owed.** A green CI run on this commit — guards, host suites, `xcodegen`, simulator build and `CairnTests` on
+iPhone 17 / iOS 26.5, which is the only place the two new `Tests/CairnTests` memory files and the four app-layer
+files they test are compiled at all — plus the five-line device checklist above. **CI-verified: no.
+On-device-verified: no. Real-network-verified: not applicable**, since none of this opens a socket.
+
+**Left open by the review, on purpose.** `unloadIdleModels` and `markIdle` both cross `await unloader(...)` before
+they finish mutating `resident`, so a `beginTurn` that interleaves inside that suspension can be clobbered when the
+release resumes. Nothing drives two concurrent unload paths today — the watch and the sink both serialize through one
+actor — so the window is theoretical; the honest fix is to mutate state before the await, and it is a follow-up
+rather than a change smuggled into a review pass.
+

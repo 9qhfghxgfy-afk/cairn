@@ -47,4 +47,16 @@ struct NativeSampling: Sendable, Equatable {
         maxTokens == nil && temperature == nil && topP == nil && topK == nil
             && minP == nil && repeatPenalty == nil && repeatLastN == nil
     }
+
+    /// The attention-cache bound handed to every turn, from the domain rather than from here.
+    ///
+    /// `OnDeviceKV.tokenCap` is the shared figure: the same number the memory gate priced the model at
+    /// when it decided the load fits. Setting it makes the runtime use a rotating cache — past the cap
+    /// the oldest entries are overwritten except the first few tokens — which is an honest loss of
+    /// context and not a broken one, and the only alternative is a cache that grows with the
+    /// conversation until the phone takes the process.
+    ///
+    /// Not a `NativeSampling` field, deliberately: a user-settable field would put it on the settings
+    /// sheet, where it would read as a context window. It is a safety bound.
+    static func kvBound() -> Int? { OnDeviceKV.tokenCap }
 }

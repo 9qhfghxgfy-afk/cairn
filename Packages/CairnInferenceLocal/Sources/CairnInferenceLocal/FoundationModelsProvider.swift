@@ -17,7 +17,20 @@ public struct FoundationModelsProvider: InferenceProvider {
     public static let engineID = "on-device.apple"
     public static let modelID = "apple-on-device"
 
-    public init() {}
+    /// What tracks what is resident in this process, or `nil` when nothing is tracking it.
+    ///
+    /// Deliberately not `private`: the residency half of this provider lives in
+    /// `FoundationModelsProvider+Residency.swift`, and `private` in Swift means file-scoped. It stays
+    /// module-internal, so nothing outside `CairnInferenceLocal` can reach it.
+    let residency: OnDeviceModelRegistry?
+
+    /// - Parameter residency: the on-device registry to make room through. The Apple model is installed
+    ///   and evicted by iOS, so this provider cannot unload it — what it *can* do is release the MLX
+    ///   container that shares this process with it, which is the only memory this app owns at that
+    ///   moment. Left `nil`, nothing is released and the two runtimes may be resident together.
+    public init(residency: OnDeviceModelRegistry? = nil) {
+        self.residency = residency
+    }
 
     public var id: String { Self.engineID }
     public var displayName: String { "On-Device (Apple)" }
@@ -63,11 +76,18 @@ public struct FoundationModelsProvider: InferenceProvider {
         AsyncThrowingStream { continuation in
             let work = Task {
                 do {
+                    // Room first, then the session. Apple's model is not ours to unload, so the only
+                    // memory this app can offer it is the memory its own runtime vacates — and asking
+                    // after the session has opened is asking too late.
+                    await self.beginResidencyTurn()
                     try await Self.generate(request, into: continuation)
                     continuation.finish()
                 } catch {
                     continuation.finish(throwing: error)
                 }
+                // Outside the `do`, so a cancelled or failed turn gives the marker back too: a resident
+                // entry nobody releases is a resident entry the memory gate keeps paying for.
+                await self.endResidencyTurn()
             }
             continuation.onTermination = { _ in work.cancel() }
         }

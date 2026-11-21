@@ -21,8 +21,14 @@ struct CairnLaunchView: View {
     @State private var servers: ServersModel?
     @State private var theme: ThemeModel?
     @State private var startupFailure: String?
-    /// The memory-pressure watch, kept alive for the life of the app process.
-    @State private var onDeviceWatch: Task<Void, Never>?
+    /// The memory-pressure watch, kept alive for the life of the app process. It owns the system
+    /// sources behind it: dropping the watch would stop the watch, and an app that believes it still has
+    /// one is an app that is about to be surprised by a jetsam report.
+    @State private var onDeviceWatch: OnDeviceMemoryWatch?
+    /// The thing that can put an on-device model back out of memory. Kept alive because the scene-phase
+    /// rule below releases through it, and because a release that silently goes nowhere because the
+    /// object was deallocated is the exact failure this path exists to prevent.
+    @State private var onDeviceSink: OnDeviceUnloadSink?
     /// The tool assembly, kept alive for the life of the app: it holds the mail composer and reads
     /// Settings and the Keychain on behalf of the tools every chat gets.
     @State private var toolWiring: ToolWiring?
@@ -103,12 +109,22 @@ struct CairnLaunchView: View {
                 // registered so the offline demo path keeps working on a fresh install.
                 // The two on-device engines join the mock: the Apple model and MLX. Both are
                 // `.onDevice`, so a turn that runs here sends nothing anywhere and shows no badge.
-                let onDeviceEngines = OnDeviceWiring.engines()
+                // One owner for "what is resident in this process", plus the release path that makes the
+                // claim mean something: a registry that can only forget an id has freed no memory, and
+                // every later decision priced from that count would be too confident. The sink is told
+                // about the MLX provider inside `engines`, because the provider needs the registry and
+                // the registry needs the sink — neither can be built first.
+                let onDeviceSink = OnDeviceUnloadSink()
+                let onDeviceRegistry = OnDeviceModelRegistry(
+                    unloader: { id in _ = await onDeviceSink.unload(modelID: id) },
+                    flusher: { await onDeviceSink.flushCaches() }
+                )
+                let onDeviceEngines = await OnDeviceWiring.engines(
+                    registry: onDeviceRegistry,
+                    sink: onDeviceSink
+                )
+                self.onDeviceSink = onDeviceSink
                 let registry = ProviderRegistry(providers: [MockStreamingProvider()] + onDeviceEngines)
-                // One owner for "what is resident in this process": the memory-pressure watch releases
-                // through this registry and a hybrid turn's residency answer reads and releases through
-                // the same one, so the two paths cannot disagree about what is loaded.
-                let onDeviceRegistry = OnDeviceModelRegistry()
                 // Which server is in use, and what each server was last used with, is one shared
                 // object. The Servers screen and every chat read and write it, so a tap in either
                 // place is true in the other — and it is written through to disk, so it survives a
@@ -257,8 +273,17 @@ struct CairnLaunchView: View {
             // suspends the app minutes after it leaves the foreground and takes the listener with it
             // whether or not anything was said first; saying it here means the switch and the port agree
             // before the phone goes to sleep rather than after it wakes up confused.
-            guard let shareWiring else { return }
-            Task { await shareWiring.handlePhase(phase) }
+            if let shareWiring {
+                Task { await shareWiring.handlePhase(phase) }
+            }
+            // The same moment tells the on-device model to go. Leaving the foreground is when iOS starts
+            // deciding what to take, and a model's weights plus its buffer pool are the largest thing
+            // this app holds; a generation still in flight defers the release to the end of its turn
+            // instead of having the model pulled out from under it. Kept in `OnDeviceWiring` so the rule
+            // is one named thing rather than a clause in a launch file.
+            if let onDeviceSink {
+                Task { await OnDeviceWiring.handlePhase(phase, sink: onDeviceSink) }
+            }
         }
         .onChange(of: theme?.toolSignals) { _, _ in
             // Re-assemble the registry when one of the two answers that decide a chat's tools moves.

@@ -185,6 +185,16 @@ targets:
       - App/LocationWiring.swift
       - App/LocationProvider.swift
       - App/LocationProvider+Mapping.swift
+      # The on-device memory surface, for the same reason and with the same reason to need a simulator:
+      # this is the only place the measured load gate (`MLXLoadPreflight`), the registry that decides what
+      # may be resident, and the object that can actually release MLX all exist. The rule worth proving is
+      # the one no single module can see — that a refusal happens **before** a byte is allocated, that a
+      # release request for Apple's model is answered honestly as "nothing was freed here", and that
+      # backgrounding asks for the model back. No @main in any of these files.
+      - App/MLXModelDiscovery.swift
+      - App/OnDeviceUnloadSink.swift
+      - App/OnDeviceMemoryAdmission.swift
+      - App/OnDeviceWiring.swift
     dependencies:
       - package: CairnChatDomain
       - package: CairnPersistence
@@ -195,6 +205,10 @@ targets:
       # The residency gate a hybrid turn asks is built here, on the real memory reading, so the
       # simulator suite has to be able to construct it and the registry behind it.
       - package: CairnInferenceLocal
+      # And the MLX provider behind the memory gate: `OnDeviceWiring` builds it, and the release path a
+      # memory warning takes ends inside it. Linked without MLX (`CAIRN_MLX` unset), which is exactly the
+      # shape these tests need — the lifecycle is the same code, with no weights to hold.
+      - package: CairnInferenceNative
     configFiles:
       # The one shared xcconfig, same as the app target, so a local Team ID in Local.xcconfig covers
       # app and tests together; the bundle ids stay distinct because the test bundle is derived as

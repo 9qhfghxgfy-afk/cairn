@@ -44,4 +44,49 @@ enum MLXModelDiscovery {
         let values = try? url.resourceValues(forKeys: [.contentModificationDateKey])
         return values?.contentModificationDate ?? Date(timeIntervalSince1970: 0)
     }
+
+    /// What loading this folder would cost the process, read from the files themselves.
+    ///
+    /// The catalogue's advertised size is not used: a download can be interrupted, resumed or partially
+    /// deleted, and the only figure that describes what this phone is about to allocate is the number of
+    /// bytes actually sitting in the folder. The attention shape comes from the model's own
+    /// `config.json`, and a field the model never published stays `nil` — the preflight then charges a
+    /// blanket reserve instead of inventing an architecture.
+    ///
+    /// `nil` means unmeasurable: the folder is not loadable, or its size cannot be read. The gate treats
+    /// that as a refusal rather than as a zero, because "we could not tell" is not a licence to allocate.
+    static func footprint(
+        at directory: URL,
+        fileManager: FileManager = .default
+    ) -> MLXModelFootprint? {
+        guard isLoadable(directory, fileManager: fileManager),
+              let layout = ModelStoreLayout.defaultRoot(fileManager: fileManager)
+        else { return nil }
+        let weights = layout.sizeOnDisk(at: directory, fileManager: fileManager)
+        guard weights > 0 else { return nil }
+
+        let configURL = directory.appendingPathComponent("config.json")
+        var facts = ModelConfigFacts()
+        if let data = try? Data(contentsOf: configURL) {
+            facts = ModelConfigReader.read(data)
+        }
+        return MLXModelFootprint(
+            weightsBytes: weights,
+            layerCount: facts.layerCount,
+            kvHeadCount: facts.kvHeadCount,
+            headDimension: facts.headDimension
+        )
+    }
+}
+
+/// One model folder's cost, as far as this app can measure it.
+///
+/// Sizes and architecture numbers only — no repo name, no path, nothing that identifies which model a
+/// person downloaded. That is deliberate: this value travels into a memory decision, and a memory
+/// decision needs numbers, not a name.
+struct MLXModelFootprint: Sendable, Equatable {
+    var weightsBytes: Int64
+    var layerCount: Int?
+    var kvHeadCount: Int?
+    var headDimension: Int?
 }

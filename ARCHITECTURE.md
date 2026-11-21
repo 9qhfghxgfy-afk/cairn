@@ -163,17 +163,37 @@ addresses only, and `Scripts/check-hostname.sh` enforces that in CI: it rejects 
 hostname, and since 2026-11-15 also a private IP literal that is not one of the documented
 examples.
 
-## 8. Memory guardrails (Milestone 3)
+## 8. Memory guardrails (Milestone 3, revised 2026-11-20 after a jetsam kill)
 
-`os_proc_available_memory()` is a **point-in-time headroom estimate**, not a budget for
-a whole session. Sizing is conservative: `model bytes + KV cache bytes`, where KV cache
-scales with `2 × layers × kv_heads × head_dim × bytes_per_element × context_length`,
-computed for the **active** context length rather than the model maximum. Load failures
-and `UIApplication` memory warnings degrade to a smaller context or a smaller model with
-a visible reason instead of a crash. The increased-memory-limit entitlement is treated
-as optional uplift: Milestone 3 is validated **without** it first, then re-tested with it
-if the signing profile grants it. **Hard rule:** never two on-device models resident
-unless headroom says yes.
+`os_proc_available_memory()` is a **point-in-time headroom estimate**, not a budget for a whole
+session. Every decision re-reads it; none caches a number. Sizing is conservative:
+`weights + attention cache`, where the cache is
+`2 × layers × kv_heads × head_dim × bytes_per_element × context_length`
+computed at the **bound Cairn runs** (`OnDeviceKV.tokenCap`, 2,048 tokens) rather than at the model's
+advertised window, plus a Metal reserve for pipelines and activations. A model that publishes no
+attention shape is charged a blanket 512 MiB instead of an invented architecture. Unknown headroom and
+unmeasurable weights both **refuse the load** — a missing reading is never read as unlimited, and a
+folder that cannot be sized is not a licence to allocate. Refusal is a sentence the person can act on,
+never a crash. **Hard rule:** never two on-device models resident unless headroom says yes.
+
+Three things were added on 2026-11-20, because a jetsam (bug type 298) event on an 8 GB iPhone showed
+1,554 MiB resident with 1,168 MiB of it dirty and unpurgeable:
+
+| Guard | What it stops |
+|---|---|
+| `MLXLoadPreflight` (Local) + `NativeMemoryAdmitting` seam (Native) | Loading weights the phone cannot hold. Asked at load time, answered with a reason. |
+| `MLXMemoryBudget` → `Memory.cacheLimit` before the cold load, `Memory.clearCache()` at every turn end | The runtime's buffer pool, whose default is the whole memory limit (1.5× the recommended working set) and which iOS counts as dirty, unpurgeable memory. Ceiling 32 MiB, floor 8 MiB, scaled by headroom. |
+| `MLXContainerPool` + `MLXTurnLedger` (Native) | One container reused across turns instead of a fresh load per turn, and no unload while a stream is live. |
+
+Ownership rules that are not negotiable: the pressure watch (`OnDeviceMemoryWatch`) is stored by the app
+for the life of the process, because a `DispatchSourceMemoryPressure` that nothing retains is a watch
+that stopped working; a **warning** flushes buffers and keeps the model, a **critical** event releases
+what is idle; a release asked for while a generation is in flight is deferred to that turn's end rather
+than dropped or taken mid-stream, and a deferred request is dropped outright once a **new** turn starts in that
+model, because the request was about the model while it was idle; backgrounding releases through the same path. Apple's system model is
+system-managed, so the honest answer to "unload it" is *nothing was freed here* — the sink says so
+rather than counting a release that did not happen. `GenerateParameters.maxKVSize` is a cache bound, not
+a context window, so it is never offered as a user knob and `contextLengthAdjustable` stays false.
 
 ## 9. Background policy (Milestone 5)
 

@@ -11,6 +11,14 @@ import Foundation
 /// `DeviceTemplateChunkParser` is what decides that, and a model that emits none produces a turn with no
 /// thinking chunk. The same parser sits in front of the text the runtime produces, so a template that
 /// marks a tool region is read there rather than shown.
+///
+/// Memory has a lifecycle here, and it is the reason a jetsam report existed to be fixed. Every turn
+/// asks an injected gate for permission before it allocates (`NativeMemoryAdmitting`), runs inside a
+/// `MLXTurnLedger` turn so a release asked for mid-stream lands at the end instead of under the stream,
+/// and takes its container from one pooled `MLXContainerPool` instead of loading a fresh one. The gate
+/// is injected rather than hard-coded because the numbers it needs — the model's size on disk, the
+/// process's headroom — belong to the layer that owns the model store, and because a gate that cannot
+/// be substituted is a gate that cannot be tested.
 public actor MLXNativeProvider: InferenceProvider {
     public static let engineID = "on-device.mlx"
     public static let modelID = "mlx-on-device"
@@ -19,6 +27,9 @@ public actor MLXNativeProvider: InferenceProvider {
     /// open should be loadable on the next turn, not at the next launch. `nonisolated` because the
     /// registry reads availability from any thread, and a `@Sendable` closure is safe to call there.
     private let resolveDirectory: @Sendable () -> URL?
+    private let admission: any NativeMemoryAdmitting
+    private let pool: MLXContainerPool
+    private let ledger: MLXTurnLedger
     private var loaded: String?
 
     /// - Parameter modelDirectory: a folder of already-installed, already-verified weights.
@@ -31,7 +42,29 @@ public actor MLXNativeProvider: InferenceProvider {
     ///   points this at the model store, so installing a model makes this engine usable without a
     ///   relaunch and without re-registering the provider.
     public init(directoryResolver: @escaping @Sendable () -> URL?) {
+        self.init(directoryResolver: directoryResolver, admission: NativeAdmissionUnwired())
+    }
+
+    /// The full form: a directory **and** the memory gate that decides whether a turn may allocate.
+    ///
+    /// - Parameter admission: the measured gate. Left at `NativeAdmissionUnwired`, turns are allowed
+    ///   with a zero buffer pool, which is a small and honest posture but not a measured one — so the
+    ///   app always passes a gate that reads `os_proc_available_memory()` and the model's size on disk.
+    public init(
+        directoryResolver: @escaping @Sendable () -> URL?,
+        admission: any NativeMemoryAdmitting
+    ) {
         self.resolveDirectory = directoryResolver
+        self.admission = admission
+        // One pool, and the ledger's release path points at that same pool — there is exactly one
+        // place in Cairn that can be holding weights, and a release that could hit something else
+        // would be a release that reports success while the memory stays.
+        let containerPool = MLXContainerPool()
+        self.pool = containerPool
+        self.ledger = MLXTurnLedger(
+            onFlush: { MLXRuntimeMemory.flushBufferCache() },
+            onRelease: { await containerPool.releaseNow() }
+        )
     }
 
     // MARK: - Identity (nonisolated so the registry can read them from any thread)
@@ -78,8 +111,9 @@ public actor MLXNativeProvider: InferenceProvider {
         [ModelInfo(id: Self.modelID, displayName: "Installed on-device model", providerID: id)]
     }
 
-    /// Resident model, for the Running tab. `nil` until a turn has really started answering — claiming a
-    /// model is in memory before the weights have been read would be a number the user then trusts.
+    /// Resident model, for the Running tab. `nil` until a turn has really started answering, and cleared
+    /// as soon as the pool really is empty — claiming a model is in memory when nothing is holding it
+    /// would be a number the user then trusts.
     public func residentModelId() -> String? { loaded }
 
     public nonisolated func stream(
@@ -97,11 +131,23 @@ public actor MLXNativeProvider: InferenceProvider {
             let work = Task {
                 do {
                     guard let directory else { throw NativeGenerationError.modelNotInstalled }
-                    try await MLXNativeEngine.stream(
-                        request: request, modelDirectory: directory
-                    ) { chunk in
-                        bridge.receive(chunk)
+                    let cacheLimitBytes = try await self.admitAndBeginTurn(directory: directory)
+                    do {
+                        try await self.run(
+                            request, directory: directory, cacheLimitBytes: cacheLimitBytes
+                        ) { chunk in
+                            bridge.receive(chunk)
+                        }
+                    } catch {
+                        // The turn closes before the error surfaces. A refused or broken generation
+                        // still owes its bookkeeping, and a stream that ends while the ledger still
+                        // counts it is how a release gets skipped for good.
+                        await self.endTurn(directory: directory)
+                        throw error
                     }
+                    // Ahead of `complete()`, so a consumer that starts its next turn at once sees this
+                    // one closed and cannot overlap two turns inside the ledger.
+                    await self.endTurn(directory: directory)
                     bridge.complete()
                 } catch {
                     continuation.finish(throwing: error)
@@ -112,6 +158,64 @@ public actor MLXNativeProvider: InferenceProvider {
                 work.cancel()
             }
         }
+    }
+
+    /// Permission to allocate, and the ledger turn that goes with it.
+    ///
+    /// Asked at load time, never cached: a headroom reading describes the moment it was taken, and a
+    /// model that fitted at launch may not fit after a photo has been decoded into this process.
+    private func admitAndBeginTurn(directory: URL) async throws -> Int {
+        let verdict = await admission.admitLoading(modelDirectory: directory)
+        switch verdict {
+        case .refuse(let reason):
+            throw NativeGenerationError.insufficientMemory(reason: reason)
+        case .admit(let cacheLimitBytes):
+            await ledger.beginTurn()
+            return cacheLimitBytes
+        }
+    }
+
+    /// The engine call, made from inside the actor so the pool never crosses the actor boundary.
+    private func run(
+        _ request: GenerationRequest,
+        directory: URL,
+        cacheLimitBytes: Int,
+        emit: @escaping @Sendable (StreamChunk) -> Void
+    ) async throws {
+        try await MLXNativeEngine.stream(
+            request: request,
+            modelDirectory: directory,
+            cacheLimitBytes: cacheLimitBytes,
+            pool: pool,
+            emit: emit
+        )
+    }
+
+    /// Closes the ledger turn — which hands the runtime's buffer pool back, or completes a release
+    /// pressure asked for while this turn was running — and tells the gate the model is idle again.
+    private func endTurn(directory: URL) async {
+        await ledger.endTurn()
+        await admission.turnFinished(modelDirectory: directory)
+        let holding = await pool.isLoaded
+        if !holding { loaded = nil }
+    }
+
+    /// Hands the weights back if nothing is generating.
+    ///
+    /// This is what backgrounding calls. A release asked for under a running turn is recorded and lands
+    /// at that turn's `endTurn`: taking a model out from under a stream produces a torn answer and frees
+    /// nothing the runtime was not already going to free — while backgrounding is precisely the moment
+    /// iOS is deciding whether to take the process, so the request is never dropped, only sequenced.
+    public func unloadIfIdle() async {
+        await ledger.requestRelease()
+        let holding = await pool.isLoaded
+        if !holding { loaded = nil }
+    }
+
+    /// Warning-level pressure: buffers back, model stays. Reloading a gigabyte-scale build costs more
+    /// than the nudge ever will, and the next turn is faster for it.
+    public func flushCachesIfIdle() async {
+        await ledger.requestFlush()
     }
 
     private func markResident() { loaded = Self.modelID }

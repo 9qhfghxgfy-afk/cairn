@@ -1,8 +1,22 @@
 import Foundation
 
-/// A stream of memory-pressure signals, so the eviction path can be driven from a test.
+/// A stream of memory-pressure levels, so the eviction path can be driven from a test.
+///
+/// Levels rather than bare signals, because the two severities call for different answers: a warning
+/// is answered by handing buffers back, a critical event by releasing a model. A source that cannot
+/// tell them apart can only ever answer at one severity, and the app would then be either jumpy or
+/// deaf depending on which one it guessed.
 public protocol MemoryPressureObserving: Sendable {
-    func memoryPressureSignals() -> AsyncStream<Void>
+    func memoryPressureSignals() async -> AsyncStream<MemoryPressureLevel>
+
+    /// Releases whatever system object this source holds. A source that owns none needs nothing, so
+    /// the default is empty; a source built on a dispatch source overrides this, because whoever made
+    /// that source is responsible for cancelling it.
+    func stop() async
+}
+
+public extension MemoryPressureObserving {
+    func stop() async {}
 }
 
 /// The system's own memory-pressure notification.
@@ -24,7 +38,7 @@ public struct SystemMemoryPressureSource: MemoryPressureObserving {
 
     public init() {}
 
-    public func memoryPressureSignals() -> AsyncStream<Void> {
+    public func memoryPressureSignals() async -> AsyncStream<MemoryPressureLevel> {
         AsyncStream { continuation in
             let center = NotificationCenter.default
             let box = ObserverBox()
@@ -33,7 +47,10 @@ public struct SystemMemoryPressureSource: MemoryPressureObserving {
                 object: nil,
                 queue: nil
             ) { _ in
-                continuation.yield(())
+                // UIKit posts one severity, and that severity is a warning by name: the app is asked
+                // to free what it can spare, not told it is about to be taken. Reported as what it is,
+                // never promoted to critical to make the app react harder.
+                continuation.yield(.warning)
             }
             continuation.onTermination = { _ in
                 if let token = box.token { center.removeObserver(token) }

@@ -61,6 +61,12 @@ private var mlxProducts: [Target.Dependency] {
     return [
         .product(name: "MLXLLM", package: "mlx-swift-lm"),
         .product(name: "MLXLMCommon", package: "mlx-swift-lm"),
+        // `MLX` itself, not only the language-model layer above it. The runtime's buffer pool is what
+        // turns a multi-gigabyte load into a jetsam kill on a phone, and the only lever over that pool
+        // — `Memory.cacheLimit`, `Memory.clearCache()`, and the `Memory.cacheMemory` reading that
+        // shows what the pool is holding — lives in this product. A cache budget that cannot be set is
+        // a budget that does not exist.
+        .product(name: "MLX", package: "mlx-swift"),
     ]
 }
 
