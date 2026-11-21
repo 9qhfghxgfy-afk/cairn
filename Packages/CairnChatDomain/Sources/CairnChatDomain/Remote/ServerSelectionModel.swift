@@ -34,6 +34,21 @@ public final class ServerSelectionModel {
         mutate { $0.remember(modelID: modelID, forProfile: id) }
     }
 
+    /// The model this phone was last pointed at, or nil when nothing has been chosen yet.
+    public var onDeviceModelID: String? { selection.onDeviceModelID }
+
+    /// Records the phone's model so the next launch opens on the same weights rather than on whichever
+    /// folder happens to sort first.
+    public func rememberOnDevice(modelID: String) {
+        mutate { $0.rememberOnDevice(modelID: modelID) }
+    }
+
+    /// Clears the phone's model — called when that model's files are deleted, so a name nobody can load
+    /// does not come back as the choice.
+    public func forgetOnDeviceModel() {
+        mutate { $0.forgetOnDeviceModel() }
+    }
+
     public func forget(_ id: UUID) { mutate { $0.forgetProfile(id) } }
 
     public func reload() {

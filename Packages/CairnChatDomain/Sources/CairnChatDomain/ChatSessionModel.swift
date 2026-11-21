@@ -159,9 +159,12 @@ public final class ChatSessionModel {
             let models = try await provider.models()
             availableModels = models
             // A remembered id may not exist on this server; fall back rather than send a
-            // name the server does not know.
+            // name the server does not know. The same rule covers a phone whose remembered model was
+            // deleted: the first folder that is really there wins, so a turn never names weights that
+            // are gone.
             if selectedModelID.isEmpty || !models.contains(where: { $0.id == selectedModelID }) {
                 selectedModelID = models.first?.id ?? ""
+                await handSelection(to: provider)
             }
             recordSelectedModel()
         } catch {
@@ -201,26 +204,58 @@ public final class ChatSessionModel {
         Task { await loadModels() }
     }
 
-    /// Picks a model for the current server and remembers it against that server only.
+    /// Picks a model for the engine in front of this chat and remembers it.
+    ///
+    /// A server keeps its choice per profile; a phone keeps one, because there is no profile to key it
+    /// against. Both survive a relaunch, which is the point — a picker that resets to whichever folder
+    /// sorts first is a choice nobody made.
     public func choose(model modelID: String) {
         selectedModelID = modelID
         recordSelectedModel()
+        // An engine holding weights on this phone owns this decision. The picker has to move the engine,
+        // not just the label: the previous model's weights have to go back before the next turn, or the
+        // switch is reported and the memory is not.
+        guard let provider = activeProvider, provider.networkClass == .onDevice else { return }
+        Task { await self.handSelection(to: provider) }
+    }
+
+    /// Tells an on-device engine which of its models this session now means.
+    ///
+    /// Every other engine takes the protocol's no-op, so this is guarded by network class rather than
+    /// called blindly: asking a server to "select" is a round trip that changes nothing. The failure is
+    /// shown rather than swallowed — a folder that vanished between listing and selecting is the kind of
+    /// thing a person should hear about before a turn fails on it.
+    private func handSelection(to provider: any InferenceProvider) async {
+        guard provider.networkClass == .onDevice, !selectedModelID.isEmpty else { return }
+        do {
+            try await provider.selectModel(selectedModelID)
+        } catch {
+            lastError = error.localizedDescription
+        }
     }
 
     private func restoreLastModel() {
-        guard let profileID = RemoteEngineID.parse(selectedProviderID) else {
-            selectedModelID = ""
+        if let profileID = RemoteEngineID.parse(selectedProviderID) {
+            selectedModelID = selection?.lastModel(forProfile: profileID) ?? ""
             return
         }
-        selectedModelID = selection?.lastModel(forProfile: profileID) ?? ""
+        // Not a server: the only thing this can be pointed at is the phone, and the phone keeps its own
+        // last model. Anything else (a mock, an unregistered engine) still has no remembered choice.
+        selectedModelID = activeProvider?.networkClass == .onDevice
+            ? (selection?.onDeviceModelID ?? "")
+            : ""
     }
 
     /// Writes the current model back to the shared selection. This is what makes "last model"
-    /// mean *last used with this server*: the key is the profile, never the model name.
+    /// mean *last used with this server*: the key is the profile, never the model name. An on-device
+    /// engine has no profile, so its model goes to the phone's own slot instead.
     private func recordSelectedModel() {
-        guard let profileID = RemoteEngineID.parse(selectedProviderID),
-              !selectedModelID.isEmpty else { return }
-        selection?.remember(modelID: selectedModelID, forProfile: profileID)
+        guard !selectedModelID.isEmpty else { return }
+        if let profileID = RemoteEngineID.parse(selectedProviderID) {
+            selection?.remember(modelID: selectedModelID, forProfile: profileID)
+        } else if activeProvider?.networkClass == .onDevice {
+            selection?.rememberOnDevice(modelID: selectedModelID)
+        }
     }
 
     // MARK: - Sending

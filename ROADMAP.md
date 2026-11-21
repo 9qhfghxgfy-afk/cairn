@@ -3251,3 +3251,117 @@ Changed: `CairnInferenceLocal/…/MLXMemoryBudget.swift`, `CairnInferenceLocal/�
    What is proven here is the host slice.
 4. `ModelManagerModel.swift` is 192 lines and still wants its server-lifecycle half in its own file.
 
+
+## 2026-11-21 — the phone that had models installed was told it had none: MLX links by default now, and one reading of the store answers every screen
+
+### The four things that were actually wrong
+
+A person with gigabytes of weights on an iPhone 15 Pro saw three separate lies on two screens. They had one
+cause each, and fixing one would not have fixed the others:
+
+1. **The runtime was not in the binary.** `CairnInferenceNative/Package.swift` linked `mlx-swift-lm` only
+   when `CAIRN_MLX=1` was set, and Xcode's ⌘R does not pass the authoring shell's environment into SwiftPM's
+   manifest evaluation. So every build a person actually ran resolved the package **without** MLX;
+   `NativeRuntimeBuild.mlxIsLinked` then correctly read false, and Servers correctly said the runtime was not
+   in this build. A flag nobody can set from the one place the app is built is not configuration — it is a
+   silent downgrade.
+2. **The Servers row never received a count.** `OnDeviceEngineReport.installedModelCount` existed and
+   defaulted to 0; nothing on the wiring path ever filled it. "0 models installed" was a number nobody had
+   looked at.
+3. **Three readers of one folder disagreed.** The Installed tab listed a folder from its install manifest; the
+   engine asked for a manifest **plus** `config.json` **plus** at least one `.safetensors`; the Servers count
+   asked for neither. A phone holding three folders could therefore be counted as zero by one screen and read
+   as one loadable model by another.
+4. **The picker had nothing to pick between.** `MLXNativeProvider.models()` returned one hard-coded row
+   ("Installed on-device model") whatever was on disk, and no persisted identity existed for "the model this
+   phone is using". Switching was not a missing feature but an impossible one — and deleting the model that
+   happened to be remembered left the engine pointing at a folder that was gone.
+
+### What changed
+
+* **MLX links by default; `CAIRN_SKIP_MLX=1` is the opt-out.** Inverted in
+  `Packages/CairnInferenceNative/Package.swift`, and the lanes now say what they mean: the host native-test
+  lane and the simulator build/test lanes export the opt-out (MLX cannot be called from a simulator, and no
+  one has compiled it for arm64-apple-ios-sim), while `Scripts/ci.sh device` clears it. `CAIRN_MLX=1` is still
+  accepted and means nothing on its own, so an old invocation cannot quietly flip a lane back to the excluded
+  shape.
+* **One reading of the store.** New `InstalledModelDiscovery` in `CairnInferenceLocal` answers *installed* —
+  any folder with a readable `cairn-install.json`, newest first — and marks the MLX-loadable subset rather than
+  filtering it, because "installed" and "loadable by this runtime" are different questions and the two screens
+  ask them differently. `App/OnDeviceInstalledModels.swift` is the app-side reader: it hands the engine its
+  folder list and the Servers row its count from that one read. `OnDeviceModelLibrary.installedRows` and
+  `OnDeviceWiring.report` go through it instead of each re-deriving the rule.
+* **The engine lists folders and can be pointed at one.** `NativeInstalledModel` (id, display name, directory,
+  format, measured size), `NativeModelChoice` for resolution, `MLXNativeProvider(installed:activeModelID:)`, a
+  `models()` that is the folder list with a runtime badge, and `selectModel(_:)` on `InferenceProvider` —
+  required, with a default no-op, so a server ignores it and an on-device engine moves real weight state
+  through the ledger rather than repainting a label.
+* **The resolution rule, and the one case it refuses.** No preference — nothing asked, a blank, or the legacy
+  engine-wide `mlx-on-device` id — keeps what is resident, and falls back to the newest installed folder when
+  that one is gone. A **named** model that is not installed resolves to nothing and the turn fails typed as
+  `modelNotInstalled`. Answering from another model's weights was the worse failure, and the picker, the
+  Servers count and this rule read the same list, so a miss means the folder really is gone.
+* **The choice survives.** `ServerSelection.onDeviceModelID` with `rememberOnDevice` /
+  `forgetOnDeviceModel`, persisted through `ServerSelectionRecord`; `ChatSessionModel` restores it when the
+  thread becomes on-device, falls back when the remembered folder is missing, hands the engine the selection;
+  `CairnApp` forgets it when that exact folder is deleted, so the next reading has nothing stale to restore.
+* **The Servers line reads honestly.** Zero gets its own wording instead of a bare 0, and a non-zero count
+  rides along even when no engine can run — "the weights are here, the runtime is not" is a different fact
+  from "nothing is installed", and on a simulator it is the only true one.
+
+### A gate bug found by running the gate
+
+`Scripts/ci.sh` still could not run `all` locally: `runtime_version` printed each version with `printf '%s'`,
+so several of them reached `sort -V` as a single line — `26.227.2` — and the destination failed with "no
+available devices matched the request". It prints one version per line now. This is the fix the entry above
+listed as **owed**; the pairing it feeds (the device name plus the newest runtime that really holds that
+device) was already in place and is what resolved iPhone 15 Pro onto iOS 27.2 here.
+
+### Verified — locally, on this machine
+
+* `Scripts/ci.sh guards` → **53 ok, 0 failed**, after the `project.yml`, `Package.swift` and `ci.sh` edits.
+* Host suites: `CairnChatDomain` **677 tests, 0 failures**; `CairnInferenceLocal` **124, 0** (four new
+  discovery tests: three folders all listed and only the two safetensors folders loadable, a partial download
+  with no manifest is not installed, the two questions answered separately, deletion read as gone);
+  `CairnInferenceNative` with `CAIRN_SKIP_MLX=1` **58, 0** (nine new — five resolution-rule, four
+  listing/switching). `CairnProviderRemote` was not touched.
+* `xcodegen generate` → `xcodebuild build` for the **iPhone 15 Pro / iOS 27.2** simulator with MLX excluded →
+  **BUILD SUCCEEDED**.
+* `xcodebuild test` on that destination → **TEST SUCCEEDED**, **242 XCTest tests, 0 failures**, and no
+  swift-testing failures. Two facts this paid for: the app target had never compiled
+  `App/OnDeviceInstalledModels.swift` into the test bundle, which is what `OnDeviceWiring.swift` needs to
+  build there — so `project.yml` lists it now; and `MLXNativeProviderTests` asserted
+  `models().count == 1`, a claim about the old synthetic row, which now asserts that an engine with nothing
+  installed lists nothing.
+
+### Not verified, stated plainly
+
+* **CI-verified: no.** No run number is cited, so nothing in this entry is a milestone.
+* **On-device-verified: no.** `Scripts/ci.sh device` reached signing and stopped: *"Cairn" requires a
+  provisioning profile*. `Config/Local.xcconfig` is present with a Team ID; the profile is the missing piece,
+  and the rules forbid pinning one in a tracked file — so that step belongs to Xcode on this Mac, not to a
+  source change. Nothing MLX-related compiled, so "the runtime is linked into a device binary" remains a
+  claim this machine has not observed.
+* **Real-network-verified: not applicable** — none of this opens a socket.
+
+### Files
+
+New: `CairnInferenceLocal/…/InstalledModelDiscovery.swift` and its tests, `App/OnDeviceInstalledModels.swift`,
+`CairnInferenceNative/…/NativeModelChoice.swift`, `CairnInferenceNative/…/MLXNativeProvider+Models.swift`,
+`NativeModelChoiceTests`, `MLXNativeModelListingTests`, `CairnChatDomain/…/OnDeviceEngineReportTests.swift`.
+Changed: `Provider.swift` (`selectModel`, `ModelInfo.runtimeBadge`), `ChatSessionModel.swift`,
+`OnDeviceEngineReport.swift`, `ServerSelection.swift`, `ServerSelectionModel.swift`, `SelectionRecord.swift`,
+`InstalledModelManifest.swift`, `MLXNativeProvider.swift`, `NativeInstalledModel.swift`,
+`OnDeviceWiring.swift`, `OnDeviceModelLibrary.swift`, `CairnApp.swift`, `ChatScreen+Menus.swift`,
+`project.yml`, `Scripts/ci.sh`, `CairnInferenceNative/Package.swift`.
+
+### Owed
+
+1. A CI run on this commit — guards, the four host suites, `xcodegen`, simulator build and `CairnTests`.
+2. The device pass: get past the provisioning profile, install, and watch four things — Servers counts the
+   folders that are on disk; the picker lists each by name with its badge; switching one answers the next turn
+   from the new weights rather than the old; and no two models sit resident at once.
+3. A per-folder residency claim. `OnDeviceMemoryAdmission` still records MLX under the single engine-wide id,
+   which is honest while one MLX model can be resident and not honest for a second on-device runtime.
+4. Whether MLX compiles for arm64-apple-ios-sim at all — the reason the simulator lanes still opt out, and a
+   question worth answering before MLX work depends on simulator runs.

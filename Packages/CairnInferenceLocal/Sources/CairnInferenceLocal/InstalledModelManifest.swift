@@ -34,7 +34,11 @@ public struct InstalledModelManifest: Sendable, Equatable, Codable, Identifiable
         files.reduce(Int64(0)) { $0.addingReportingOverflow($1.bytes).partialValue }
     }
 
-    public var manifestFileName: String { "cairn-install.json" }
+    /// The file that says a folder is finished. Written last by the installer, so its presence is the
+    /// difference between "bytes are arriving" and "this model is installed".
+    public static let manifestFileName = "cairn-install.json"
+
+    public var manifestFileName: String { Self.manifestFileName }
 
     public func encoded() -> Data? {
         let encoder = JSONEncoder()

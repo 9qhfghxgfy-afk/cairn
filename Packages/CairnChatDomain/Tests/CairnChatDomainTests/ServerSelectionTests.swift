@@ -107,6 +107,47 @@ final class ServerSelectionTests: XCTestCase {
         XCTAssertNil(reloaded.activeProfileID)
         XCTAssertNil(reloaded.lastModel(forProfile: home.id))
     }
+
+    /// The phone keeps one model of its own. There is no profile to key it against, so it needs its own
+    /// slot: a chat that reopens on-device has to land on the folder chosen yesterday rather than on
+    /// whichever folder sorts first, and a folder that was deleted must not come back as a choice that
+    /// fails the next turn.
+    func testThePhoneKeepsItsOwnModelApartFromEveryServer() {
+        let home = UUID()
+        var selection = ServerSelection()
+        selection.remember(modelID: "llama3", forProfile: home)
+        selection.rememberOnDevice(modelID: "mlx-community/Llama-3.2-3B-Instruct-4bit")
+
+        XCTAssertEqual(selection.onDeviceModelID, "mlx-community/Llama-3.2-3B-Instruct-4bit")
+        XCTAssertEqual(selection.lastModel(forProfile: home), "llama3",
+                       "the phone's model never overwrites a server's last model")
+
+        // A blank name is not a choice, and must not read as "the choice was cleared".
+        selection.rememberOnDevice(modelID: "   ")
+        XCTAssertEqual(selection.onDeviceModelID, "mlx-community/Llama-3.2-3B-Instruct-4bit")
+
+        selection.forgetOnDeviceModel()
+        XCTAssertNil(selection.onDeviceModelID)
+        XCTAssertEqual(selection.lastModel(forProfile: home), "llama3",
+                       "deleting the phone's model leaves every server's choice alone")
+    }
+
+    /// The choice has to survive the store, or it is an instant switch that evaporates: written through on
+    /// pick, read back on the next launch, and gone for good once the folder is deleted.
+    func testThePhonesModelSurvivesTheStoreThatHoldsIt() {
+        let store = FakeSelectionStore()
+        let model = ServerSelectionModel(storing: store)
+        model.rememberOnDevice(modelID: "mlx-community/Qwen2.5-7B-Instruct-6bit")
+
+        var reloaded = ServerSelectionModel(storing: store)
+        reloaded.reload()
+        XCTAssertEqual(reloaded.onDeviceModelID, "mlx-community/Qwen2.5-7B-Instruct-6bit")
+
+        reloaded.forgetOnDeviceModel()
+        reloaded = ServerSelectionModel(storing: store)
+        reloaded.reload()
+        XCTAssertNil(reloaded.onDeviceModelID)
+    }
 }
 
 @MainActor

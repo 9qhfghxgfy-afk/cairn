@@ -61,15 +61,32 @@ public struct OnDeviceEngineReport: Sendable, Equatable {
         }
     }
 
+    /// The models half of the line, phrased for the count it describes.
+    ///
+    /// "0 models installed" is a sentence with no subject, and it is what the Servers row used to say to a
+    /// phone holding three downloaded folders. Zero gets its own wording because that is a different fact —
+    /// nothing is on this phone — not a number that happens to be small.
+    private var modelPhrase: String {
+        switch installedModelCount {
+        case 0: return "no models installed"
+        case 1: return "1 model installed"
+        default: return "\(installedModelCount) models installed"
+        }
+    }
+
     /// One line for the Servers row: which engines are ready, or why they are not.
+    ///
+    /// The count rides along in both branches. When an engine is ready it says what can be run; when none
+    /// is, the count says why the phone is not simply empty — weights are here and waiting on a runtime,
+    /// which is a different thing to read than "nothing installed".
     public var summary: String {
         if canRunSomething {
             var ready: [String] = []
             if appleModel.isUsable { ready.append("Apple model") }
             if mlx.isUsable { ready.append("MLX") }
-            let models = installedModelCount == 1 ? "1 model installed" : "\(installedModelCount) models installed"
-            return "\(ready.joined(separator: " + ")) ready · \(models)"
+            return "\(ready.joined(separator: " + ")) ready · \(modelPhrase)"
         }
-        return mlx.status
+        guard installedModelCount > 0 else { return mlx.status }
+        return "\(mlx.status) · \(modelPhrase)"
     }
 }

@@ -9,10 +9,22 @@ import Foundation
 public struct ServerSelection: Sendable, Equatable {
     public var activeProfileID: UUID?
     public var lastModelIDs: [UUID: String]
+    /// Which model on this phone the chat was last pointed at.
+    ///
+    /// It is stored apart from `lastModelIDs` on purpose. Those are keyed by server profile because a
+    /// model name means a different thing on each box; an on-device model has no server, so keying it
+    /// under some profile's UUID would make "the phone's model" change whenever the active server did.
+    /// One slot, and only the on-device engine reads it.
+    public var onDeviceModelID: String?
 
-    public init(activeProfileID: UUID? = nil, lastModelIDs: [UUID: String] = [:]) {
+    public init(
+        activeProfileID: UUID? = nil,
+        lastModelIDs: [UUID: String] = [:],
+        onDeviceModelID: String? = nil
+    ) {
         self.activeProfileID = activeProfileID
         self.lastModelIDs = lastModelIDs
+        self.onDeviceModelID = onDeviceModelID
     }
 
     public func lastModel(forProfile id: UUID) -> String? { lastModelIDs[id] }
@@ -24,6 +36,18 @@ public struct ServerSelection: Sendable, Equatable {
         guard !trimmed.isEmpty else { return }
         lastModelIDs[id] = trimmed
     }
+
+    /// Remembers the phone's model. An empty name is not a choice, so it writes nothing — the
+    /// difference between "no choice yet" and "the choice was cleared" matters when a model is deleted.
+    public mutating func rememberOnDevice(modelID: String) {
+        let trimmed = modelID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        onDeviceModelID = trimmed
+    }
+
+    /// Drops the remembered phone model, which is what deleting it owes: a stale name would otherwise
+    /// come back as the choice on the next launch and fail the turn.
+    public mutating func forgetOnDeviceModel() { onDeviceModelID = nil }
 
     /// A deleted server leaves no trace: neither an active pointer nor a remembered model.
     public mutating func forgetProfile(_ id: UUID) {

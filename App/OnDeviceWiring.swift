@@ -24,12 +24,22 @@ enum OnDeviceWiring {
     ///     MLX engine loads through it.
     ///   - sink: the object that can actually put MLX back out of memory, which the registry's release
     ///     path points at.
+    /// - Parameters:
+    ///   - registry: what counts as resident in this process. The Apple model makes room through it; the
+    ///     MLX engine loads through it.
+    ///   - sink: the object that can actually put MLX back out of memory, which the registry's release
+    ///     path points at.
+    ///   - activeModelID: the folder the person last chose in a chat, read back from the saved selection.
+    ///     It decides which installed model the first turn loads; when that folder has been deleted, the
+    ///     engine falls back to the newest one that exists rather than failing every turn.
     static func engines(
         registry: OnDeviceModelRegistry,
-        sink: OnDeviceUnloadSink
+        sink: OnDeviceUnloadSink,
+        activeModelID: String? = nil
     ) async -> [any InferenceProvider] {
         let mlx = MLXNativeProvider(
-            directoryResolver: { MLXModelDiscovery.installedDirectory() },
+            installed: { OnDeviceInstalledModels.mlxLoadableFolders() },
+            activeModelID: activeModelID,
             admission: OnDeviceMemoryAdmission(registry: registry)
         )
         await sink.attach(mlx)
@@ -49,21 +59,25 @@ enum OnDeviceWiring {
                 name: "MLX",
                 status: mlx.reasonText,
                 isUsable: mlx.isUsable
-            )
+            ),
+            // Counted from the store, not from whether this build carries the runtime. The old report had
+            // no count at all, so the Servers row said "0 models installed" on a phone holding three — and
+            // said it whether MLX was linked or not, which is what made it read as a download failure.
+            installedModelCount: OnDeviceInstalledModels.installedCount()
         )
     }
 
     /// One MLX provider, aimed at the store rather than at a photograph of it taken at launch.
     ///
     /// A model that finishes downloading while Cairn is open is found on the next look: the Servers
-    /// screen says ready and the next turn loads it, without a relaunch. The two closures are the only
+    /// screen says ready and the next turn loads it, without a relaunch. The closures are the only
     /// place this wiring touches the filesystem, so the engine still cannot reach outside its module.
     ///
     /// The report path needs no memory gate — availability is a question about the build and the folder,
     /// not about loading — so this one stays unwired, which means its turns would run with a zero buffer
     /// pool. Only the gated provider above is ever used to generate.
     private static func mlxProvider() -> MLXNativeProvider {
-        MLXNativeProvider(directoryResolver: { MLXModelDiscovery.installedDirectory() })
+        MLXNativeProvider(installed: { OnDeviceInstalledModels.mlxLoadableFolders() })
     }
 
     /// The memory watch: a warning hands buffers back, a critical event releases what is idle.

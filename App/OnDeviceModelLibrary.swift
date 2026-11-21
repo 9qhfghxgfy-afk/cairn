@@ -81,36 +81,31 @@ final class OnDeviceModelLibrary: LocalModelLibraryServicing {
 
     /// What this phone holds, read from the per-repository manifests.
     ///
-    /// A directory with no `cairn-install.json` is skipped rather than listed: the manifest is written last
-    /// precisely so that a partial download is never reported as installed. The display name comes from the
-    /// curated entry when one exists, and from the repository id when it does not — nobody invents a
-    /// friendlier name for something Cairn knows nothing about.
+    /// The read itself lives in `InstalledModelDiscovery`, so this tab, the Servers count and the engine's
+    /// picker are all answered from one rule about what counts as installed. A directory with no
+    /// `cairn-install.json` is skipped rather than listed: the manifest is written last precisely so that a
+    /// partial download is never reported as installed. The display name comes from the curated entry when
+    /// one exists, and from the repository id when it does not — nobody invents a friendlier name for
+    /// something Cairn knows nothing about.
     func installedRows() async throws -> [InstalledLocalModel] {
         guard let layout else { throw CairnLibraryError.noStorage }
-        var found: [InstalledLocalModel] = []
-        for directory in layout.modelDirectories(fileManager: fileManager) {
-            let manifestURL = directory
-                .appendingPathComponent("cairn-install.json")
-            guard let data = try? Data(contentsOf: manifestURL),
-                  let manifest = InstalledModelManifest.decode(data) else { continue }
-            let curated = ModelCatalog.onDevice.first { $0.repoID == manifest.repoID }
-            found.append(
-                InstalledLocalModel(
-                    repoID: manifest.repoID,
-                    displayName: curated?.displayName ?? manifest.repoID,
-                    sizeBytes: manifest.totalBytes,
-                    fileCount: manifest.files.count,
-                    installedOn: manifest.installedAt,
+        return InstalledModelDiscovery.readings(layout: layout, fileManager: fileManager)
+            .map { folder in
+                let curated = ModelCatalog.onDevice.first { $0.repoID == folder.repoID }
+                return InstalledLocalModel(
+                    repoID: folder.repoID,
+                    displayName: curated?.displayName ?? folder.repoID,
+                    sizeBytes: folder.manifestBytes,
+                    fileCount: folder.fileCount,
+                    installedOn: folder.installedOn,
                     canDelete: true,
                     // Read from the file names the manifest recorded, which is what this phone was given —
                     // not from the repository's name, which is what a publisher chose. A folder holding
                     // neither a `.gguf` nor a `.safetensors` is not a runtime Cairn can name, and saying so
                     // is better than guessing from a family name.
-                    format: ModelFormat.detect(fileNames: manifest.files.map(\.name)) ?? .other
+                    format: ModelFormat.detect(fileNames: folder.fileNames) ?? .other
                 )
-            )
-        }
-        return found.sorted { $0.installedOn > $1.installedOn }
+            }
     }
 
     func delete(_ model: InstalledLocalModel) async throws {

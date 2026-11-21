@@ -32,21 +32,33 @@
 // parser and its tests are unchanged, and the provider reports its own unavailability honestly instead of
 // pretending to be a working engine.
 //
-// DEFAULT — the runtime is linked only when `CAIRN_MLX=1` is set, because that is the one configuration
-// this milestone has not yet proved builds inside a CI time box or on the authoring machine.
-// `CAIRN_SKIP_MLX=1` forces the exclusion even if `CAIRN_MLX` is set. So:
-//   CAIRN_MLX=1        link MLX 2.31.3 (device / release build; needs the time and the RAM)
-//   (nothing set)      no MLX — what CI and the simulator build use
-//   CAIRN_SKIP_MLX=1   no MLX, forced
-// The gap this leaves is recorded in ROADMAP.md, not hidden here: the engine's call shapes have been read
-// out of the 2.31.3 sources, but no compiler has yet type-checked them.
+// DEFAULT — the runtime is linked. This was inverted on 2026-11-21, and the reason is a phone, not a
+// preference: Xcode's ⌘R does not pass the authoring shell's environment into SwiftPM's manifest
+// evaluation, so a default-on-flag meant every build a person actually ran from the Xcode GUI resolved
+// this package with MLX absent. `NativeRuntimeBuild.mlxIsLinked` then read false — correctly, since the
+// runtime genuinely was not in the binary — and the Servers screen told an iPhone 15 Pro holding
+// gigabytes of downloaded weights that the on-device runtime was not in this build. A flag nobody can set
+// from the one place the app is built is not a configuration, it is a silent downgrade.
+//
+// So the flag is now an opt-out, and the opt-out is used only where a lane is deliberately about the
+// excluded shape or is time-boxed:
+//   (nothing set)      link MLX 2.31.3 — Xcode ⌘R, `Scripts/ci.sh device`, and the `.ipa` lane
+//   CAIRN_SKIP_MLX=1   no MLX — the host native-test lane and the simulator build/test lanes, which are
+//                      fast on purpose; linking a vendored C++ and Metal core inside those time boxes is
+//                      the CI's clock to decide, not this manifest's
+// `CAIRN_MLX=1` is still accepted and means nothing on its own now, so an older invocation cannot
+// silently flip a lane back to the excluded shape.
+//
+// What is still owed: MLX has been compiled for the macOS host, and the device lane is the build that
+// carries it into a binary a person installs. Nobody has compiled it for the arm64 iOS Simulator, and no
+// device run has yet been observed on a phone with this inversion in place — which is why the simulator
+// lanes keep the opt-out and ROADMAP.md carries the gap rather than this comment hiding it.
 //
 // Logging rule: nothing here writes prompt text, response text or secrets. Typed metadata only.
 
 import PackageDescription
 
-private let wantsMLX = Context.environment["CAIRN_MLX"] == "1"
-private let skipMLX = Context.environment["CAIRN_SKIP_MLX"] == "1" || !wantsMLX
+private let skipMLX = Context.environment["CAIRN_SKIP_MLX"] == "1"
 
 private var mlxDependencies: [Package.Dependency] {
     guard !skipMLX else { return [] }

@@ -28,7 +28,10 @@ struct MLXNativeProviderTests {
         #expect(!provider.networkClass.leavesTheDevice)
         #expect(provider.serverProfileID == nil)
         let models = try await provider.models()
-        #expect(models.count == 1)
+        // Nothing installed is nothing listed. This reported one synthetic row whatever was on disk, which
+        // is how a phone with three downloaded models showed one un-nameable entry in the picker — and how
+        // a phone with none was told it held a model it could not run.
+        #expect(models.isEmpty)
     }
 
     @Test func onlyKnobsTheEngineHonestToTheRuntimeAreOffered() {

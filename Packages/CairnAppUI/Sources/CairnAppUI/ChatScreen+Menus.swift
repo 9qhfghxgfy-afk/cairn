@@ -64,10 +64,15 @@ extension ChatScreen {
                     Button {
                         session?.choose(model: model.id)
                     } label: {
+                        // The runtime badge when the engine supplies one. A phone can hold two folders whose
+                        // names differ only by quantisation, and a list that shows both by name alone reads
+                        // as the same model twice — which is why MLX says which engine each folder runs on.
+                        let title = model.runtimeBadge.map { "\(model.displayName) — \($0)" }
+                            ?? model.displayName
                         if session?.selectedModelID == model.id {
-                            Label(model.displayName, systemImage: "checkmark")
+                            Label(title, systemImage: "checkmark")
                         } else {
-                            Text(model.displayName)
+                            Text(title)
                         }
                     }
                 }

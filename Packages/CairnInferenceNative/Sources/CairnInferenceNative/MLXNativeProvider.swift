@@ -26,11 +26,28 @@ public actor MLXNativeProvider: InferenceProvider {
     /// Read on demand rather than frozen at launch: a model that finishes downloading while Cairn is
     /// open should be loadable on the next turn, not at the next launch. `nonisolated` because the
     /// registry reads availability from any thread, and a `@Sendable` closure is safe to call there.
-    private let resolveDirectory: @Sendable () -> URL?
+    ///
+    /// It is a **list**, not a single folder, because a phone can hold several downloaded models and the
+    /// chat has to be able to name them. Before this, the engine reported one synthetic model whatever was
+    /// on disk, so a person with three folders on an iPhone saw one entry in the picker and no way to
+    /// pick. Internal rather than private because the listing and switching half of this type lives in
+    /// `MLXNativeProvider+Models.swift`.
+    let installed: @Sendable () -> [NativeInstalledModel]
     private let admission: any NativeMemoryAdmitting
-    private let pool: MLXContainerPool
-    private let ledger: MLXTurnLedger
-    private var loaded: String?
+    /// Internal, not private: the switching path releases through the pool and the ledger, and a
+    /// `private` member is unreachable from the extension in `MLXNativeProvider+Models.swift`. The pool is
+    /// read there for one question only — whether any container is still held, which is what decides
+    /// whether the residency claim may be cleared.
+    let pool: MLXContainerPool
+    let ledger: MLXTurnLedger
+    /// Internal, not private: the switching path in `MLXNativeProvider+Models.swift` has to clear the
+    /// residency claim when it hands a model's weights back, and a `private` member is unreachable from
+    /// an extension in another file.
+    var loaded: String?
+    /// The folder this engine is pointed at, set at wiring time and moved by `selectModel`. Per-engine
+    /// rather than per-turn because loading weights is not free: which model is live is the engine's
+    /// state, and the picker has to move that state rather than only repaint a label.
+    var activeModelID: String?
 
     /// - Parameter modelDirectory: a folder of already-installed, already-verified weights.
     ///   Cairn's own downloader owns that folder; this engine never fetches anything.
@@ -45,7 +62,29 @@ public actor MLXNativeProvider: InferenceProvider {
         self.init(directoryResolver: directoryResolver, admission: NativeAdmissionUnwired())
     }
 
-    /// The full form: a directory **and** the memory gate that decides whether a turn may allocate.
+    /// The shape with more than one folder on the phone.
+    ///
+    /// - Parameters:
+    ///   - installed: the folders this phone holds, newest first, each one loadable by this runtime. The
+    ///     App layer reads them; this engine never does.
+    ///   - activeModelID: the folder the person last chose, read back from the saved selection. When it
+    ///     no longer describes a folder on disk, the newest installed one is used instead — the same rule
+    ///     a turn follows, so the listing and the turn cannot disagree about what is live.
+    public init(
+        installed: @escaping @Sendable () -> [NativeInstalledModel],
+        activeModelID: String? = nil,
+        admission: any NativeMemoryAdmitting = NativeAdmissionUnwired()
+    ) {
+        self.init(
+            installed: installed,
+            activeModelID: activeModelID,
+            admission: admission,
+            pool: MLXContainerPool()
+        )
+    }
+
+    /// The full form: folders, the chosen one, **and** the memory gate that decides whether a turn may
+    /// allocate.
     ///
     /// - Parameter admission: the measured gate. Left at `NativeAdmissionUnwired`, turns are allowed
     ///   with a zero buffer pool, which is a small and honest posture but not a measured one — so the
@@ -54,16 +93,32 @@ public actor MLXNativeProvider: InferenceProvider {
         directoryResolver: @escaping @Sendable () -> URL?,
         admission: any NativeMemoryAdmitting
     ) {
-        self.resolveDirectory = directoryResolver
+        self.init(
+            installed: {
+                guard let directory = directoryResolver() else { return [] }
+                return [NativeInstalledModel.unwired(directory: directory)]
+            },
+            activeModelID: nil,
+            admission: admission
+        )
+    }
+
+    /// The single path every initialiser ends in, so a pool and a ledger are built exactly one way:
+    /// the ledger's release has to point at the same pool the turns load from, or a release that reports
+    /// success could be releasing nothing.
+    private init(
+        installed: @escaping @Sendable () -> [NativeInstalledModel],
+        activeModelID: String?,
+        admission: any NativeMemoryAdmitting,
+        pool: MLXContainerPool
+    ) {
+        self.installed = installed
+        self.activeModelID = activeModelID
         self.admission = admission
-        // One pool, and the ledger's release path points at that same pool — there is exactly one
-        // place in Cairn that can be holding weights, and a release that could hit something else
-        // would be a release that reports success while the memory stays.
-        let containerPool = MLXContainerPool()
-        self.pool = containerPool
+        self.pool = pool
         self.ledger = MLXTurnLedger(
             onFlush: { MLXRuntimeMemory.flushBufferCache() },
-            onRelease: { await containerPool.releaseNow() }
+            onRelease: { [pool] in await pool.releaseNow() }
         )
     }
 
@@ -104,11 +159,16 @@ public actor MLXNativeProvider: InferenceProvider {
     }
 
     public nonisolated var runtimeAvailability: NativeRuntimeAvailability {
-        NativeRuntimeAvailability.current(hasInstalledModel: resolveDirectory() != nil)
+        // "A model is installed" means "a folder this runtime can load is installed", which is what the
+        // App layer hands over — a GGUF folder on disk is real but not loadable here, and it is counted on
+        // the Servers row rather than making this engine claim it can run it.
+        NativeRuntimeAvailability.current(hasInstalledModel: !installed().isEmpty)
     }
 
+    /// The models on this phone this runtime can load, newest first — see
+    /// `MLXNativeProvider+Models.swift`, which also holds the switching rule.
     public func models() async throws -> [ModelInfo] {
-        [ModelInfo(id: Self.modelID, displayName: "Installed on-device model", providerID: id)]
+        installedRecords()
     }
 
     /// Resident model, for the Running tab. `nil` until a turn has really started answering, and cleared
@@ -119,7 +179,6 @@ public actor MLXNativeProvider: InferenceProvider {
     public nonisolated func stream(
         _ request: GenerationRequest
     ) -> AsyncThrowingStream<StreamChunk, any Error> {
-        let directory = resolveDirectory()
         return AsyncThrowingStream { continuation in
             let bridge = MLXStreamBridge(
                 parser: DeviceTemplateChunkParser(offeredTools: request.tools),
@@ -130,7 +189,12 @@ public actor MLXNativeProvider: InferenceProvider {
             }
             let work = Task {
                 do {
-                    guard let directory else { throw NativeGenerationError.modelNotInstalled }
+                    // Resolved inside the actor, because which folder is live is actor state and the
+                    // person may have switched models between two turns. A name the engine does not have
+                    // is `modelNotInstalled`, not a load attempt against somebody else's weights.
+                    guard let directory = await self.turnDirectory(for: request) else {
+                        throw NativeGenerationError.modelNotInstalled
+                    }
                     let cacheLimitBytes = try await self.admitAndBeginTurn(directory: directory)
                     do {
                         try await self.run(

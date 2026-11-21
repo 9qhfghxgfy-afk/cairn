@@ -119,17 +119,22 @@ struct CairnLaunchView: View {
                     unloader: { id in _ = await onDeviceSink.unload(modelID: id) },
                     flusher: { await onDeviceSink.flushCaches() }
                 )
-                let onDeviceEngines = await OnDeviceWiring.engines(
-                    registry: onDeviceRegistry,
-                    sink: onDeviceSink
-                )
-                self.onDeviceSink = onDeviceSink
-                let registry = ProviderRegistry(providers: [MockStreamingProvider()] + onDeviceEngines)
                 // Which server is in use, and what each server was last used with, is one shared
                 // object. The Servers screen and every chat read and write it, so a tap in either
                 // place is true in the other — and it is written through to disk, so it survives a
                 // relaunch rather than being an instant switch that evaporates.
+                //
+                // Built before the on-device engines, because the phone's remembered model is the answer to
+                // "which folder should the first turn load". A model chosen yesterday is the model running
+                // today, and a folder deleted since falls back to one that exists rather than failing.
                 let selection = ServerSelectionModel(storing: persistent)
+                let onDeviceEngines = await OnDeviceWiring.engines(
+                    registry: onDeviceRegistry,
+                    sink: onDeviceSink,
+                    activeModelID: selection.onDeviceModelID
+                )
+                self.onDeviceSink = onDeviceSink
+                let registry = ProviderRegistry(providers: [MockStreamingProvider()] + onDeviceEngines)
                 // One object for the theme, the appearance and the Default Configuration, because they
                 // are one stored row: a default configuration saved without the theme beside it would
                 // leave the app disagreeing with itself.
@@ -223,9 +228,14 @@ struct CairnLaunchView: View {
                 // is only about what the screens re-read.
                 builtServers.modelManager?.onLocalModelRemoved = { entry in
                     builtServers.refreshOnDeviceReport()
-                    if let repoID = entry.hostModelID {
-                        await builtServers.modelCatalog?.modelWasRemoved(repoID: repoID)
+                    guard let repoID = entry.hostModelID else { return }
+                    // The folder that went away may be the one the phone was pointed at. Left remembered, the
+                    // next chat would name weights that no longer exist, so the choice returns to "whatever
+                    // is here" and the engine's own fallback takes the newest folder that does.
+                    if selection.onDeviceModelID == repoID {
+                        selection.forgetOnDeviceModel()
                     }
+                    await builtServers.modelCatalog?.modelWasRemoved(repoID: repoID)
                 }
                 // A finished download changes what this phone can run. The Servers screen's on-device
                 // report is re-read through the same reader the launch used, so MLX moves to ready without

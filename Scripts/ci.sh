@@ -11,13 +11,14 @@
 #   Scripts/ci.sh domain     swift test for the pure domain package (fast, macOS host)
 #   Scripts/ci.sh remote     swift test for CairnProviderRemote (stub + loopback, no internet)
 #   Scripts/ci.sh local      swift test for CairnInferenceLocal (memory fit, catalog, downloads)
-#   Scripts/ci.sh native     swift test for CairnInferenceNative (MLX excluded unless CAIRN_MLX=1)
+#   Scripts/ci.sh native     swift test for CairnInferenceNative (MLX excluded here; linked by default)
 #   Scripts/ci.sh hosts      all four host suites, which is what the CI host job runs
 #   Scripts/ci.sh gen        xcodegen generate only
-#   Scripts/ci.sh build      xcodegen + xcodebuild build for a simulator
-#   Scripts/ci.sh test       xcodegen + xcodebuild test on a simulator
+#   Scripts/ci.sh build      xcodegen + xcodebuild build for a simulator (MLX excluded — a simulator
+#                            cannot call it either way, see `export_simulator_build_env`)
+#   Scripts/ci.sh test       xcodegen + xcodebuild test on a simulator (same exclusion)
 #   Scripts/ci.sh device     xcodegen + xcodebuild build for a real iPhone, signed with the Team ID
-#                            from Config/Local.xcconfig (see docs/BUILD-MAC.md)
+#                            from Config/Local.xcconfig, with the MLX runtime linked (see docs/BUILD-MAC.md)
 #   Scripts/ci.sh probe      print the toolchain, SDKs and simulator runtimes actually installed
 set -euo pipefail
 
@@ -121,13 +122,36 @@ create_local_simulator() {
   echo "created a ${SIMULATOR_NAME} simulator for this machine."
 }
 
-# A local Mac will not have the exact runtime CI pins. Falling back to the device name alone lets
-# xcodebuild pick the newest runtime that exists instead of failing on a version nobody installed.
+# Which runtimes a named device actually exists on, one line each.
+#
+# `simctl list devices available` groups every device under a `-- iOS 26.5 (26.5) --` header, and a device
+# type does not exist on every installed runtime: a Mac that carries iOS 26.2 and iOS 26.5 can hold
+# `iPhone 15 Pro` only under 26.2 while `iPhone 17` exists only under 26.5. So "which runtime is newest"
+# and "which runtime is my device on" are two different questions, and answering one with the other is how
+# a destination gets built that no machine can resolve. The header line is the answer to the second one.
+device_runtime_lines() {
+  xcrun simctl list devices available 2>/dev/null | awk -v name="$1" '
+    /^-- / { runtime = substr($0, 4); next }
+    index($0, name " (") > 0 { print runtime }
+  '
+}
+
+# The version out of a runtime line such as "iOS 26.5 (26.5)".
+#
+# One per line, which matters: the only caller pipes several of these into `sort -V`, and a version printed
+# without its newline reaches that sort as "26.227.2" — a number that matches no runtime on any machine,
+# which then fails the destination with "no available devices matched the request".
+runtime_version() { printf '%s\n' "$1" | sed -E 's/^iOS ([0-9.]+).*/\1/'; }
+
+# A local Mac will not have the exact runtime CI pins, and a device will not sit on the runtime its name
+# happens to suggest. The destination is therefore built from what the pairing actually is: the named
+# device plus the newest runtime that really has it, which is also what makes `OS=` explicit rather than
+# leaving xcodebuild to guess a runtime the device was never created under.
 resolve_destination() {
   # Before concluding anything about runtimes, rule out the license, which makes every runtime list
   # come back empty and would otherwise be reported as "no simulator runtime installed".
   check_license || exit 1
-  local runtimes devices
+  local runtimes found newest
   runtimes="$(xcrun simctl list runtimes 2>/dev/null || true)"
   if ! printf '%s' "$runtimes" | grep -qi "iOS"; then
     # The usual fresh-Mac gap: Xcode installs with no simulator runtime at all, so every simulator
@@ -138,30 +162,47 @@ resolve_destination() {
     echo "  or skip the simulator and run the host suites:    Scripts/ci.sh hosts" >&2
     exit 1
   fi
-  devices="$(xcrun simctl list devices available 2>/dev/null || true)"
-  if ! printf '%s' "$devices" | grep -q "  ${SIMULATOR_NAME} ("; then
-    if [[ -z "${CI:-}" ]]; then
-      # The target device for this project is a physical iPhone 15 Pro, so a Mac that has never had
-      # that simulator gets one rather than a lane that quietly runs on a different screen size.
-      create_local_simulator || exit 1
-      devices="$(xcrun simctl list devices available 2>/dev/null || true)"
-    fi
+
+  found="$(device_runtime_lines "$SIMULATOR_NAME")"
+  if [[ -z "$found" ]] && [[ -z "${CI:-}" ]]; then
+    # The target device for this project is a physical iPhone 15 Pro, so a Mac that has never had
+    # that simulator gets one rather than a lane that quietly runs on a different screen size.
+    create_local_simulator || exit 1
+    found="$(device_runtime_lines "$SIMULATOR_NAME")"
   fi
-  if ! printf '%s' "$devices" | grep -q "  ${SIMULATOR_NAME} ("; then
+  if [[ -z "$found" ]]; then
     echo "no '${SIMULATOR_NAME}' simulator on this machine. Available iOS simulators:" >&2
-    printf '%s\n' "$devices" | grep -E '^    (iPhone|iPad)' | sed 's/ (.*//' | sort -u | head -8 >&2
+    xcrun simctl list devices available 2>/dev/null | grep -E '^    (iPhone|iPad)' | sed 's/ (.*//' \
+      | sort -u | head -8 >&2
     echo "  choose one with: SIMULATOR_NAME='iPhone 15' Scripts/ci.sh test" >&2
     echo "  CI stays pinned to iPhone 17 / iOS 26.5 whatever is chosen here." >&2
     exit 1
   fi
-  if [[ -n "$SIMULATOR_OS" ]] && ! printf '%s' "$runtimes" | grep -q "iOS ${SIMULATOR_OS}"; then
-    echo "note: no iOS ${SIMULATOR_OS} runtime installed; using ${SIMULATOR_NAME} with its newest available runtime"
-    SIMULATOR_OS=""
+
+  # A pinned runtime is honoured only when this device really exists on it. On CI that is the pin, so a
+  # mismatch is a runner problem and must stop the lane rather than be papered over with a different
+  # runtime; locally it is a machine that has moved on, which is noted and then worked around.
+  if [[ -n "$SIMULATOR_OS" ]] && printf '%s\n' "$found" | grep -q "iOS ${SIMULATOR_OS}"; then
+    TEST_DESTINATION="platform=iOS Simulator,name=${SIMULATOR_NAME},OS=${SIMULATOR_OS}"
+    echo "test destination: ${TEST_DESTINATION}"
+    return
+  fi
+  if [[ -n "${CI:-}" ]]; then
+    echo "CI pins ${SIMULATOR_NAME} on iOS ${SIMULATOR_OS}, but this runner has that device on:" >&2
+    printf '%s\n' "$found" | sed 's/^/  /' >&2
+    exit 1
   fi
   if [[ -n "$SIMULATOR_OS" ]]; then
-    TEST_DESTINATION="platform=iOS Simulator,name=${SIMULATOR_NAME},OS=${SIMULATOR_OS}"
-  else
+    echo "note: no iOS ${SIMULATOR_OS} runtime holds a '${SIMULATOR_NAME}' here; using its newest one"
+  fi
+  newest="$(printf '%s\n' "$found" | while IFS= read -r line; do runtime_version "$line"; done \
+    | sort -V | tail -1)"
+  if [[ -z "$newest" ]]; then
+    # A device line whose runtime is not an iOS version cannot be turned into an OS= component; let
+    # xcodebuild resolve the name alone rather than inventing a version.
     TEST_DESTINATION="platform=iOS Simulator,name=${SIMULATOR_NAME}"
+  else
+    TEST_DESTINATION="platform=iOS Simulator,name=${SIMULATOR_NAME},OS=${newest}"
   fi
   echo "test destination: ${TEST_DESTINATION}"
 }
@@ -216,9 +257,12 @@ local_tests() {
   swift test --package-path Packages/CairnInferenceLocal
 }
 
-# The Swift 5 isolation island. Run with MLX excluded by default: linking mlx-swift-lm compiles
-# swift-syntax macros and a vendored C++ engine from source, which is a long build on an 8 GB Mac.
-# `CAIRN_MLX=1 Scripts/ci.sh native` is the device-build shape that really links 3.32.3.
+# The Swift 5 isolation island. Run with MLX excluded on purpose: linking mlx-swift-lm compiles
+# swift-syntax macros and a vendored C++ engine from source, which is a long build on an 8 GB Mac and is
+# not what a host test of the parser or the shapes needs. The package now links MLX **by default** (see
+# `Packages/CairnInferenceNative/Package.swift`), so this lane is the one that has to say it wants the
+# excluded shape. `CAIRN_MLX=1 Scripts/ci.sh native` is the linked shape, which is what a device build
+# and an Xcode ⌘R get.
 native_tests() {
   if [[ "${CAIRN_MLX:-}" == "1" ]]; then
     swift test --package-path Packages/CairnInferenceNative
@@ -227,12 +271,22 @@ native_tests() {
   fi
 }
 
+# The simulator lanes drop MLX, and they say so here rather than inheriting the package default.
+# `MLXNativeEngine` is compiled out on a simulator by `targetEnvironment(simulator)` no matter what is
+# linked, so linking it there would buy a long C++/Metal build for a runtime the binary cannot call — and
+# nobody has yet proved MLX compiles for arm64-simulator at all. The device lane below is the lane that
+# links it, which is also the shape a person runs on a phone.
+export_simulator_build_env() {
+  export CAIRN_SKIP_MLX=1
+}
+
 generate() {
   ensure_xcodegen
   xcodegen generate
 }
 
 run_build() {
+  export_simulator_build_env
   # CI builds against a generic simulator destination, exactly as the workflow does, so this lane can
   # never depend on a device that happens to exist. Locally it builds for the target device by name,
   # which is what catches a layout that only breaks on iPhone 15 Pro's screen.
@@ -261,7 +315,12 @@ run_build() {
 # The device lane is local-only: it signs with the Team ID in Config/Local.xcconfig, which CI does
 # not have, so CI never runs it. It deliberately does NOT pass CODE_SIGNING_ALLOWED=NO — without a
 # Local.xcconfig it should fail with a signing error rather than quietly produce an unsigned binary.
+#
+# It also clears `CAIRN_SKIP_MLX`, which no other lane may do. This is the build a person installs on a
+# phone, so it is the build that has to carry the on-device runtime; an inherited skip here is exactly how
+# an iPhone ended up told that the runtime "is not in this build".
 run_device() {
+  unset CAIRN_SKIP_MLX
   xcodebuild \
     -project Cairn.xcodeproj \
     -scheme Cairn \
@@ -272,6 +331,7 @@ run_device() {
 }
 
 run_tests() {
+  export_simulator_build_env
   resolve_destination
   rm -rf ResultBundles
   mkdir -p ResultBundles

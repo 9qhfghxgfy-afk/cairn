@@ -124,6 +124,13 @@ public struct ModelInfo: Sendable, Equatable, Identifiable {
     public var contextLength: Int?
     public var supportsVision: Bool
     public var supportsThinking: Bool
+    /// Which runtime runs this model, as the badge that runtime's own format table publishes. nil for
+    /// the ordinary case — one server, one runtime, nothing to disambiguate.
+    ///
+    /// It exists because a phone can hold two weights folders that run on different engines, and a picker
+    /// that lists both by name alone reads as a duplicate. Only an on-device engine fills it, from
+    /// `ModelFormat.badgeText`, which is read from the files in the folder rather than from a name.
+    public var runtimeBadge: String?
     /// Published by the server, never inferred from a model's name or size. A catalog entry that
     /// states nothing keeps `false`, which is why a tool turn's format comes from the server kind's
     /// declared capabilities and this flag only ever **adds** a badge the server itself claimed.
@@ -138,7 +145,8 @@ public struct ModelInfo: Sendable, Equatable, Identifiable {
         contextLength: Int? = nil,
         supportsVision: Bool = false,
         supportsThinking: Bool = false,
-        supportsTools: Bool = false
+        supportsTools: Bool = false,
+        runtimeBadge: String? = nil
     ) {
         self.id = id
         self.displayName = displayName
@@ -149,6 +157,7 @@ public struct ModelInfo: Sendable, Equatable, Identifiable {
         self.supportsVision = supportsVision
         self.supportsThinking = supportsThinking
         self.supportsTools = supportsTools
+        self.runtimeBadge = runtimeBadge
     }
 }
 
@@ -255,6 +264,16 @@ public protocol InferenceProvider: Sendable, Identifiable {
 
     func models() async throws -> [ModelInfo]
 
+    /// Points this engine at one of the models it just listed.
+    ///
+    /// The default is a no-op, and that default is the reason the requirement can exist at all: a server
+    /// picks a model per turn through `GenerationRequest.modelID`, so it has nothing to do here. An engine
+    /// on this phone is different — loading weights costs memory and time, so which folder is live is
+    /// engine state rather than a per-turn string, and switching it has to hand back the weights that were
+    /// held before it. A picker that only repaints a label while the old model stays resident is the
+    /// failure this exists to prevent.
+    func selectModel(_ modelID: String) async throws
+
     func stream(_ request: GenerationRequest) -> AsyncThrowingStream<StreamChunk, any Error>
 }
 
@@ -263,6 +282,11 @@ public protocol InferenceProvider: Sendable, Identifiable {
 /// to prevent, so support is declared rather than assumed.
 public extension InferenceProvider {
     var samplingSupport: SamplingSupport { .none }
+
+    /// Choosing is per-turn for anything that is not an engine holding weights on this phone, so the
+    /// default does nothing rather than pretending to have released something. An on-device engine
+    /// overrides this — see `MLXNativeProvider`.
+    func selectModel(_ modelID: String) async throws {}
 
     /// A server is the ordinary case, and an engine on this device that has not said it runs a real
     /// model is the Milestone 1 stand-in — which is what keeps "On device" from ever routing a chat
