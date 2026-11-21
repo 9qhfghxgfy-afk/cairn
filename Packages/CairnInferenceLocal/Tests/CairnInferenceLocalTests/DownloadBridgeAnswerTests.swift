@@ -74,10 +74,19 @@ struct DownloadBridgeAnswerTests {
         let bridge = DownloadBridge()
         let token = bridge.register(destination: destination) { _ in }
         // 206, not 200: a resumed file is answered with partial content and is still the file.
+        let payload = Data("payload payload".utf8)
         bridge.storeFile(try body("payload payload"), for: token, response: response(206))
         bridge.answer(token: token, failure: nil)
-        #expect(await bridge.wait(for: token) == .complete(bytes: 14))
-        #expect(try Data(contentsOf: destination) == Data("payload payload".utf8))
+        // Fifteen, not the fourteen this line first claimed. CI read the difference back: the number the
+        // bridge reports is the size of the file that actually landed, and it is the number the digest is
+        // taken over, so an off-by-one here is a checksum that would not match rather than a typo.
+        let outcome = await bridge.wait(for: token)
+        #expect(outcome == .complete(bytes: 15))
+        let landed = try Data(contentsOf: destination)
+        #expect(landed == payload)
+        if case .complete(let bytes) = outcome {
+            #expect(bytes == Int64(landed.count), "the reported count is the size of the file on disk")
+        }
     }
 
     /// Nowhere to put the file is a failure of its own, said in storage words rather than network words.
