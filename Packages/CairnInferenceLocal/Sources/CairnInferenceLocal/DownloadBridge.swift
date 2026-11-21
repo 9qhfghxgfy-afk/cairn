@@ -284,14 +284,36 @@ final class DownloadBridge: NSObject, URLSessionDownloadDelegate, @unchecked Sen
         }
     }
 
+    /// How many bytes a finished transfer left behind, read in every spelling Foundation uses.
+    ///
+    /// `FileAttributeKey.size` is not one type across platforms. The Foundation that ships with Xcode hands
+    /// back an integer that bridges to `Int64`; the open-source one hands back a plain Swift `Int`, sometimes
+    /// its unsigned twin; and a dynamic cast between two distinct Swift integer types fails rather than
+    /// converting. A bare `as? Int64` therefore reads a real file as zero bytes on the open-source side, and
+    /// in this position zero is never a wrong number — it is a completed four-gigabyte download announced as
+    /// having delivered nothing, which throws
+    /// away bytes and the digest that would have proved them. Measured, not assumed: that bare cast returned
+    /// nothing for a fifteen-byte file on the toolchain this was edited on while the macOS runner reported a
+    /// different count, and this machine cannot build the package to tell which side was right. So every
+    /// spelling is asked in order and none is trusted, which is the only honest shape for a fact that is not
+    /// verifiable here.
+    private static func storedByteCount(atPath path: String) -> Int64 {
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: path) else { return 0 }
+        let raw = attributes[.size]
+        if let bytes = raw as? Int64 { return bytes }
+        if let bytes = raw as? Int { return Int64(bytes) }
+        if let bytes = raw as? UInt64 { return Int64(clamping: bytes) }
+        if let number = raw as? NSNumber { return number.int64Value }
+        return 0
+    }
+
     /// Answers the one waiter this task belongs to, from the callback a transfer always produces.
     func answer(token: Int, failure: (any Error)?) {
         guard let waiter = read(token), !waiter.finished else { return }
         guard let failure else {
             // The size on disk, not the number the socket counted: a resumed file is the bytes that landed, and
             // the digest taken afterwards is what makes that claim true.
-            let attributes = try? FileManager.default.attributesOfItem(atPath: waiter.destination.path)
-            let stored = (attributes?[.size] as? Int64) ?? 0
+            let stored = Self.storedByteCount(atPath: waiter.destination.path)
             guard stored > 0 else {
                 // A completion with no file behind it is not a completed download. The handoff callback is
                 // documented to always precede this one, so reaching here means either the file never arrived or
