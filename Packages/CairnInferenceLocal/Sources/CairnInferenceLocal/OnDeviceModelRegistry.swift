@@ -10,14 +10,14 @@ import Foundation
 /// no runtime loaded — and so a memory warning cannot be ignored on the way to being killed.
 public actor OnDeviceModelRegistry {
     private let memory: any MemoryReading
-    private let unloader: @Sendable (String) async -> Void
-    private let flusher: @Sendable () async -> Void
-    private var resident: [ResidentModel] = []
+    let unloader: @Sendable (String) async -> Void
+    let flusher: @Sendable () async -> Void
+    var resident: [ResidentModel] = []
     /// Residents with a turn running in them right now. Pressure may not take one of these away
     /// mid-stream — `unloadIdleModels` defers that release to the end of the turn instead.
-    private var activeModelIDs: Set<String> = []
+    var activeModelIDs: Set<String> = []
     /// A release pressure asked for and could not take yet, applied the moment the turn ends.
-    private var deferredReleaseIDs: Set<String> = []
+    var deferredReleaseIDs: Set<String> = []
 
     /// - Parameters:
     ///   - memory: the headroom source. Defaults to the real process reading; a test injects a fixed
@@ -71,18 +71,6 @@ public actor OnDeviceModelRegistry {
         deferredReleaseIDs.remove(modelID)
     }
 
-    /// Frees everything this process can control. Apple's own model is system-managed, so it is
-    /// reported as unloaded from Cairn's side only.
-    @discardableResult
-    public func releaseAll(reason: String) async -> [String] {
-        let released = resident.map(\.modelID)
-        for id in released { await unloader(id) }
-        resident.removeAll()
-        activeModelIDs.removeAll()
-        deferredReleaseIDs.removeAll()
-        return released
-    }
-
     /// The one call an engine makes before it loads anything: ask whether this model may be resident,
     /// and **carry the answer out** rather than reporting it.
     ///
@@ -115,6 +103,15 @@ public actor OnDeviceModelRegistry {
         markTurnStarted(modelID)
     }
 
+    /// Whether a turn is running in this model right now.
+    ///
+    /// This is the question a removal asks before it touches a byte: weights mapped into a process that is
+    /// generating cannot be taken away, and the answer has to come from the thing that owns the claim
+    /// rather than from the caller's memory of what it started.
+    public func isTurnActive(_ modelID: String) -> Bool {
+        activeModelIDs.contains(modelID)
+    }
+
     /// Records that a turn is running in this model, and drops any release pressure left over from the
     /// idle period before it.
     ///
@@ -136,57 +133,6 @@ public actor OnDeviceModelRegistry {
         if resident.contains(where: { $0.modelID == modelID }) {
             await unloader(modelID)
             markUnloaded(modelID)
-        }
-    }
-
-    /// Releases every resident this app owns that is **not** mid-turn, and defers the ones that are.
-    ///
-    /// Unloading a model in the middle of a stream does not produce a clean unload: the runtime is
-    /// still holding buffers for it, and the turn dies with the model under it. So a busy model is
-    /// marked for release and the release lands at `markIdle`, one turn later, which is also the
-    /// moment the person sees the answer they were waiting for.
-    @discardableResult
-    public func unloadIdleModels() async -> [String] {
-        var released: [String] = []
-        for model in resident {
-            guard !activeModelIDs.contains(model.modelID) else {
-                deferredReleaseIDs.insert(model.modelID)
-                continue
-            }
-            await unloader(model.modelID)
-            released.append(model.modelID)
-        }
-        resident.removeAll { model in !activeModelIDs.contains(model.modelID) }
-        return released
-    }
-
-    /// Hands back the buffers a runtime is holding and not using. Idempotent by design: warning-level
-    /// pressure can arrive twice for the same squeeze, and flushing twice must cost nothing.
-    public func flushCaches() async {
-        await flusher()
-    }
-
-    /// A memory warning is not a suggestion. Everything Cairn owns is released and the caller shows
-    /// the reason, rather than letting the next allocation be the one that kills the process.
-    public func handleMemoryPressure() async -> [String] {
-        await releaseAll(reason: "memory-pressure")
-    }
-
-    /// Pressure with its severity respected.
-    ///
-    /// A **warning** costs buffers and not a model: flush the pool and stay loaded, because reloading
-    /// a multi-gigabyte build is a worse outcome than the nudge. **Critical** is the system about to
-    /// take the process, so idle residents go now and a busy one goes at the end of its turn. The
-    /// blunt `handleMemoryPressure()` above remains the "release everything I own" path a caller uses
-    /// when it is about to hand the memory to something else, and is deliberately not this function.
-    @discardableResult
-    public func handleMemoryPressure(level: MemoryPressureLevel) async -> [String] {
-        switch level {
-        case .warning:
-            await flusher()
-            return []
-        case .critical:
-            return await unloadIdleModels()
         }
     }
 }

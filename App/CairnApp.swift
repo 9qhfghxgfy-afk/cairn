@@ -192,11 +192,12 @@ struct CairnLaunchView: View {
                     isGranted: { builtTheme.settings.modelDownloadsAreAllowed },
                     setGranted: { builtTheme.setModelDownloadsAllowed($0) }
                 )
+                let onDeviceLibrary = OnDeviceModelLibrary.installed(
+                    traffic: weightTraffic,
+                    tokens: modelTokenStore
+                )
                 builtServers.modelCatalog = ModelCatalogModel(
-                    library: OnDeviceModelLibrary.installed(
-                        traffic: weightTraffic,
-                        tokens: modelTokenStore
-                    ),
+                    library: onDeviceLibrary,
                     servers: builtServers.modelManager,
                     traffic: weightTraffic,
                     // The Ollama servers a tag may be pulled onto, read at the moment the sheet asks so a
@@ -207,11 +208,33 @@ struct CairnLaunchView: View {
                         builtServers.profiles.filter { $0.kind == .ollama || $0.kind == .ollamaCloud }
                     }
                 )
+                // The Installed tab's device-owned half: this phone's folders and the model iOS built in.
+                // Without it the tab can only show what a server reports, which is the gap that made a phone
+                // with models on disk look empty. It reads through the same library the Download tab writes
+                // to, so one store is read and written by one pair of hands.
+                builtServers.modelManager?.installedServing = InstalledModelStore(
+                    layout: ModelStoreLayout.defaultRoot(),
+                    library: onDeviceLibrary,
+                    registry: onDeviceRegistry
+                )
+                // A model taken back changes three things at once: what the Servers screen says this phone can
+                // run, what the Download card says it holds, and what the next turn may be pointed at. The
+                // registry is already told — the store evicted through it before touching the files — so this
+                // is only about what the screens re-read.
+                builtServers.modelManager?.onLocalModelRemoved = { entry in
+                    builtServers.refreshOnDeviceReport()
+                    if let repoID = entry.hostModelID {
+                        await builtServers.modelCatalog?.modelWasRemoved(repoID: repoID)
+                    }
+                }
                 // A finished download changes what this phone can run. The Servers screen's on-device
                 // report is re-read through the same reader the launch used, so MLX moves to ready without
-                // a relaunch and without CairnAppUI being allowed to look at a filesystem.
+                // a relaunch and without CairnAppUI being allowed to look at a filesystem. The Installed tab
+                // reads the same folder the download just wrote, so it is re-read on the same nudge — a
+                // model that lands while the tab is open should be in it before the person leaves the tab.
                 builtServers.modelCatalog?.onTransferSettled = {
                     builtServers.refreshOnDeviceReport()
+                    Task { await builtServers.modelManager?.refreshInstalledEntries() }
                 }
                 // A memory warning releases the resident on-device model. Held in state so the
                 // watch is not deallocated the moment this closure returns.

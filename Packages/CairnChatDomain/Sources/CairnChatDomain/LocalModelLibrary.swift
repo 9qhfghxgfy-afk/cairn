@@ -24,6 +24,10 @@ public struct InstalledLocalModel: Identifiable, Sendable, Equatable {
     /// Whether Cairn can remove it. Apple's system model is installed and evicted by iOS, so its row
     /// says so instead of offering a Delete button that would do nothing.
     public var canDelete: Bool
+    /// Which runtime this folder's files describe — MLX, GGUF, or neither. Read from the file names the
+    /// manifest recorded rather than guessed from the repository's name, because a name is what a
+    /// publisher chose and a file list is what this phone actually holds.
+    public var format: ModelFormat
 
     public init(
         repoID: String,
@@ -31,7 +35,8 @@ public struct InstalledLocalModel: Identifiable, Sendable, Equatable {
         sizeBytes: Int64 = 0,
         fileCount: Int = 0,
         installedOn: Date = Date(timeIntervalSince1970: 0),
-        canDelete: Bool = true
+        canDelete: Bool = true,
+        format: ModelFormat = .other
     ) {
         self.repoID = repoID
         self.displayName = displayName
@@ -39,6 +44,7 @@ public struct InstalledLocalModel: Identifiable, Sendable, Equatable {
         self.fileCount = fileCount
         self.installedOn = installedOn
         self.canDelete = canDelete
+        self.format = format
     }
 
     public var id: String { repoID }

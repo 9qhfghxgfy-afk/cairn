@@ -258,3 +258,36 @@ when only a device model is available — never a second resident device model.
   (release-clean, empty) and `Entitlements/Cairn-sideload-experiment.entitlements`
   (memory-limit experiment) exist for the later paid/Xcode signing path only.
 
+
+## 14. The Installed section (added 2026-11-20)
+
+Models are **files owned by someone**, not capabilities of whatever server happens to be open, so the Installed
+tab is one list assembled from three sources and every row names its runtime and its host. `CairnChatDomain`
+owns the shape and the rule; the App layer owns the reading and the deleting; the view model owns the merge.
+
+| Type | Module | Job |
+|---|---|---|
+| `InstalledModelEntry` | `CairnChatDomain` | one model as one row: `id` **name-spaced by host** (`phone:<repo>`, `server:<profile>:<tag>`, `system:apple-intelligence`), `hostModelID` for the un-prefixed id the host itself uses, `format`, `sizeBytes` (measured or nil), and **derived** `canDelete` |
+| `ModelFormat` / `ModelHost` | `CairnChatDomain` | the two labels a row must carry: which runtime runs those bytes (MLX, GGUF, Apple Intelligence, Server, Other) and whose disk they are on (this phone, iOS, a server) |
+| `InstalledInventory` | `CairnChatDomain` | turns each source's rows into entries and merges them; dedupe is by the name-spaced id, so one name on two hosts stays two rows and only the same row reported twice can collapse |
+| `ModelDeletion` | `CairnChatDomain` | the deletion rule: allowed with the bytes it frees, or blocked with the person-facing reason — system-managed, a server's disk, storage unreadable, a turn being written in that model |
+| `InstalledModelServing` | `CairnChatDomain` | the seam `CairnAppUI` reads: `installedEntries()` and `remove(_:)` |
+| `InstalledModelStore` | `App` | the phone's half: reads the store's manifests and re-measures each folder, reads Apple's availability **at that moment**, and removes through the registry before touching a byte |
+| `OnDeviceModelRegistry.evict(_:)` | `CairnInferenceLocal` | takes one named model out of memory through the injected unloader, or throws `OnDeviceModelBusy` while a turn is in flight |
+| `ModelManagerModel+Installed` | `CairnAppUI` | reads the device's sources, merges them with the open server's rows, and calls the App hook after a removal |
+| `ModelInstalledList` / `ModelInstalledRow` | `CairnAppUI` | the rows: badge, source line, measured size, an `(i)` popover explaining whose bytes they are, Delete only where deleting is real |
+
+Three rules hold across all of it:
+
+* **Measured or nothing.** A size is bytes this phone counted or a figure a server published; a folder that
+  cannot be read reads `size not measured`, and the Delete confirmation promises only what was measured.
+* **A refusal states a reason.** No row draws both a control and a reason. Apple's model and a server's models
+  get a sentence, never a button that deletes nothing; `canDelete` is derived from the host and format, so a
+  hand-built row cannot give itself a control.
+* **The order is the safety.** `remove` asks the registry first — an idle resident is released through the real
+  unloader, a busy one throws and the files are never touched — and then hands the removal to the library, which
+  owns "folder plus resume blocks". The Download tab is settled through `modelWasRemoved(repoID:)`, so a delete
+  leaves the installed mark, the transfer line, and the open sheet agreeing with the folder.
+
+A server's list is still read by `RemoteModelManaging` alone; the store is never asked about remote models, and
+the device's rows are never re-fetched through a server.

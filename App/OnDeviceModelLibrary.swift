@@ -70,8 +70,13 @@ final class OnDeviceModelLibrary: LocalModelLibraryServicing {
     /// there is shown as downloadable even though the repository is famous, and a half-downloaded model
     /// with no manifest is shown as not installed, because it cannot be loaded.
     func catalogRows() async throws -> [LocalCatalogRow] {
-        let held = Set(try await installedRows().map(\.repoID))
-        return ModelCatalog.onDevice.map { $0.marking(installed: held.contains($0.repoID)) }
+        let held = try await installedRows()
+        let ids = Set(held.map(\.repoID))
+        var bytes: [String: Int64] = [:]
+        for row in held where row.sizeBytes > 0 { bytes[row.repoID] = row.sizeBytes }
+        return ModelCatalog.onDevice.map { row in
+            row.marking(installed: ids.contains(row.repoID), bytes: bytes[row.repoID])
+        }
     }
 
     /// What this phone holds, read from the per-repository manifests.
@@ -96,7 +101,12 @@ final class OnDeviceModelLibrary: LocalModelLibraryServicing {
                     sizeBytes: manifest.totalBytes,
                     fileCount: manifest.files.count,
                     installedOn: manifest.installedAt,
-                    canDelete: true
+                    canDelete: true,
+                    // Read from the file names the manifest recorded, which is what this phone was given —
+                    // not from the repository's name, which is what a publisher chose. A folder holding
+                    // neither a `.gguf` nor a `.safetensors` is not a runtime Cairn can name, and saying so
+                    // is better than guessing from a family name.
+                    format: ModelFormat.detect(fileNames: manifest.files.map(\.name)) ?? .other
                 )
             )
         }

@@ -28,6 +28,11 @@ public struct LocalCatalogRow: Identifiable, Sendable, Equatable {
     public var capabilityLabels: [String]
     public var addedOn: Date
     public var isInstalled: Bool
+    /// Bytes this phone actually holds for the entry, measured from the folder rather than from the
+    /// publisher's stated figure. Nil for a row that is not installed here, and for an installed folder
+    /// the store could not read — a card that quotes the advertised size as what is on the phone states
+    /// a number nobody measured.
+    public var installedBytes: Int64?
     /// Who makes the model — `Qwen`, `Google`, `OpenBMB` — as the publisher names themselves.
     public var provider: String?
     /// The family within that provider — `Qwen 3.5`, `Gemma 4`.
@@ -49,6 +54,7 @@ public struct LocalCatalogRow: Identifiable, Sendable, Equatable {
         capabilityLabels: [String] = [],
         addedOn: Date = Date(timeIntervalSince1970: 0),
         isInstalled: Bool = false,
+        installedBytes: Int64? = nil,
         provider: String? = nil,
         series: String? = nil,
         sortOrder: Int = 0,
@@ -64,6 +70,7 @@ public struct LocalCatalogRow: Identifiable, Sendable, Equatable {
         self.capabilityLabels = capabilityLabels
         self.addedOn = addedOn
         self.isInstalled = isInstalled
+        self.installedBytes = installedBytes
         self.provider = provider
         self.series = series
         self.sortOrder = sortOrder
@@ -85,6 +92,20 @@ public struct LocalCatalogRow: Identifiable, Sendable, Equatable {
     public func marking(installed: Bool) -> LocalCatalogRow {
         var copy = self
         copy.isInstalled = installed
+        copy.installedBytes = installed ? installedBytes : nil
+        return copy
+    }
+
+    /// The installed answer together with the bytes the store measured for this repository.
+    ///
+    /// Both halves travel in one call because a row marked installed with no figure is a row whose Delete
+    /// button cannot say what it gives back, and a figure with no mark is a number about nothing. Passing
+    /// nil for an uninstalled row is what clears a stale reading rather than leaving last launch's size on
+    /// a card that has nothing on disk.
+    public func marking(installed: Bool, bytes: Int64?) -> LocalCatalogRow {
+        var copy = self
+        copy.isInstalled = installed
+        copy.installedBytes = installed ? bytes : nil
         return copy
     }
 

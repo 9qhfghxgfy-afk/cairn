@@ -52,10 +52,22 @@ public struct ModelManagerView: View {
                 .pickerStyle(.segmented)
             }
         }
-        .task {
-            // Re-read on every appearance: the server's memory changes while the user is in the
-            // chat, and a stale Running list is worse than no Running list.
-            if let profile = model.profile { await model.open(profile) }
+        // Keyed to the profile rather than to appearance alone: a server chosen after this screen appears has
+        // to re-read every tab, and with no profile the device's own sources are still read. `.task` without an
+        // `id:` fires once per appearance, which would leave the merged Installed list showing one server's
+        // answer after the person had moved to another one.
+        .task(id: model.profile?.id) {
+            // Re-read on every appearance: the server's memory changes while the person is in the chat, and
+            // a stale Running list is worse than no Running list.
+            //
+            // With no profile open, the Installed tab is still not allowed to read empty. A phone opened from
+            // the On-Device entry has no server at all, and its folders are the whole answer there — so the
+            // device's own sources are read on their own, which is the gap this tab used to fall into.
+            if let profile = model.profile {
+                await model.open(profile)
+            } else {
+                await model.refreshInstalledEntries()
+            }
             // The Download tab's source is decided by the server that opened Models — On-Device opens
             // on Hugging Face, a remote server opens on Ollama. It has to happen after the profile is
             // open, or the catalog would read a profile that is not set yet and always guess On-Device.

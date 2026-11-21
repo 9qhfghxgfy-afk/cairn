@@ -51,66 +51,6 @@ struct ModelRunningRow: View {
     }()
 }
 
-struct ModelInstalledList: View {
-    private var model: ModelManagerModel
-
-    init(model: ModelManagerModel) { self.model = model }
-
-    var body: some View {
-        if model.installed.isEmpty {
-            Section {
-                Text("This server has not reported any models.")
-                    .font(.callout)
-                    .foregroundStyle(CairnTheme.stoneLight)
-            }
-        } else {
-            Section {
-                ForEach(model.installed) { info in
-                    ModelInstalledRow(model: model, info: info)
-                }
-            } footer: {
-                Text("Sizes and capability badges appear only for fields the server published.")
-            }
-        }
-    }
-}
-
-struct ModelInstalledRow: View {
-    private var model: ModelManagerModel
-    private var info: ModelInfo
-    @State private var expanded = false
-
-    init(model: ModelManagerModel, info: ModelInfo) {
-        self.model = model
-        self.info = info
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Button {
-                expanded.toggle()
-                Task { await model.inspect(info.id) }
-            } label: {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(info.displayName)
-                    Text(subline)
-                        .font(.caption)
-                        .foregroundStyle(CairnTheme.stoneLight)
-                }
-            }
-            if expanded, let detail = model.detail, detail.id == info.id {
-                ModelDetailLines(detail: detail)
-            }
-        }
-        .accessibilityElement(children: .combine)
-    }
-
-    private var subline: String {
-        if let size = info.parameterSize { return size }
-        return info.id
-    }
-}
-
 struct ModelDetailLines: View {
     private var detail: ModelDetail
 

@@ -3024,3 +3024,91 @@ release resumes. Nothing drives two concurrent unload paths today — the watch 
 actor — so the window is theoretical; the honest fix is to mutate state before the await, and it is a follow-up
 rather than a change smuggled into a review pass.
 
+
+### M5.4e — the Installed section: local, system and remote models in one list
+
+**Feature: implemented. CI-verified: no. On-device-verified: no. Real-network-verified: not applicable** (the
+reading half opens no socket; the only network this feature can cause is a server answering `RemoteModelManaging`,
+which already needed the opt-in). A phone holding four models and a build with no server configured had an empty
+Installed tab, because the tab's only source was the open server's `listModels`. Models are files owned by
+someone, so the tab now reads three sources and labels every row with the runtime that runs those bytes and the
+host that holds them.
+
+*`CairnChatDomain`, pure and strict:* `InstalledModelEntry` (name-spaced `id` — `phone:<repo>`,
+`server:<profile>:<tag>`, `system:apple-intelligence` — plus `hostModelID` for the un-prefixed id the host itself
+uses, and **derived** `canDelete`, so a hand-built row for Apple's model cannot give itself a Delete button);
+`ModelFormat` (`MLX`, `GGUF`, `AppleIntelligence`, `Server`, `Other`) with `detect(fileNames:)` reading the file
+names rather than a repository's name, and `badgeText` every row must carry; `ModelHost` with
+`lifecycleIsOurs`; `InstalledInventory` (per-source conversion, the Apple row only when Apple says usable, and
+`merge(_:)`, which dedupes by the name-spaced id so `qwen3:4b` on this phone and `qwen3:4b` on a LAN tag stay two
+rows); `ModelDeletion` + `ModelDeletionBlock` + `ModelDeletionVerdict` + `InstalledModelError` (the rule, the
+person-facing reason for each refusal, and the confirmation copy, which states a freed figure only when one was
+measured); `InstalledModelServing` (the `@MainActor` seam `CairnAppUI` reads); and
+`InstalledModelEntry+Info`, the `(i)` popover copy, in the domain so the list and a test cannot disagree about
+what a row explains.
+
+*`CairnInferenceLocal`:* `OnDeviceModelRegistry+Release.swift` now holds the whole release half that was in the
+main file — `releaseAll`, `unloadIdleModels`, `flushCaches`, both `handleMemoryPressure` paths — plus
+`isTurnActive(_:)` and `evict(_:)`: the injected unloader runs **before** the registry forgets the id, a model
+nobody holds is not an error, and a model with a turn in flight throws `OnDeviceModelBusy` instead of deferring,
+because a deferred release is a promise about a model that is about to be deleted from disk. `unloader`,
+`flusher`, `resident`, `activeModelIDs`, `deferredReleaseIDs` went `private` → internal for that split.
+`LocalCatalogRow` gained `installedBytes` and `marking(installed:bytes:)`, so a card that says Installed can say
+what is actually on the phone and its Delete can quote a measured figure.
+
+*`App`:* `InstalledModelStore` implements the seam — manifests read, each folder **re-measured** rather than
+trusting the install record, Apple's availability read at that moment and never cached, and `remove(_:)` asking
+the registry before touching a byte, then handing the removal to the library so folder and resume blocks still go
+in the one order that leaves a retry possible. `OnDeviceModelLibrary` fills `format` from the manifest's file
+names and hands measured bytes to the catalogue rows. `CairnApp` wires the store through the same library the
+Download tab writes to, and the removal hook re-reads the Servers report and settles the Download tab through
+`modelWasRemoved(repoID:)`.
+
+*`CairnAppUI`:* `ModelManagerModel` gained `installedEntries`, the injected `installedServing`, and
+`onLocalModelRemoved`; `ModelManagerModel+Installed` merges device rows with the open server's rows and keeps the
+rows it already showed when the store refuses rather than emptying the tab under a person's hands;
+`ModelInstalledRows` draws badge, source line, measured size, `(i)`, and Delete or the reason; `ModelManagerView`'
+`.task` now reads the device's sources **with no profile open**, which is the case that used to read empty.
+
+**Host verification for this pass.** `swift test --package-path Packages/CairnChatDomain --enable-xctest` →
+**670 tests, 0 failures** (**17** new: `InstalledInventoryTests` 9, `ModelDeletionTests` 8 — merge order, one name
+two hosts, refusal copy, no button on a forged row). `Scripts/ci.sh guards` → all five guards pass and
+`Scripts/test-guards.sh` reports **53 ok, 0 failed**. `swiftc -swift-version 6 -typecheck` (6.4.2) over a scratch
+file mirroring the shapes this pass cannot compile here — an actor extension in another file reaching internal
+state, a throwing `evict`, a `@MainActor` `Sendable` protocol, a `@MainActor` class with injected `@MainActor`
+closures conforming to it, and `await hook?(entry)` — → **no diagnostics**. What the host still cannot see:
+`CairnInferenceLocal` (`error: no such module 'CryptoKit'`, so `OnDeviceEvictTests` is unrun), all of `CairnAppUI`
+(SwiftUI), the app target, and `Tests/CairnTests`, where `ModelInstalledSectionTests` (9 cases) is compiled only
+on CI.
+
+**A review round, taken.** Gemini (acting as the macOS compiler) flagged three things: a Delete-tap path that
+re-asked a server for detail on the way **out** of an expanded row (fixed — asked only when expanding, because
+`detail` is one shared value); a test whose name promised more than it proved (rewritten as
+`aReleaseDeferredByPressureDoesNotSurviveTheModelItWasAskedFor`, with the extra `markIdle` that proves no third
+release); and `markUnloaded` being unreachable from the new file if it were `private` — it is already `public`, so
+no change. A **second** pass on the files written after the first produced three more fixes, each taken: the stub
+serving had one `failure` flag, so the refusal test could have been satisfied by the refresh that follows the
+removal rather than by the removal (split into `removeFailure` and `listFailure`, and a second test added for the
+keep-the-rows-it-showed rule with an error of its own); `ModelManagerView`'s `.task` had no `id:`, so a server
+chosen after the screen appeared left the merged list showing the previous server's answer (now
+`.task(id: model.profile?.id)`); and a test reached the list through a local closure (now `try XCTUnwrap` on the
+property). It also claimed `beginTurn` needs `_ =` at the call site — the declaration is `@discardableResult` and
+the existing suite calls it bare, so that was refused. It could not verify the domain type definitions it was shown
+in summary, which is why the domain suite above was run rather than reasoned about.
+
+**Still owed.** A green CI run on this commit — guards, both host suites, `xcodegen`, simulator build and
+`CairnTests` on iPhone 17 / iOS 26.5, the only place `ModelInstalledSectionTests`, `OnDeviceEvictTests`, the rows
+and `InstalledModelStore` are compiled at all. Then the device pass: install one GGUF and one MLX model, open
+Installed with no server configured, check both rows and their badges, delete one while it is **not** in a turn and
+watch the folder, the resume blocks and the Download card all agree; start a turn in the resident model and confirm
+the refusal reads "A turn is still being written in this model. Finish it, then delete."; check Apple Intelligence
+appears with no Delete on an eligible phone and does not appear at all on one that is not eligible; add a LAN
+server holding a tag with the same name as a local folder and confirm two rows.
+
+**Left open by this pass, on purpose.** The Download tab's detail sheet still has no Delete for an installed row —
+the Installed tab is the one screen that owns deletion, and a second control needs its own measured-bytes path.
+`ModelManagerModel.swift` is at 188 lines and wants the server-lifecycle half split into its own file. Deleting a
+model **while its own download is in flight** is not handled: the Installed list only shows installed folders, so
+the case needs the Download tab's row to offer a cancel first, and `modelWasRemoved` deliberately leaves a server
+pull alone. And `releaseFromMemory` maps a folder's `format` to the engine's resident id, which is right for MLX's
+one-resident engine and would need a real per-folder claim table before a second on-device runtime ships.
